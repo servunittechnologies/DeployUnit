@@ -30,6 +30,7 @@ async def create_rule(payload: AlertRuleIn, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.alert_rules.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 

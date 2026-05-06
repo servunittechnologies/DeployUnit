@@ -16,7 +16,7 @@ def _now() -> datetime:
 # ============ Auth ============
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str
     name: str = Field(min_length=1, max_length=80)
 
 

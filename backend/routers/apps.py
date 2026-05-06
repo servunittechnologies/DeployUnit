@@ -148,6 +148,7 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "created_at": _now_iso(),
     }
     await db.apps.insert_one(doc)
+    doc.pop("_id", None)
     deploy_doc = {
         "id": str(uuid.uuid4()),
         "app_id": app_id,
@@ -161,6 +162,7 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "finished_at": None,
     }
     await db.deployments.insert_one(deploy_doc)
+    deploy_doc.pop("_id", None)
     background.add_task(_coolify_deploy, app_id)
     return doc
 
@@ -213,6 +215,7 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks):
         "finished_at": None,
     }
     await db.deployments.insert_one(deploy_doc)
+    deploy_doc.pop("_id", None)
     await db.apps.update_one({"id": app_id}, {"$set": {"status": "queued", "last_deploy_at": _now_iso()}})
 
     if coolify.configured and app.get("coolify_app_uuid"):

@@ -31,6 +31,7 @@ async def disconnect():
 async def ensure_indexes():
     db = get_db()
     await db.users.create_index("email", unique=True)
+    await db.users.create_index("email_ci")
     await db.workspaces.create_index("slug", unique=True)
     await db.workspace_members.create_index([("workspace_id", 1), ("user_id", 1)], unique=True)
     await db.apps.create_index([("workspace_id", 1), ("slug", 1)], unique=True)

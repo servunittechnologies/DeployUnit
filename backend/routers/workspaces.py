@@ -46,6 +46,7 @@ async def create_workspace(payload: WorkspaceIn, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.workspaces.insert_one(doc)
+    doc.pop("_id", None)
     await db.workspace_members.insert_one(
         {
             "id": str(uuid.uuid4()),
@@ -110,6 +111,7 @@ async def add_member(workspace_id: str, payload: WorkspaceMemberIn, request: Req
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.workspace_members.insert_one(member)
+    member.pop("_id", None)
     return {**member, "email": target["email"], "name": target["name"]}
 
 

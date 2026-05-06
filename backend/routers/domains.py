@@ -46,6 +46,7 @@ async def add_domain(payload: DomainIn, request: Request):
         "created_at": _now_iso(),
     }
     await db.domains.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 

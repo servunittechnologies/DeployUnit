@@ -44,6 +44,7 @@ async def create_project(payload: ProjectIn, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.projects.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 
