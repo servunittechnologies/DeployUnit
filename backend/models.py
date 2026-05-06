@@ -174,6 +174,27 @@ class AlertRuleOut(AlertRuleIn):
 
 
 # ============ Billing ============
+class BillingProfileIn(BaseModel):
+    company_name: str = Field(min_length=1, max_length=120)
+    address: str = Field(min_length=1, max_length=200)
+    postal_code: str = Field(min_length=1, max_length=20)
+    city: str = Field(min_length=1, max_length=80)
+    country: str = Field(min_length=2, max_length=2)  # ISO-2
+    email: EmailStr
+    vat_id: Optional[str] = None
+    is_business: bool = False
+
+
+class BillingProfileOut(BillingProfileIn):
+    model_config = ConfigDict(extra="ignore")
+    workspace_id: str
+    vat_id_valid: Optional[bool] = None
+    vat_id_holder_name: Optional[str] = None
+    vat_rate: Optional[float] = None
+    vat_note: Optional[str] = None
+    updated_at: datetime
+
+
 class CheckoutIn(BaseModel):
     workspace_id: str
     plan: Literal["hobby", "pro", "agency"]
@@ -183,14 +204,18 @@ class InvoiceOut(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     workspace_id: str
-    whmcs_invoice_id: Optional[str] = None
-    number: str
-    amount: float
-    currency: str = "USD"
+    invoice_number: str
+    mollie_payment_id: Optional[str] = None
+    subtotal: float
+    vat_rate: float
+    vat_amount: float
+    vat_note: Optional[str] = None
+    total: float
+    currency: str = "EUR"
     status: str
+    invoice_date: datetime
     due_date: Optional[datetime] = None
-    paid_date: Optional[datetime] = None
-    items: List[Dict[str, Any]] = Field(default_factory=list)
+    pdf_url: Optional[str] = None
 
 
 # ============ Notifications ============

@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 3 — validated the new Mollie + EU VAT + PDF invoices billing migration end-to-end. Updated /app/backend/tests/backend_test.py (TestBilling section rewritten to the new Mollie contract: EUR currency, plans=hobby/pro/agency, profile/VAT calc, hobby checkout returns checkout_url=null, Pro requires profile then returns Mollie checkout_url starting with https://, cancel drops to hobby, invoices shape, 404 for unknown PDF, webhook returns 200 for unknown payment id). Result: 35/36 PASS (one minor spec deviation — see backend_issues). Frontend Playwright verified: /app/billing renders Plans & invoices, Powered by Mollie, current plan tile (Hobby / canceled), billing profile (Demo B.V., Keizersgracht 1, NL), VAT TREATMENT='NL VAT', change plan grid €0/€19/€99, empty invoices table. Edit → country DE → uncheck is_business → Save changes → toast 'Profile saved · Germany VAT (19.0%)' and VAT TREATMENT updates to 'Germany VAT (19.0%)'. /pricing shows 3 € symbols on plans. /checkout?plan=pro renders plan summary, pre-filled profile form, both 'Update & continue to Mollie' and 'Profile is fine — go to Mollie' buttons (per spec). Mollie checkout_url confirmed live (starts with https://www.mollie.com/checkout/...). Profile restored to NL after testing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/billing/vat/validate?vat_id=ABC", "issue": "Spec said malformed 'ABC' should return error='format', but the regex in services/vat.py:normalize_vat_id matches 'ABC' as country='AB' + number='C', then returns error='not_eu'. Suggest tightening normalize_vat_id to require number length >= 2, OR make the test accept either error code. Cosmetic only — nothing in production breaks."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Billing profile Edit", "issue": "The 'EDIT' / 'SAVE CHANGES' buttons lack data-testid attributes. Worked via get_by_role('button', name='Edit') and button:has-text('Save changes'), but data-testid='profile-edit-btn' and data-testid='profile-save-btn' would make automation more robust.", "affected_selectors": ["[data-testid='profile-edit-btn']", "[data-testid='profile-save-btn']"]},
+      {"flow": "Billing change plan grid", "issue": "Plan upgrade buttons 'Go Pro · €19' / 'Go Agency · €99' lack data-testid (e.g. data-testid='upgrade-pro' / 'upgrade-agency'). Worked via :has-text but brittle."}
+    ],
+    "design_issues": [
+      {"screen": "Billing", "issues": ["Layout, spacing, contrast all consistent with the existing terminal aesthetic. NL/DE country dropdown shows ' · 21% VAT' / ' · 19% VAT' inline, which is a nice UX touch. Toast on save is clearly readable (green check, top-right). No design issues."]},
+      {"screen": "Checkout", "issues": ["Two-button choice ('Update & continue to Mollie' vs 'Profile is fine — go to Mollie') is clear; helper text 'You'll be redirected to Mollie's secure checkout' is reassuring."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "(MINOR) Either tighten services/vat.py:normalize_vat_id so 'ABC' returns error='format' (require number portion >= 2 chars) OR document the current behaviour. Test currently asserts 'format' per spec and fails.",
+    "(NICE-TO-HAVE) Add data-testid to BillingProfile Edit/Save buttons and to each upgrade-plan button on /app/billing for stable Playwright selectors."
+  ],
+  "critical_code_review_comments": [
+    "billing.py is well-structured but ~630 lines — close to but under the 700-line guideline. If more recurring/refund/proration logic is added, split webhook + invoice generation into services/billing_pipeline.py.",
+    "billing.py upsert_profile returns the full profile dict including newly-saved fields — good. Idempotency on payments via mollie_payment_id is correct (update_one upsert).",
+    "Webhook correctly returns 200 even on unknown payment id and on Mollie API failure — prevents Mollie retry storms. Good.",
+    "vat.py normalize_vat_id regex `^([A-Z]{2})([A-Z0-9]+)$` is slightly too lenient — 'ABC' parses as ('AB','C'). Either require number length ≥ 2 or per-country-format validation. (Captured in action items.)",
+    "MOLLIE_API_KEY is LIVE in .env. Confirmed checkout endpoint creates a real Mollie payment that returns a real https://www.mollie.com/checkout/... URL. Pending payments will auto-expire on Mollie side.",
+    "Workspace plan correctly drops to 'hobby' on cancel; subscription document marked status=canceled with canceled_at timestamp.",
+    "Invoice list sorted by invoice_date desc and excludes file_path — good."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "97% (35/36)", "frontend": "100% (all spec scenarios verified end-to-end)"},
+  "test_credentials": "demo@deployhub.dev / demo1234 (used). admin@deployhub.dev / admin123 (available, not used).",
+  "seed_data_creation": "Test suite created TEST_*-prefixed users/workspaces/projects via existing patterns. A pending Mollie 'first' payment was created during test_pro_checkout_requires_profile_then_returns_mollie_url (Mollie will auto-expire it). Demo workspace billing profile was temporarily flipped to DE then restored to NL.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Mollie billing migration is functional end-to-end. The single test failure (vat/validate 'ABC' returning 'not_eu' instead of 'format') is a minor spec/code mismatch — main agent decides whether to fix the regex or update the spec. Backend test file is at /app/backend/tests/backend_test.py with TestBilling fully rewritten for the new contract; non-billing tests (Auth, Workspaces, Projects, Apps, Domains, Monitoring, Alerts, Notifications, GitHub mock, Settings, Integrations, Isolation) still all pass unchanged.",
+  "rca_of_issue": "vat/validate 'ABC' RCA: services/vat.py normalize_vat_id uses regex `^([A-Z]{2})([A-Z0-9]+)$`. For input 'ABC' this matches successfully with cc='AB', number='C'. The function returns the parsed tuple; validate_vies then checks `cc not in EU_VAT_RATES` and returns `{valid: False, error: 'not_eu'}` instead of the spec-expected `'format'`. Mitigation: change the regex to `^([A-Z]{2})([A-Z0-9]{2,})$` (require ≥2 chars in the number portion), which correctly classifies 'ABC' as malformed."
+}

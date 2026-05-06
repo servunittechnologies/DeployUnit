@@ -53,7 +53,7 @@ export default function Pricing() {
             )}
             <div className="text-xs font-mono uppercase tracking-[0.3em] text-zinc-500">{p.name}</div>
             <div className="mt-3 flex items-baseline gap-1">
-              <span className="font-display text-5xl font-semibold tracking-tighter">${p.price}</span>
+              <span className="font-display text-5xl font-semibold tracking-tighter">€{p.price}</span>
               <span className="text-zinc-500 text-sm">/{p.interval}</span>
             </div>
             <p className="mt-2 text-sm text-zinc-400">{p.tagline}</p>

@@ -265,38 +265,164 @@ class TestAlerts:
         assert rm.status_code in (200, 204)
 
 
-# ----- Billing -----
+# ----- Billing (Mollie + EU VAT) -----
 class TestBilling:
-    def test_plans(self):
+    def test_plans_eur(self):
         r = requests.get(f"{API}/billing/plans", timeout=10)
         assert r.status_code == 200
         plans = r.json()
-        assert {p["id"] for p in plans} == {"hobby", "pro", "agency"}
+        by_id = {p["id"]: p for p in plans}
+        assert set(by_id.keys()) == {"hobby", "pro", "agency"}
+        assert by_id["hobby"]["currency"] == "EUR"
+        assert by_id["hobby"]["price"] == 0
+        assert by_id["pro"]["price"] == 19
+        assert by_id["agency"]["price"] == 99
 
-    def test_subscription_and_hobby_checkout(self, demo_session, demo_workspace_id):
-        s = demo_session.get(f"{API}/billing/subscription", params={"workspace_id": demo_workspace_id}, timeout=10)
-        assert s.status_code == 200
-        assert "plan" in s.json()
-
-        r = demo_session.post(f"{API}/billing/checkout",
-                              json={"workspace_id": demo_workspace_id, "plan": "hobby"}, timeout=15)
+    def test_countries_27_eu_plus_extras(self):
+        r = requests.get(f"{API}/billing/countries", timeout=10)
         assert r.status_code == 200
-        data = r.json()
-        assert data["plan"] == "hobby"
-        assert data["status"] == "active"
+        rows = r.json()
+        eu = [c for c in rows if c["eu"]]
+        non_eu = [c for c in rows if not c["eu"]]
+        assert len(eu) == 27
+        assert len(non_eu) >= 6
+        for c in eu:
+            assert "vat_rate" in c and "code" in c and "name" in c
 
-    def test_pro_checkout_whmcs_best_effort(self, demo_session, demo_workspace_id):
+    # Profile saves & VAT calculation
+    def test_profile_nl_b2c_returns_21(self, demo_session, demo_workspace_id):
+        body = {"company_name": "Demo NL", "address": "Keizersgracht 1", "postal_code": "1015CJ",
+                "city": "Amsterdam", "country": "NL", "email": "demo@deployhub.dev", "is_business": False}
+        r = demo_session.put(f"{API}/billing/profile",
+                             params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["vat_rate_applied"] == 21.0
+        assert "NL" in d["vat_note"]
+
+        g = demo_session.get(f"{API}/billing/profile",
+                             params={"workspace_id": demo_workspace_id}, timeout=10)
+        assert g.status_code == 200 and g.json()["country"] == "NL"
+
+    def test_profile_de_b2c_returns_19(self, demo_session, demo_workspace_id):
+        body = {"company_name": "Demo DE", "address": "Strasse 1", "postal_code": "10115",
+                "city": "Berlin", "country": "DE", "email": "demo@deployhub.dev", "is_business": False}
+        r = demo_session.put(f"{API}/billing/profile",
+                             params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["vat_rate_applied"] == 19.0
+        assert "Germany" in d["vat_note"] or "DE" in d["vat_note"]
+
+    def test_profile_us_returns_zero(self, demo_session, demo_workspace_id):
+        body = {"company_name": "Demo US", "address": "1 Main St", "postal_code": "10001",
+                "city": "NYC", "country": "US", "email": "demo@deployhub.dev", "is_business": False}
+        r = demo_session.put(f"{API}/billing/profile",
+                             params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["vat_rate_applied"] == 0.0
+        assert "Outside EU" in d["vat_note"] or "no VAT" in d["vat_note"].lower()
+
+    def test_profile_de_invalid_vat_falls_back_to_b2c(self, demo_session, demo_workspace_id):
+        body = {"company_name": "Demo DE B2B", "address": "Strasse 2", "postal_code": "10115",
+                "city": "Berlin", "country": "DE", "email": "demo@deployhub.dev",
+                "is_business": True, "vat_id": "INVALID"}
+        r = demo_session.put(f"{API}/billing/profile",
+                             params={"workspace_id": demo_workspace_id}, json=body, timeout=20)
+        assert r.status_code == 200
+        d = r.json()
+        # invalid VAT id → falls back to destination B2C → 19% DE
+        assert d["vat_rate_applied"] == 19.0
+
+    # VAT validate endpoint
+    def test_vat_validate_malformed(self, demo_session):
+        r = demo_session.get(f"{API}/billing/vat/validate", params={"vat_id": "ABC"}, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["valid"] is False
+        assert d.get("error") == "format"
+
+    def test_vat_validate_invalid_or_unreachable(self, demo_session):
+        r = demo_session.get(f"{API}/billing/vat/validate", params={"vat_id": "NL123456789B01"}, timeout=20)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["valid"] is False
+        assert d.get("error") in ("invalid", "vies_unreachable", "vies_http_500", "vies_http_503")
+
+    # Hobby checkout — no Mollie roundtrip
+    def test_hobby_checkout_returns_active_no_url(self, demo_session, demo_workspace_id):
+        r = demo_session.post(f"{API}/billing/checkout",
+                              json={"workspace_id": demo_workspace_id, "plan": "hobby"}, timeout=20)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["plan"] == "hobby"
+        assert d["status"] == "active"
+        assert d["checkout_url"] is None
+
+    # Pro checkout requires profile, then returns Mollie URL
+    def test_pro_checkout_requires_profile_then_returns_mollie_url(self, demo_session, demo_workspace_id):
+        # Make sure profile exists (set via earlier tests; re-set NL for determinism)
+        body = {"company_name": "Demo B.V.", "address": "Keizersgracht 1", "postal_code": "1015CJ",
+                "city": "Amsterdam", "country": "NL", "email": "demo@deployhub.dev", "is_business": False}
+        demo_session.put(f"{API}/billing/profile",
+                         params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
         r = demo_session.post(f"{API}/billing/checkout",
                               json={"workspace_id": demo_workspace_id, "plan": "pro"}, timeout=30)
         assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["plan"] == "pro"
-        assert data["status"] in ("pending", "active", "trial")
+        d = r.json()
+        assert d["plan"] == "pro"
+        assert d["status"] == "pending"
+        assert d.get("checkout_url", "").startswith("https://"), d
+        assert d.get("payment_id")
 
-    def test_invoices_list(self, demo_session, demo_workspace_id):
-        r = demo_session.get(f"{API}/billing/invoices", params={"workspace_id": demo_workspace_id}, timeout=30)
+    def test_pro_checkout_without_profile_returns_400(self, demo_session):
+        # Use a fresh workspace with no profile
+        s = requests.Session()
+        email = f"TEST_noprof_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        rr = s.post(f"{API}/auth/register",
+                    json={"email": email, "password": "pw12345x", "name": "NoProf User"}, timeout=15)
+        assert rr.status_code == 200
+        ws_list = s.get(f"{API}/workspaces", timeout=10).json()
+        ws_id = ws_list[0]["id"]
+        r = s.post(f"{API}/billing/checkout",
+                   json={"workspace_id": ws_id, "plan": "pro"}, timeout=20)
+        assert r.status_code == 400
+        assert "profile" in (r.text or "").lower()
+
+    # Cancel
+    def test_cancel_drops_workspace_to_hobby(self, demo_session, demo_workspace_id):
+        r = demo_session.post(f"{API}/billing/cancel",
+                              params={"workspace_id": demo_workspace_id}, timeout=15)
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        assert r.json().get("status") == "canceled"
+        ws = demo_session.get(f"{API}/workspaces", timeout=10).json()
+        target = next((w for w in ws if w["id"] == demo_workspace_id), None)
+        assert target and target.get("plan") == "hobby"
+
+    # Invoices list shape
+    def test_invoices_list_shape(self, demo_session, demo_workspace_id):
+        r = demo_session.get(f"{API}/billing/invoices",
+                             params={"workspace_id": demo_workspace_id}, timeout=15)
+        assert r.status_code == 200
+        rows = r.json()
+        assert isinstance(rows, list)
+        for inv in rows:
+            for k in ("id", "invoice_number", "mollie_payment_id", "subtotal", "vat_rate",
+                      "vat_amount", "vat_note", "total", "currency", "status",
+                      "invoice_date", "due_date", "pdf_url"):
+                assert k in inv, f"missing {k} in invoice"
+            assert inv["currency"] == "EUR"
+
+    def test_invoice_pdf_404_for_unknown(self, demo_session):
+        r = demo_session.get(f"{API}/billing/invoices/9999-9999/pdf", timeout=10)
+        assert r.status_code == 404
+
+    # Webhook returns 200 even for unknown payment
+    def test_webhook_unknown_payment_returns_200(self):
+        r = requests.post(f"{API}/billing/mollie/webhook",
+                          data={"id": "tr_does_not_exist_xyz"}, timeout=20)
+        assert r.status_code == 200
 
 
 # ----- Notifications -----
