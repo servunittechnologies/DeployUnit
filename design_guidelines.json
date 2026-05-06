@@ -1,128 +1,75 @@
 {
-  "project_context": {
-    "name": "Deployment SaaS Platform",
-    "theme": "dark",
-    "archetype": "4_swiss_high_contrast_hybrid_retro",
-    "vibe": "Terminal/IDE-inspired, Technical, Developer-focused, Asymmetric"
+  "theme": "dark",
+  "archetype": "7 (Electric & Neon)",
+  "colors": {
+    "background": "#050505",
+    "surface": "#0a0a0a",
+    "surface_glass": "rgba(10, 10, 10, 0.6)",
+    "primary": "#00E5FF",
+    "primary_hover": "#33EBFF",
+    "accent_success": "#39FF14",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "border": "rgba(255, 255, 255, 0.1)",
+    "border_glow": "rgba(0, 229, 255, 0.5)"
   },
   "typography": {
-    "heading_font": "Outfit",
-    "body_font": "IBM Plex Sans",
-    "mono_font": "JetBrains Mono",
-    "heading_classes": "font-sans font-medium tracking-tight",
-    "body_classes": "font-sans leading-relaxed tracking-normal",
-    "mono_classes": "font-mono text-sm tracking-tight",
-    "scales": {
-      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter",
-      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
-      "h3": "text-xl sm:text-2xl",
-      "body": "text-base sm:text-sm",
-      "labels": "text-xs uppercase tracking-[0.2em]"
+    "headings": {
+      "font_family": "'Outfit', sans-serif",
+      "scale": "h1: text-5xl lg:text-7xl font-black tracking-tighter, h2: text-3xl lg:text-4xl font-bold tracking-tight"
+    },
+    "body": {
+      "font_family": "'IBM Plex Sans', sans-serif",
+      "scale": "text-base leading-relaxed text-zinc-400"
+    },
+    "mono": {
+      "font_family": "'JetBrains Mono', monospace",
+      "scale": "text-sm tracking-tight"
     }
   },
-  "colors": {
-    "background": {
-      "base": "#0A0D14", 
-      "surface": "#111520",
-      "elevated": "#1A1F2E"
-    },
-    "text": {
-      "primary": "#FFFFFF",
-      "secondary": "#A1A1AA",
-      "muted": "#71717A"
-    },
-    "brand": {
-      "primary": "#00E5FF",
-      "primary_hover": "#00B3CC",
-      "accent": "#FACC15"
-    },
-    "status": {
-      "live": "#10B981",
-      "building": "#3B82F6",
-      "failed": "#EF4444",
-      "queued": "#F59E0B"
-    },
-    "borders": {
-      "subtle": "rgba(255, 255, 255, 0.1)",
-      "strong": "rgba(255, 255, 255, 0.2)"
+  "spacing_and_layout": {
+    "strategy": "Control Room / Bento Grid",
+    "padding": "Generous on sections (py-24 to py-32), dense inside bento cards (p-6 to p-8)",
+    "borders": "1px sharp borders border-white/10. No massive border-radius. Use rounded-md or rounded-none."
+  },
+  "surface_styles": {
+    "nav": "Crystal glass: backdrop-blur-2xl bg-black/50 border-b border-white/10. Must be sticky.",
+    "cards": "Solid #0a0a0a with 1px border. Hover state should subtly glow with cyan box-shadow.",
+    "buttons": "Primary: bg-[#00E5FF] text-black font-bold hover:shadow-[0_0_20px_rgba(0,229,255,0.4)]. Secondary: bg-transparent border-white/20 hover:border-[#00E5FF] hover:text-[#00E5FF]."
+  },
+  "animations": {
+    "css_additions_index_css": "@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } } @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); } } @keyframes matrix-scan { 0% { background-position: 0% -100%; } 100% { background-position: 0% 200%; } }",
+    "framer_motion_usage": "MANDATORY. Install framer-motion if not present. Use staggered reveals (`staggerChildren: 0.1`). Elements fade in and slide up (`y: 20, opacity: 0 -> y: 0, opacity: 1`).",
+    "hero_specific": "Typewriter effect for the H1 or tagline. Simulated terminal window. Floating 3D-like cards with `onMouseMove` lighting effect."
+  },
+  "image_urls": [
+    {
+      "url": "https://images.unsplash.com/photo-1764258560295-21e74c3d0d15?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhcmslMjBnbG93aW5nJTIwdGVjaCUyMGxpbmVzfGVufDB8fHx8MTc3ODA5NjU3MXww&ixlib=rb-4.1.0&q=85",
+      "category": "hero_background",
+      "description": "Abstract neon tech lines. Use with mix-blend-screen, opacity-20, absolute inset-0 z-0 to create a futuristic data grid vibe."
     }
+  ],
+  "component_instructions": {
+    "Landing.jsx": "Focus on high-impact hero: an animated terminal that types 'Ship Next.js & Node in two clicks', wrapped in a glowing cyan border. Below hero, build a 'Control Room' Bento grid for features (Deployments, Monitoring, GitHub integration). Use framer-motion for scroll reveals. Make it feel like a futuristic IDE.",
+    "Pricing.jsx": "3 cards (Hobby, Pro, Agency). The Pro/Agency cards must have an animated gradient border (tracing beam effect). Display Mollie integration seamlessly. Deep void backgrounds.",
+    "Auth (Login.jsx / Register.jsx)": "Split screen layout. Left side: immersive abstract texture or CSS particle field. Right side: minimalistic form (Shadcn UI). GitHub OAuth button with premium hover effect. Focus states on inputs must be cyan ring.",
+    "Checkout": "Clean inline billing. Neon accents for success states.",
+    "Dashboard": "Preserve functionality but inject the new CSS variables (cyan focus, JetBrains Mono for data). Tight density, sharp 1px borders."
   },
-  "surface_strategies": {
-    "dashboard_grid": {
-      "concept": "Grid Borders (The Technical Look)",
-      "classes": "border-collapse border-border/40",
-      "items": "border-r border-b border-border/40 hover:bg-white/[0.02] transition-colors"
-    },
-    "code_blocks": {
-      "concept": "Retro-Futurism (Terminal)",
-      "classes": "bg-black/80 border border-white/10 shadow-[0_0_15px_rgba(0,229,255,0.05)]",
-      "text": "text-[#00E5FF] font-mono"
-    },
-    "headers": {
-      "concept": "Crystal Glass",
-      "classes": "bg-[#0A0D14]/70 backdrop-blur-xl border-b border-white/10"
-    }
-  },
-  "layout_and_spacing": {
-    "philosophy": "Generous Spacing + Bento Grid Protocol",
-    "marketing_hero": "grid-cols-1 md:grid-cols-12 gap-8. Asymmetric layout where hero image spans col-span-8 and overlapping terminal code blocks span col-span-5 with -ml-16 negative margin to break the grid.",
-    "dashboard": "Control Room grid. grid-cols-1 md:grid-cols-12 gap-0. Strictly use exposed skeletal borders instead of floating cards.",
-    "spacing_scale": "p-6 for standard inner containers, p-12 for section gaps, py-24 for marketing vertical rhythm."
-  },
-  "components": {
-    "buttons": {
-      "primary": "bg-[#00E5FF] text-black font-medium hover:bg-[#00E5FF]/90 transition-transform active:scale-95 rounded-none border border-transparent shadow-[0_0_15px_rgba(0,229,255,0.3)]",
-      "secondary": "bg-transparent text-white border border-white/20 hover:border-white/50 hover:bg-white/5 transition-all rounded-none",
-      "ghost": "text-zinc-400 hover:text-white hover:bg-white/5 transition-colors rounded-none"
-    },
-    "badges": {
-      "live": "inline-flex items-center gap-2 px-2.5 py-0.5 text-xs font-mono text-[#10B981] bg-[#10B981]/10 border border-[#10B981]/20 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.2)]",
-      "building": "inline-flex items-center gap-2 px-2.5 py-0.5 text-xs font-mono text-[#3B82F6] bg-[#3B82F6]/10 border border-[#3B82F6]/20 rounded-full animate-pulse",
-      "failed": "inline-flex items-center gap-2 px-2.5 py-0.5 text-xs font-mono text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full",
-      "queued": "inline-flex items-center gap-2 px-2.5 py-0.5 text-xs font-mono text-[#F59E0B] bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-full border-dashed"
-    }
-  },
-  "micro_interactions": {
-    "hover": "Subtle -translate-y-0.5 and glow enhancement on cards.",
-    "building_state": "Use a 'Tracing Beam' or shimmering gradient border (via framer-motion or CSS mask) around the deployment card while 'Building'.",
-    "terminal_typing": "Deploy logs should appear with a slight staggering/typing effect to emulate real terminal output.",
-    "status_dot": "Live status badge must have a 6px pulsing dot (ping animation)."
-  },
-  "page_specific_guidelines": {
-    "marketing_landing": "High visual impact. Use the 3D abstract background image overlaid with black/50. Massive typography (H1 tracking-tighter). A 'Kinetic Texture' marquee of tech stack logos. No generic 'hero on left, image on right'. Use overlapping bento layers.",
-    "dashboard_apps": "Data-heavy, scanable. Grid borders (no cards). Sortable tables using Shadcn, but remove rounded corners and heavy shadows. Flat, rectangular, dense. Include tech badges (React, Node) and 'last deploy' relative times.",
-    "app_detail": "Tabbed interface (Overview, Deployments, Domains, Env Vars, Monitoring, Settings). Overview should feature a prominent 'Terminal' block showing latest build logs. Use Shadcn Tabs but style them minimally (border-b indicator, not pill shapes).",
-    "monitoring": "Integrate Shadcn Recharts. Use monochromatic charts with the brand primary color (#00E5FF) and a gradient fill (opacity 0.2 to 0).",
-    "billing": "Simple, no-nonsense. Hidden WHMCS logic represented cleanly. High contrast pricing tiers using 'Tracing Beam' on the recommended 'Agency' plan."
-  },
-  "media_and_assets": {
-    "icon_library": "lucide-react (installed) + @phosphor-icons/react (Duotone for marketing, regular for dashboard)",
-    "images": [
-      {
-        "category": "hero_background",
-        "url": "https://static.prod-images.emergentagent.com/jobs/5fed0a66-6655-41bc-a461-78244f817ef5/images/51d46d5ed33552961486aeeafbca5ab7ae2225742c10449492914fbf4634b138.png",
-        "description": "Abstract 3D rendering of fiber optic data streams, glowing server block. Use as absolute background in the Marketing Hero section with bg-black/50 overlay."
-      },
-      {
-        "category": "marketing_abstract",
-        "url": "https://static.prod-images.emergentagent.com/jobs/5fed0a66-6655-41bc-a461-78244f817ef5/images/f6fe650f9de126469ea48b176c020827fff6e51aa7a515ea758c3ac4b57625b6.png",
-        "description": "Macro silicon wafer with green accents. Use in 'Features' or 'Infrastructure' section of the marketing page."
-      },
-      {
-        "category": "developer_coding",
-        "url": "https://images.unsplash.com/photo-1625838144804-300f3907c110?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwzfHxkZXZlbG9wZXIlMjBjb2RpbmclMjBkYXJrfGVufDB8fHx8MTc3ODA3MzgzM3ww&ixlib=rb-4.1.0&q=85",
-        "description": "Dark developer monitor coding. Use in the 'Built for Developers' section."
-      }
-    ]
-  },
-  "instructions_to_main_agent": [
-    "Strictly follow the color palette. No purple/violet gradients allowed.",
-    "Enforce flat, hard-edged corners (rounded-none or max rounded-sm) to match the terminal/IDE aesthetic.",
-    "Do not use Shadcn 'Card' wrapper if it introduces soft shadows and high border-radius. Override Shadcn defaults to match the 'Grid Borders' and 'Retro-Futurism' surface strategies.",
-    "All interactive elements must have data-testid attributes.",
-    "For the dashboard, use a 1px exposed border grid rather than floating isolated cards to emphasize the technical 'Control Room' feel.",
-    "Implement the 'Building' state with framer-motion tracing beam or dashed border animations.",
-    "DO NOT use Inter, Roboto, or Space Grotesk. Rely on Outfit, IBM Plex Sans, and JetBrains Mono.",
-    "Make sure to use the provided media URLs. No placeholder image URLs."
-  ]
+  "testing": {
+    "data_testids": [
+      "nav-pricing",
+      "nav-signin",
+      "nav-signup",
+      "hero-cta-start",
+      "hero-cta-pricing",
+      "plan-hobby",
+      "plan-pro",
+      "plan-agency",
+      "plan-cta-hobby",
+      "plan-cta-pro",
+      "plan-cta-agency"
+    ],
+    "rules": "All interactive elements MUST include these exact data-testids. Apply kebab-case for any new interactive elements."
+  }
 }
