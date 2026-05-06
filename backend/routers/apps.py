@@ -3,6 +3,7 @@ import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from slugify import slugify
 
@@ -14,9 +15,16 @@ from services.github_helpers import (
     detect_default_branch,
     inject_github_token,
     is_github_https,
+    parse_repo,
     probe_repo_visibility,
     strip_token_from_url,
     workspace_github_token,
+)
+from services.deploy_keys import (
+    add_github_deploy_key,
+    generate_deploy_keypair,
+    github_ssh_url,
+    remove_github_deploy_key,
 )
 from services.log_parser import parse_log_lines, extract_failure_summary
 
@@ -95,21 +103,25 @@ async def _redeploy_background(
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
     patch = dict(coolify_patch or {})
-    if app and is_github_https(app.get("repo_url") or ""):
+    # Apps on the private-deploy-key flow don't need URL rewrites — the SSH
+    # key is permanent and Coolify keeps `git_repository` as the SSH form.
+    if app and is_github_https(app.get("repo_url") or "") and not app.get("coolify_private_key_uuid"):
         gh_token = await workspace_github_token(app["workspace_id"])
         if gh_token:
-            patch["git_repository"] = inject_github_token(app["repo_url"], gh_token)
-            await _append_log(deployment_id, "[BUILD] refreshing Coolify clone URL with current GitHub token")
-        else:
+            # Best-effort shortcut: if the user has a token and the repo is
+            # public, refreshing the clone URL doesn't hurt. For private repos
+            # this won't work (Coolify strips the userinfo) — those should be
+            # using _create_private_github_app at create time instead.
             visibility = await probe_repo_visibility(app["repo_url"])
-            if visibility == "private":
+            if visibility == "public":
+                patch["git_repository"] = app["repo_url"]
+            elif visibility == "private":
                 await _append_log(
                     deployment_id,
-                    "[ERROR] repo is private but no GitHub account is linked on this workspace — "
-                    "connect GitHub in Settings and try again.",
+                    "[WARN] this app was created before deploy-key support was "
+                    "wired in. Delete and re-create the app to switch to the "
+                    "deploy-key flow (recommended for private repos).",
                 )
-                # Still try a deploy so user sees Coolify's own error context,
-                # but we already know it will fail.
     if patch:
         await _append_log(deployment_id, f"[BUILD] applying coolify patch: {', '.join(patch.keys())}")
         try:
@@ -117,6 +129,105 @@ async def _redeploy_background(
         except Exception as e:
             await _append_log(deployment_id, f"[WARN] coolify PATCH failed: {str(e)[:160]}")
     await _trigger_coolify_deploy_with_retry(app_id, deployment_id, coolify_uuid)
+
+
+async def _create_private_github_app(
+    app: dict,
+    deployment_id: str | None,
+    project_uuid: str,
+    server_uuid: str,
+) -> Optional[dict]:
+    """Private-repo deploy path:
+       1) Get the workspace's GitHub OAuth token (with `repo` scope).
+       2) Generate an ed25519 SSH keypair.
+       3) Upload the public key to the GitHub repo as a read-only deploy key.
+       4) Register the private key in Coolify (is_git_related=true).
+       5) Create a Coolify app via /applications/private-deploy-key with the
+          SSH URL + private_key_uuid.
+       6) Persist { github_deploy_key_id, coolify_private_key_uuid } on our app
+          row so we can clean them up on delete.
+    Returns the Coolify response (dict with `uuid`) on success, None on failure.
+    """
+    db = get_db()
+    app_id = app["id"]
+    parsed = parse_repo(app["repo_url"])
+    if not parsed:
+        if deployment_id:
+            await _append_log(deployment_id, "[ERROR] could not parse GitHub repo URL")
+        return None
+    owner, repo_name = parsed
+
+    gh_token = await workspace_github_token(app["workspace_id"])
+    if not gh_token:
+        if deployment_id:
+            await _append_log(
+                deployment_id,
+                "[ERROR] this repo is private and no GitHub account is linked on this workspace. "
+                "Open Settings → Connect GitHub (with repo scope), then redeploy.",
+            )
+        return None
+
+    if deployment_id:
+        await _append_log(deployment_id, f"[BUILD] private repo detected ({owner}/{repo_name}) — setting up deploy key")
+
+    private_pem, public_key = generate_deploy_keypair()
+    key_title = f"deployhub-{app['slug']}"
+    gh_key_id = await add_github_deploy_key(owner, repo_name, key_title, public_key, gh_token)
+    if not gh_key_id:
+        if deployment_id:
+            await _append_log(
+                deployment_id,
+                "[ERROR] could not add deploy key on GitHub — token likely missing 'repo' scope, "
+                "or the repo is not accessible. Re-connect GitHub in Settings and retry.",
+            )
+        return None
+    if deployment_id:
+        await _append_log(deployment_id, f"[BUILD] deploy key uploaded to GitHub (id={gh_key_id}, read-only)")
+
+    coolify_key = await coolify.create_private_key(
+        name=f"deployhub-{app['slug']}-key",
+        description=f"DeployHub auto-key for {owner}/{repo_name}",
+        private_key=private_pem,
+    )
+    coolify_key_uuid = (coolify_key or {}).get("uuid")
+    if not coolify_key_uuid:
+        if deployment_id:
+            await _append_log(deployment_id, "[ERROR] Coolify rejected the private key — retry or check server logs")
+        # Clean up the GitHub-side key so we don't leave dangling deploy keys
+        await remove_github_deploy_key(owner, repo_name, gh_key_id, gh_token)
+        return None
+    if deployment_id:
+        await _append_log(deployment_id, f"[BUILD] private key registered in coolify (uuid={coolify_key_uuid})")
+
+    ssh_url = github_ssh_url(app["repo_url"]) or app["repo_url"]
+    res = await coolify.create_private_deploy_key_app(
+        project_uuid=project_uuid,
+        server_uuid=server_uuid,
+        name=app["slug"],
+        git_repository=ssh_url,
+        git_branch=app.get("branch") or "main",
+        private_key_uuid=coolify_key_uuid,
+        ports_exposes="3000",
+        instant_deploy=False,
+    )
+    if res and res.get("uuid"):
+        await db.apps.update_one(
+            {"id": app_id},
+            {"$set": {
+                "coolify_private_key_uuid": coolify_key_uuid,
+                "github_deploy_key_id": gh_key_id,
+                "github_owner": owner,
+                "github_repo": repo_name,
+            }},
+        )
+        return res
+
+    # Coolify refused the app → clean up both sides so a retry starts fresh.
+    if deployment_id:
+        await _append_log(deployment_id, "[WARN] Coolify did not create the app — cleaning up deploy key")
+    await remove_github_deploy_key(owner, repo_name, gh_key_id, gh_token)
+    await coolify.delete_private_key(coolify_key_uuid)
+    return None
 
 
 async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
@@ -192,42 +303,28 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         await _append_log(deployment_id, "[BUILD] coolify project ready")
         await _append_log(deployment_id, "[BUILD] creating application on coolify...")
 
-    # Resolve which repo URL Coolify will see. Private GitHub repos need
-    # embedded credentials because Coolify otherwise asks for a username on
-    # stdin (no TTY) and the build container dies with:
-    #   "fatal: could not read Username for 'https://github.com'".
-    repo_for_coolify = app["repo_url"]
-    if is_github_https(repo_for_coolify):
-        gh_token = await workspace_github_token(app["workspace_id"])
-        visibility = await probe_repo_visibility(repo_for_coolify)
-        if gh_token:
-            repo_for_coolify = inject_github_token(app["repo_url"], gh_token)
-            if deployment_id:
-                await _append_log(
-                    deployment_id,
-                    "[BUILD] injecting workspace GitHub token into clone URL (enables private repo access)",
-                )
-        elif visibility == "private":
-            if deployment_id:
-                await _append_log(
-                    deployment_id,
-                    "[ERROR] repo looks private and no GitHub account is linked on this workspace. "
-                    "Go to Settings → Connect GitHub, then redeploy. "
-                    "Without a token Coolify cannot clone private repositories.",
-                )
-            await _fail_deploy("private repo but no GitHub token on workspace")
-            return
-
-    # Step 1 — create without instant_deploy so we keep control of the deploy trigger.
-    res = await coolify.create_public_app(
-        project_uuid=project_uuid,
-        server_uuid=server_uuid,
-        name=app["slug"],
-        git_repository=repo_for_coolify,
-        git_branch=app.get("branch") or "main",
-        ports_exposes="3000",
-        instant_deploy=False,
-    )
+    # -------------------------------------------------------------------
+    # Decide: public repo → /applications/public
+    #         private GitHub repo → generate deploy key, upload to GitHub,
+    #                                register in Coolify, use /applications/private-deploy-key
+    # -------------------------------------------------------------------
+    res = None
+    used_private_flow = False
+    if is_github_https(app["repo_url"]):
+        visibility = await probe_repo_visibility(app["repo_url"])
+        if visibility == "private":
+            used_private_flow = True
+            res = await _create_private_github_app(app, deployment_id, project_uuid, server_uuid)
+    if not used_private_flow:
+        res = await coolify.create_public_app(
+            project_uuid=project_uuid,
+            server_uuid=server_uuid,
+            name=app["slug"],
+            git_repository=app["repo_url"],
+            git_branch=app.get("branch") or "main",
+            ports_exposes="3000",
+            instant_deploy=False,
+        )
     if not res or not res.get("uuid"):
         await _fail_deploy("coolify create app failed — check token, server, and repo URL")
         return
@@ -355,6 +452,25 @@ async def delete_app(app_id: str, request: Request):
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    # Clean up deploy key artefacts so we don't leave dead keys on GitHub or Coolify.
+    if app.get("coolify_app_uuid"):
+        try:
+            await coolify.delete_application(app["coolify_app_uuid"])
+        except Exception as e:
+            logger.warning("coolify delete_application failed: %s", e)
+    if app.get("coolify_private_key_uuid"):
+        try:
+            await coolify.delete_private_key(app["coolify_private_key_uuid"])
+        except Exception as e:
+            logger.warning("coolify delete_private_key failed: %s", e)
+    if app.get("github_deploy_key_id") and app.get("github_owner") and app.get("github_repo"):
+        gh_token = await workspace_github_token(app["workspace_id"])
+        if gh_token:
+            await remove_github_deploy_key(
+                app["github_owner"], app["github_repo"], app["github_deploy_key_id"], gh_token
+            )
+
     await db.apps.delete_one({"id": app_id})
     await db.deployments.delete_many({"app_id": app_id})
     await db.domains.delete_many({"app_id": app_id})

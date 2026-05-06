@@ -97,6 +97,54 @@ class CoolifyClient:
         }
         return await self._request("POST", "/applications/public", json=payload)
 
+    async def create_private_key(self, *, name: str, private_key: str, description: str = "") -> Optional[dict]:
+        """Register a Git-related SSH private key in Coolify so applications can
+        clone private repos. Returns {uuid, ...} on success."""
+        return await self._request(
+            "POST",
+            "/security/keys",
+            json={
+                "name": name,
+                "description": description,
+                "private_key": private_key,
+                "is_git_related": True,
+            },
+        )
+
+    async def delete_private_key(self, uuid: str) -> Optional[dict]:
+        return await self._request("DELETE", f"/security/keys/{uuid}")
+
+    async def create_private_deploy_key_app(
+        self,
+        *,
+        project_uuid: str,
+        server_uuid: str,
+        name: str,
+        git_repository: str,
+        git_branch: str = "main",
+        private_key_uuid: str,
+        build_pack: str = "nixpacks",
+        ports_exposes: str = "3000",
+        environment_name: str = "production",
+        instant_deploy: bool = False,
+    ) -> Optional[dict]:
+        """Create an application that clones a private repo via an SSH deploy key
+        registered in Coolify (is_git_related=true). git_repository must be the
+        SSH form: git@github.com:owner/repo.git"""
+        payload = {
+            "project_uuid": project_uuid,
+            "server_uuid": server_uuid,
+            "environment_name": environment_name,
+            "name": name,
+            "git_repository": git_repository,
+            "git_branch": git_branch,
+            "build_pack": build_pack,
+            "ports_exposes": ports_exposes,
+            "private_key_uuid": private_key_uuid,
+            "instant_deploy": instant_deploy,
+        }
+        return await self._request("POST", "/applications/private-deploy-key", json=payload)
+
     async def deploy(self, app_uuid: str, force: bool = False) -> Optional[dict]:
         """Trigger a deploy. Returns the parsed Coolify deployment object
         ({deployment_uuid, message, resource_uuid}) on success; None on failure."""
@@ -131,6 +179,13 @@ class CoolifyClient:
 
     async def restart(self, app_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/applications/{app_uuid}/restart")
+
+    async def delete_application(self, app_uuid: str) -> Optional[dict]:
+        """Remove an application from Coolify (also tears down its container)."""
+        return await self._request(
+            "DELETE",
+            f"/applications/{app_uuid}?cleanup=true&delete_configurations=true&delete_volumes=true&delete_connected_networks=false&docker_cleanup=true",
+        )
 
     async def list_deployments(self, app_uuid: str) -> list:
         data = await self._request("GET", f"/deployments/applications/{app_uuid}")
