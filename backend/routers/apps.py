@@ -7,7 +7,7 @@ from slugify import slugify
 
 from db import get_db
 from auth_utils import get_current_user, require_workspace_member
-from models import AppIn, EnvVarUpdate
+from models import AppIn, EnvVarUpdate, AppUpdate, RedeployIn
 from clients.coolify import coolify
 
 router = APIRouter(tags=["apps"])
@@ -193,8 +193,8 @@ async def delete_app(app_id: str, request: Request):
     return {"deleted": True}
 
 
-@router.post("/apps/{app_id}/redeploy")
-async def redeploy(app_id: str, request: Request, background: BackgroundTasks):
+@router.patch("/apps/{app_id}")
+async def update_app(app_id: str, payload: AppUpdate, request: Request):
     user = await get_current_user(request)
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
@@ -202,28 +202,90 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks):
         raise HTTPException(status_code=404, detail="App not found")
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
 
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None or k in {"build_command", "start_command", "project_id"}}
+    if not update:
+        return await db.apps.find_one({"id": app_id}, {"_id": 0})
+
+    if "name" in update:
+        update["slug"] = slugify(f"{update['name']}-{app_id[:6]}")
+
+    await db.apps.update_one({"id": app_id}, {"$set": update})
+
+    # Sync to Coolify if connected
+    if coolify.configured and app.get("coolify_app_uuid"):
+        coolify_payload = {}
+        if "branch" in update and update["branch"]:
+            coolify_payload["git_branch"] = update["branch"]
+        if "build_command" in update:
+            coolify_payload["build_command"] = update["build_command"] or ""
+        if "start_command" in update:
+            coolify_payload["custom_start_command"] = update["start_command"] or ""
+        if "name" in update:
+            coolify_payload["name"] = update["slug"]
+        if coolify_payload:
+            await coolify.update_application(app["coolify_app_uuid"], coolify_payload)
+
+    return await db.apps.find_one({"id": app_id}, {"_id": 0})
+
+
+@router.post("/apps/{app_id}/redeploy")
+async def redeploy(app_id: str, request: Request, background: BackgroundTasks, payload: RedeployIn | None = None):
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    payload = payload or RedeployIn()
+    target_branch = (payload.branch or app.get("branch") or "main").strip()
+    target_commit = (payload.commit_sha or "").strip() or None
+    msg = payload.commit_message or "Manual redeploy"
+    if target_commit:
+        msg = f"{msg} ({target_branch}@{target_commit[:7]})"
+    elif payload.branch and payload.branch != app.get("branch"):
+        msg = f"{msg} (switch to {target_branch})"
+
     deploy_doc = {
         "id": str(uuid.uuid4()),
         "app_id": app_id,
         "workspace_id": app["workspace_id"],
         "status": "queued",
-        "commit_sha": None,
-        "commit_message": "Manual redeploy",
-        "branch": app.get("branch") or "main",
-        "logs": ["[QUEUE] redeploy queued"],
+        "commit_sha": target_commit,
+        "commit_message": msg,
+        "branch": target_branch,
+        "logs": [
+            "[QUEUE] redeploy queued",
+            f"[QUEUE] branch={target_branch}" + (f" commit={target_commit[:7]}" if target_commit else ""),
+        ],
         "started_at": _now_iso(),
         "finished_at": None,
     }
     await db.deployments.insert_one(deploy_doc)
     deploy_doc.pop("_id", None)
-    await db.apps.update_one({"id": app_id}, {"$set": {"status": "queued", "last_deploy_at": _now_iso()}})
+
+    app_update = {"status": "queued", "last_deploy_at": _now_iso()}
+    if payload.branch:
+        app_update["branch"] = target_branch
+    await db.apps.update_one({"id": app_id}, {"$set": app_update})
 
     if coolify.configured and app.get("coolify_app_uuid"):
+        # If switching branch / commit, update Coolify app first
+        coolify_patch = {}
+        if payload.branch:
+            coolify_patch["git_branch"] = target_branch
+        if target_commit:
+            coolify_patch["git_commit_sha"] = target_commit
+        if coolify_patch:
+            await coolify.update_application(app["coolify_app_uuid"], coolify_patch)
         await coolify.deploy(app["coolify_app_uuid"], force=True)
         await db.apps.update_one({"id": app_id}, {"$set": {"status": "building"}})
         await db.deployments.update_one(
             {"id": deploy_doc["id"]},
-            {"$set": {"status": "building", "logs": ["[BUILD] redeploy triggered on coolify"]}},
+            {"$set": {
+                "status": "building",
+                "logs": (deploy_doc.get("logs") or []) + ["[BUILD] redeploy triggered on coolify"],
+            }},
         )
     else:
         background.add_task(_coolify_deploy, app_id)

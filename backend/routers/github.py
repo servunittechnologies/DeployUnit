@@ -104,3 +104,100 @@ async def connect_github(payload: ConnectIn, request: Request):
         "workspace_id": payload.workspace_id,
         "message": "Use /api/auth/github/start?link=true to begin OAuth.",
     }
+
+
+def _parse_repo(repo_url: str) -> tuple[str, str] | None:
+    """Extract (owner, repo) from a GitHub URL. Supports https/ssh with .git suffix."""
+    if not repo_url:
+        return None
+    import re
+    m = re.match(r"^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url.strip())
+    if m:
+        return m.group(1), m.group(2)
+    m = re.match(r"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$", repo_url.strip())
+    if m:
+        return m.group(1), m.group(2)
+    return None
+
+
+async def _user_token(request: Request) -> str | None:
+    user = await get_current_user(request)
+    db = get_db()
+    full = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    enc = (full or {}).get("github_access_token")
+    if not enc:
+        return None
+    try:
+        return decrypt_token(enc)
+    except Exception:
+        return None
+
+
+@router.get("/branches")
+async def list_branches(repo_url: str, request: Request):
+    token = await _user_token(request)
+    parsed = _parse_repo(repo_url)
+    if not parsed:
+        return []
+    if not token:
+        return [{"name": "main", "commit_sha": None, "default": True}]
+    owner, repo = parsed
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as cli:
+            r = await cli.get(
+                f"https://api.github.com/repos/{owner}/{repo}/branches",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                params={"per_page": 100},
+            )
+            repo_info = await cli.get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            )
+    except Exception as e:
+        logger.warning("github branches failed: %s", e)
+        return []
+    if r.status_code != 200:
+        return []
+    default_branch = (repo_info.json() or {}).get("default_branch") if repo_info.status_code == 200 else None
+    out = []
+    for b in r.json() or []:
+        out.append({
+            "name": b.get("name"),
+            "commit_sha": (b.get("commit") or {}).get("sha"),
+            "default": b.get("name") == default_branch,
+        })
+    return out
+
+
+@router.get("/commits")
+async def list_commits(repo_url: str, branch: str, request: Request, per_page: int = 25):
+    token = await _user_token(request)
+    parsed = _parse_repo(repo_url)
+    if not parsed or not token:
+        return []
+    owner, repo = parsed
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as cli:
+            r = await cli.get(
+                f"https://api.github.com/repos/{owner}/{repo}/commits",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                params={"sha": branch, "per_page": min(per_page, 50)},
+            )
+    except Exception as e:
+        logger.warning("github commits failed: %s", e)
+        return []
+    if r.status_code != 200:
+        return []
+    out = []
+    for c in r.json() or []:
+        commit = c.get("commit") or {}
+        author = (commit.get("author") or {})
+        out.append({
+            "sha": c.get("sha"),
+            "short_sha": (c.get("sha") or "")[:7],
+            "message": (commit.get("message") or "").split("\n")[0],
+            "author_name": author.get("name"),
+            "author_date": author.get("date"),
+            "html_url": c.get("html_url"),
+        })
+    return out

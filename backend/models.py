@@ -105,11 +105,27 @@ class AppOut(BaseModel):
     status: str = "queued"
     last_deploy_at: Optional[datetime] = None
     primary_url: Optional[str] = None
+    auto_deploy: bool = True
     created_at: datetime
+
+
+class AppUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    branch: Optional[str] = None
+    build_command: Optional[str] = None
+    start_command: Optional[str] = None
+    auto_deploy: Optional[bool] = None
+    project_id: Optional[str] = None
 
 
 class EnvVarUpdate(BaseModel):
     env_vars: Dict[str, str]
+
+
+class RedeployIn(BaseModel):
+    branch: Optional[str] = None
+    commit_sha: Optional[str] = None
+    commit_message: Optional[str] = None
 
 
 # ============ Deployment ============

@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 4 — validated the enhanced App Detail page (editable settings, better env editor, prominent DeploymentStatus card, branch/commit DeployModal, redeploy with body). Backend: added TestAppsIter4 class (6 new tests) to /app/backend/tests/backend_test.py covering PATCH /api/apps/{id} with idempotency, GET /api/github/branches fallback + invalid URL, GET /api/github/commits empty when no token, redeploy with branch+commit_sha, redeploy with empty body. Full suite: 42/42 PASS (0 regressions from previous iteration's 35/36 — and the prior VAT test was fixed). Frontend Playwright (demo@deployhub.dev): logged in, opened novabrew-web-renamed-x. DeploymentStatus on Overview shows BUILDING + message + REDEPLOY button + BRANCH (main) + COMMIT (HEAD) + DURATION + STARTED + 'Recent deployments' mini-timeline. Deploy CTA opens DeployModal with branch dropdown, 'Pin to specific commit (advanced)' checkbox, '// will deploy' preview ('main@ HEAD'), Deploy/Cancel. Submit → 'Deployment started · main' toast, modal closes. Settings tab: name/branch/build/start inputs + auto-deploy checkbox + save button all present; edited name with suffix → toast 'Settings saved' + header title updated live. Env tab: EnvVarsEditor renders with pre-seeded NODE_ENV + DATABASE_URL rows; show/hide toggle works; 'paste .env' textarea accepts 'FOO=bar', Parse & merge adds a 3rd row; Save & sync shows 'Saved 3 variables' toast; Add variable adds a fresh empty row (4). Deployments tab: 7 rows with Status / Commit (short SHA like 'HEAD' / 'abc1234') / Branch+message / Duration / Started columns — all data formatted correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DeployModal", "issues": ["Branch dropdown initially shows 'loading...' text for a brief moment before the fallback 'main' entry appears. Cosmetic only — the '// will deploy' preview correctly resolves to 'main@ HEAD' and submit works. Consider seeding the dropdown with a default 'main' option so there is no loading flicker for users without a linked GitHub account."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PATCH /apps/{id} correctly uses model_dump(exclude_unset=True) and whitelists build_command/start_command/project_id for None-valued nulls — good. It also regenerates slug when name changes and syncs build_command/custom_start_command/git_branch to Coolify when connected.",
+    "RedeployIn payload handling is clean: branch + commit_sha optional, commit_message defaults to 'Manual redeploy', adds '(branch@sha7)' suffix. app branch is updated only if payload.branch was explicitly supplied — matches spec.",
+    "github.py _parse_repo regex correctly rejects non-github URLs (example.com) while accepting https + ssh with optional .git suffix. Fallback single 'main' entry when no token saved is spec-compliant.",
+    "github/commits returns [] gracefully with no token — matches spec. Consider adding a sample commit fallback in future for parity with branches if the product wants to show the advanced commit picker even for disconnected users.",
+    "EnvVarsEditor correctly detects 'secret-ish' keys (contains _KEY/_SECRET/PASSWORD) and masks the value input — good UX. .env bulk parser is forgiving (handles KEY=VALUE, quoted values, export prefix, comment lines).",
+    "DeploymentStatus card correctly computes short SHA, duration (handles seconds/minutes), and relative 'started' time. Recent-deployments mini-timeline renders up to last ~10 statuses as colored bars.",
+    "AppDetail.jsx is ~420 lines — within guideline. Good separation: DeploymentStatus, DeployModal, EnvVarsEditor are all isolated components with their own data-testids.",
+    "All new interactive elements have data-testid (settings-name-input, settings-save-btn, deploy-modal, deploy-branch-select, deploy-pick-commit, deploy-submit, env-row-{idx}, env-key-{idx}, env-value-{idx}, env-mask-{idx}, env-toggle-all, env-toggle-bulk, env-bulk-input, env-bulk-parse, env-add-row, env-save, deployment-status, deploy-status-redeploy) — excellent test hygiene."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (42/42)", "frontend": "100% (all iteration 4 UI spec scenarios verified end-to-end — DeploymentStatus card, DeployModal, Settings edit+save+header-update, EnvVarsEditor bulk-paste + save + add-row, Deployments table columns)"},
+  "test_credentials": "demo@deployhub.dev / demo1234 (used).",
+  "seed_data_creation": "Frontend test appended '-t' suffix to the first app's name (now 'novabrew-web-renamed-x-t'). Logic is idempotent (only appends once). Env vars on the first app now contain NODE_ENV, DATABASE_URL, FOO=bar (FOO added by bulk-paste test; harmless).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 4 app-detail enhancements are fully green. Backend suite is at 42/42. TestAppsIter4 is the new class to exercise PATCH + redeploy + github branches/commits. Frontend components DeployModal, EnvVarsEditor, DeploymentStatus all have stable data-testids. Demo first app name has drifted to 'novabrew-web-renamed-x-t' (idempotent on re-runs). Minor cosmetic: DeployModal branch dropdown shows a 'loading...' flicker before the fallback 'main' entry is rendered — harmless but could be seeded upfront."
+}

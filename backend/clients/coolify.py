@@ -115,6 +115,9 @@ class CoolifyClient:
             results.append(res)
         return {"updated": results}
 
+    async def update_application(self, app_uuid: str, payload: dict) -> Optional[dict]:
+        return await self._request("PATCH", f"/applications/{app_uuid}", json=payload)
+
     async def restart(self, app_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/applications/{app_uuid}/restart")
 

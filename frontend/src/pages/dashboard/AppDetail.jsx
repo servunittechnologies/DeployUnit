@@ -3,7 +3,14 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../../lib/api";
 import StatusBadge from "../../components/StatusBadge";
 import TerminalLog from "../../components/TerminalLog";
-import { ChevronLeft, RotateCw, RefreshCcw, Trash2, Globe, GitBranch, ExternalLink, Plus, X } from "lucide-react";
+import EnvVarsEditor from "../../components/EnvVarsEditor";
+import DeployModal from "../../components/DeployModal";
+import DeploymentStatus from "../../components/DeploymentStatus";
+import {
+  ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
+  ExternalLink, Plus, Save, Loader2, Rocket,
+} from "lucide-react";
+import { toast } from "sonner";
 
 const TABS = ["overview", "deployments", "domains", "env", "monitoring", "settings"];
 
@@ -18,6 +25,102 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function fmtDuration(start, end) {
+  if (!start) return "—";
+  const a = new Date(start).getTime();
+  const b = end ? new Date(end).getTime() : Date.now();
+  const sec = Math.max(0, Math.round((b - a) / 1000));
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+}
+
+function SettingsForm({ app, onSaved }) {
+  const [name, setName] = useState(app.name || "");
+  const [branch, setBranch] = useState(app.branch || "main");
+  const [build, setBuild] = useState(app.build_command || "");
+  const [start, setStart] = useState(app.start_command || "");
+  const [auto, setAuto] = useState(app.auto_deploy !== false);
+  const [saving, setSaving] = useState(false);
+
+  const dirty =
+    name !== (app.name || "") ||
+    branch !== (app.branch || "main") ||
+    build !== (app.build_command || "") ||
+    start !== (app.start_command || "") ||
+    auto !== (app.auto_deploy !== false);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await api.patch(`/apps/${app.id}`, {
+        name, branch, build_command: build, start_command: start, auto_deploy: auto,
+      });
+      toast.success("Settings saved");
+      onSaved?.(res.data);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <form onSubmit={save} className="space-y-5 max-w-2xl" data-testid="settings-form">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">App name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} required minLength={1} maxLength={80}
+            className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+            data-testid="settings-name-input"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 inline-flex items-center gap-1">
+            <GitBranch className="h-3 w-3" /> Default branch
+          </label>
+          <input value={branch} onChange={(e) => setBranch(e.target.value)}
+            className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+            data-testid="settings-branch-input"
+          />
+          <div className="text-[11px] text-zinc-500 mt-1 font-mono">Used when no specific branch is picked at deploy time.</div>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Build command</label>
+        <input value={build} onChange={(e) => setBuild(e.target.value)}
+          placeholder="yarn build (auto-detected if empty)"
+          className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+          data-testid="settings-build-input"
+        />
+      </div>
+      <div>
+        <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Start command</label>
+        <input value={start} onChange={(e) => setStart(e.target.value)}
+          placeholder="yarn start (auto-detected if empty)"
+          className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+          data-testid="settings-start-input"
+        />
+      </div>
+
+      <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="settings-auto-deploy" />
+        Auto-deploy on every push to <span className="font-mono text-brand">{branch}</span>
+      </label>
+
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={!dirty || saving}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-50"
+          data-testid="settings-save-btn"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save changes
+        </button>
+        {dirty && <span className="text-xs font-mono text-signal-queued">unsaved changes</span>}
+      </div>
+    </form>
+  );
+}
+
 export default function AppDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -26,26 +129,23 @@ export default function AppDetail() {
   const [deployments, setDeployments] = useState([]);
   const [domains, setDomains] = useState([]);
   const [envVars, setEnvVars] = useState({});
-  const [envText, setEnvText] = useState("");
   const [monitoring, setMonitoring] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [domainInput, setDomainInput] = useState("");
+  const [deployOpen, setDeployOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const [a, d, dom, e, m] = await Promise.all([
+    const [a, d, e, m] = await Promise.all([
       api.get(`/apps/${id}`),
       api.get(`/apps/${id}/deployments`),
-      api.get("/domains", { params: { workspace_id: "x" } }).catch(() => ({ data: [] })),
       api.get(`/apps/${id}/env`),
       api.get(`/apps/${id}/monitoring`),
     ]);
     setApp(a.data);
     setDeployments(d.data);
     setEnvVars(e.data.env_vars || {});
-    setEnvText(Object.entries(e.data.env_vars || {}).map(([k, v]) => `${k}=${v}`).join("\n"));
     setMonitoring(m.data);
-    // get app-scoped domains
     const ws = a.data.workspace_id;
     const domsRes = await api.get("/domains", { params: { workspace_id: ws } });
     setDomains(domsRes.data.filter((x) => x.app_id === id));
@@ -53,7 +153,6 @@ export default function AppDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll while building
   useEffect(() => {
     if (!app) return;
     if (app.status === "building" || app.status === "queued") {
@@ -62,14 +161,10 @@ export default function AppDetail() {
     }
   }, [app, load]);
 
-  const redeploy = async () => {
-    setBusy(true);
-    try { await api.post(`/apps/${id}/redeploy`); await load(); }
-    finally { setBusy(false); }
-  };
   const restart = async () => {
     setBusy(true);
-    try { await api.post(`/apps/${id}/restart`); }
+    try { await api.post(`/apps/${id}/restart`); toast.success("App restart triggered"); }
+    catch (e) { toast.error(getApiErrorMessage(e)); }
     finally { setBusy(false); }
   };
   const remove = async () => {
@@ -78,12 +173,7 @@ export default function AppDetail() {
     navigate("/app");
   };
 
-  const saveEnv = async () => {
-    const next = {};
-    envText.split(/\r?\n/).forEach((line) => {
-      const i = line.indexOf("=");
-      if (i > 0) next[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-    });
+  const saveEnv = async (next) => {
     await api.put(`/apps/${id}/env`, { env_vars: next });
     setEnvVars(next);
   };
@@ -127,8 +217,11 @@ export default function AppDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={redeploy} disabled={busy} className="inline-flex items-center gap-2 px-3 py-2 border border-white/15 hover:border-brand hover:text-brand text-sm" data-testid="app-redeploy">
-              <RotateCw className="h-4 w-4" /> Redeploy
+            <button onClick={() => setDeployOpen(true)} disabled={busy}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 active:scale-95 transition shadow-[0_0_18px_rgba(0,229,255,0.25)] text-sm"
+              data-testid="app-deploy-cta"
+            >
+              <Rocket className="h-4 w-4" /> Deploy
             </button>
             <button onClick={restart} disabled={busy} className="inline-flex items-center gap-2 px-3 py-2 border border-white/15 hover:border-white/40 text-sm" data-testid="app-restart">
               <RefreshCcw className="h-4 w-4" /> Restart
@@ -153,31 +246,35 @@ export default function AppDetail() {
       </div>
 
       {tab === "overview" && (
-        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
-          <div className="bg-background p-5 lg:col-span-2">
-            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">// latest deployment</div>
-            <TerminalLog
-              title={latestDeploy ? `${latestDeploy.status}.log` : "no.log"}
-              lines={latestDeploy?.logs || []}
-              height={320}
-            />
-          </div>
-          <div className="bg-background p-5 space-y-4">
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Repository</div>
-              <div className="text-sm font-mono break-all">{app.repo_url}</div>
+        <div className="p-6 space-y-6">
+          <DeploymentStatus app={app} latest={latestDeploy} history={deployments} onRedeploy={() => setDeployOpen(true)} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
+            <div className="bg-background p-5 lg:col-span-2">
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">// build log</div>
+              <TerminalLog
+                title={latestDeploy ? `${latestDeploy.status}.log` : "no.log"}
+                lines={latestDeploy?.logs || []}
+                height={320}
+              />
             </div>
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Last deploy</div>
-              <div className="text-sm">{timeAgo(app.last_deploy_at)}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Uptime 24h</div>
-              <div className="text-sm">{monitoring?.uptime_pct != null ? `${monitoring.uptime_pct}%` : "collecting…"}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Avg response</div>
-              <div className="text-sm">{monitoring?.avg_response_ms != null ? `${monitoring.avg_response_ms}ms` : "—"}</div>
+            <div className="bg-background p-5 space-y-4">
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Repository</div>
+                <div className="text-sm font-mono break-all">{app.repo_url}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Last deploy</div>
+                <div className="text-sm">{timeAgo(app.last_deploy_at)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Uptime 24h</div>
+                <div className="text-sm">{monitoring?.uptime_pct != null ? `${monitoring.uptime_pct}%` : "collecting…"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Avg response</div>
+                <div className="text-sm">{monitoring?.avg_response_ms != null ? `${monitoring.avg_response_ms}ms` : "—"}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -186,21 +283,28 @@ export default function AppDetail() {
       {tab === "deployments" && (
         <div className="p-6">
           <div className="border-t border-l border-white/[0.06]">
+            <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 border-r border-b border-white/[0.06]">
+              <div className="col-span-2">Status</div>
+              <div className="col-span-3">Commit</div>
+              <div className="col-span-3">Branch / message</div>
+              <div className="col-span-2">Duration</div>
+              <div className="col-span-2 text-right">Started</div>
+            </div>
             {deployments.map((d) => (
-              <div key={d.id} className="flex items-center justify-between p-4 border-r border-b border-white/[0.06]" data-testid={`deployment-${d.id}`}>
-                <div className="flex items-center gap-4">
-                  <StatusBadge status={d.status} />
-                  <div>
-                    <div className="text-sm">{d.commit_message || "Deployment"}</div>
-                    <div className="text-xs font-mono text-zinc-500">{timeAgo(d.started_at)} · {d.branch}</div>
-                  </div>
+              <div key={d.id} className="grid grid-cols-12 px-4 py-3 border-r border-b border-white/[0.06] items-center text-sm" data-testid={`deployment-${d.id}`}>
+                <div className="col-span-2"><StatusBadge status={d.status} /></div>
+                <div className="col-span-3 font-mono text-xs flex items-center gap-1.5">
+                  <GitCommit className="h-3 w-3 text-brand" />
+                  {d.commit_sha ? d.commit_sha.slice(0, 7) : "HEAD"}
                 </div>
-                <button
-                  onClick={() => api.get(`/deployments/${d.id}/logs`).then((r) => alert(r.data.logs.join("\n")))}
-                  className="text-xs font-mono text-zinc-400 hover:text-brand"
-                >
-                  view logs
-                </button>
+                <div className="col-span-3">
+                  <div className="text-xs font-mono text-zinc-400 inline-flex items-center gap-1.5">
+                    <GitBranch className="h-3 w-3" /> {d.branch || app.branch}
+                  </div>
+                  <div className="text-xs text-zinc-500 truncate">{d.commit_message}</div>
+                </div>
+                <div className="col-span-2 font-mono text-xs">{fmtDuration(d.started_at, d.finished_at)}</div>
+                <div className="col-span-2 text-right text-xs font-mono text-zinc-500">{timeAgo(d.started_at)}</div>
               </div>
             ))}
             {deployments.length === 0 && <div className="p-10 text-zinc-500 text-sm">No deployments yet.</div>}
@@ -254,18 +358,7 @@ export default function AppDetail() {
 
       {tab === "env" && (
         <div className="p-6 max-w-3xl">
-          <div className="text-xs text-zinc-400 mb-2">One per line · KEY=value</div>
-          <textarea
-            value={envText}
-            onChange={(e) => setEnvText(e.target.value)}
-            rows={12}
-            className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
-            data-testid="env-textarea"
-          />
-          <div className="mt-3 flex gap-3">
-            <button onClick={saveEnv} className="px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90" data-testid="env-save">Save & sync</button>
-            <span className="text-xs text-zinc-500 font-mono py-2">{Object.keys(envVars).length} variables stored</span>
-          </div>
+          <EnvVarsEditor envVars={envVars} onSave={saveEnv} />
         </div>
       )}
 
@@ -306,24 +399,21 @@ export default function AppDetail() {
       )}
 
       {tab === "settings" && (
-        <div className="p-6 max-w-2xl space-y-6">
-          <div className="border border-white/10 p-5">
-            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Build command</div>
-            <div className="mt-1 font-mono text-sm text-zinc-300">{app.build_command || "auto-detected"}</div>
-          </div>
-          <div className="border border-white/10 p-5">
-            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Start command</div>
-            <div className="mt-1 font-mono text-sm text-zinc-300">{app.start_command || "auto-detected"}</div>
-          </div>
-          <div className="border border-signal-failed/30 p-5">
+        <div className="p-6">
+          <SettingsForm app={app} onSaved={(updated) => setApp(updated)} />
+          <div className="mt-10 max-w-2xl border border-signal-failed/30 p-5">
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-signal-failed">Danger zone</div>
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between gap-4">
               <span className="text-sm">Permanently delete this app and its history.</span>
-              <button onClick={remove} className="px-3 py-1.5 text-sm border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10">Delete app</button>
+              <button onClick={remove} className="px-3 py-1.5 text-sm border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10" data-testid="settings-delete-app">
+                Delete app
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      <DeployModal app={app} open={deployOpen} onClose={() => setDeployOpen(false)} onDeployed={() => load()} />
     </div>
   );
 }

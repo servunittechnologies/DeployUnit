@@ -207,6 +207,98 @@ class TestApps:
         demo_session.delete(f"{API}/apps/{app_id}", timeout=10)
 
 
+# ----- Iteration 4: PATCH app, redeploy body, github branches/commits -----
+class TestAppsIter4:
+    @pytest.fixture(scope="class")
+    def target_app(self, demo_session, demo_workspace_id):
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        assert apps, "expected seeded apps"
+        return apps[0]
+
+    def test_patch_app_updates_fields_and_is_idempotent(self, demo_session, target_app):
+        app_id = target_app["id"]
+        original_name = target_app["name"]
+        new_name = original_name if "-renamed-x" in original_name else f"{original_name}-renamed-x"
+        payload = {
+            "name": new_name,
+            "branch": "main",
+            "build_command": "yarn build",
+            "start_command": "yarn start",
+            "auto_deploy": True,
+        }
+        r = demo_session.patch(f"{API}/apps/{app_id}", json=payload, timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "_id" not in data
+        assert data["name"] == new_name
+        assert data["branch"] == "main"
+        assert data["build_command"] == "yarn build"
+        assert data["start_command"] == "yarn start"
+        assert data.get("auto_deploy") is True
+        # Re-PATCH idempotent
+        r2 = demo_session.patch(f"{API}/apps/{app_id}", json=payload, timeout=15)
+        assert r2.status_code == 200
+        data2 = r2.json()
+        assert data2["name"] == new_name
+        assert data2.get("auto_deploy") is True
+        # GET persistence
+        g = demo_session.get(f"{API}/apps/{app_id}", timeout=10).json()
+        assert g["name"] == new_name
+        assert g["build_command"] == "yarn build"
+
+    def test_github_branches_fallback_no_token(self, demo_session):
+        for url in ["https://github.com/vercel/next.js", "https://github.com/expressjs/express"]:
+            r = demo_session.get(f"{API}/github/branches", params={"repo_url": url}, timeout=15)
+            assert r.status_code == 200, r.text
+            data = r.json()
+            assert isinstance(data, list) and len(data) == 1
+            assert data[0]["name"] == "main"
+            assert data[0]["commit_sha"] is None
+            assert data[0]["default"] is True
+
+    def test_github_branches_invalid_url_returns_empty(self, demo_session):
+        r = demo_session.get(f"{API}/github/branches", params={"repo_url": "https://example.com/foo/bar"}, timeout=10)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_github_commits_no_token_returns_empty(self, demo_session):
+        r = demo_session.get(f"{API}/github/commits",
+                             params={"repo_url": "https://github.com/vercel/next.js", "branch": "main"},
+                             timeout=15)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_redeploy_with_branch_and_commit(self, demo_session, target_app):
+        app_id = target_app["id"]
+        r = demo_session.post(f"{API}/apps/{app_id}/redeploy",
+                              json={"branch": "develop", "commit_sha": "abc1234567"}, timeout=15)
+        assert r.status_code in (200, 201), r.text
+        d = r.json()
+        assert d["status"] in ("building", "queued")
+        assert d["commit_sha"] == "abc1234567"
+        assert d["branch"] == "develop"
+        assert "develop" in d["commit_message"]
+        assert "@abc1234" in d["commit_message"]
+        # App branch updated
+        g = demo_session.get(f"{API}/apps/{app_id}", timeout=10).json()
+        assert g["branch"] == "develop"
+        # Restore branch to main for idempotency of other tests
+        demo_session.patch(f"{API}/apps/{app_id}", json={"branch": "main"}, timeout=10)
+
+    def test_redeploy_empty_body_uses_current_branch(self, demo_session, target_app):
+        app_id = target_app["id"]
+        # Ensure branch is main first
+        demo_session.patch(f"{API}/apps/{app_id}", json={"branch": "main"}, timeout=10)
+        r = demo_session.post(f"{API}/apps/{app_id}/redeploy", json={}, timeout=15)
+        assert r.status_code in (200, 201), r.text
+        d = r.json()
+        assert d["commit_sha"] is None
+        assert d["branch"] == "main"
+        assert d["commit_message"] == "Manual redeploy"
+
+
+
+
 # ----- Domains -----
 class TestDomains:
     @pytest.fixture(scope="class")
