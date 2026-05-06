@@ -98,7 +98,18 @@ class CoolifyClient:
         return await self._request("POST", "/applications/public", json=payload)
 
     async def deploy(self, app_uuid: str, force: bool = False) -> Optional[dict]:
-        return await self._request("GET", f"/deploy?uuid={app_uuid}&force={'true' if force else 'false'}")
+        """Trigger a deploy. Returns the parsed Coolify deployment object
+        ({deployment_uuid, message, resource_uuid}) on success; None on failure."""
+        res = await self._request("GET", f"/deploy?uuid={app_uuid}&force={'true' if force else 'false'}")
+        if not res:
+            return None
+        if isinstance(res, dict) and isinstance(res.get("deployments"), list) and res["deployments"]:
+            head = res["deployments"][0]
+            if isinstance(head, dict):
+                return head
+        if isinstance(res, dict) and res.get("deployment_uuid"):
+            return res
+        return None
 
     async def get_application(self, app_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/applications/{app_uuid}")

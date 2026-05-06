@@ -156,7 +156,7 @@ export default function TerminalLog({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-white/5 bg-black/60 text-[10px] font-mono text-zinc-600 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-t border-white/5 bg-black/60 text-[10px] font-mono text-zinc-600 flex items-center justify-between" data-testid="terminal-footer">
         <span><Activity className="inline h-3 w-3 mr-1" /> {filtered.length} / {normalized.length} lines</span>
         <span>{counts.error > 0 ? <span className="text-signal-failed">{counts.error} errors</span> : "0 errors"} · {counts.warning} warnings</span>
       </div>
