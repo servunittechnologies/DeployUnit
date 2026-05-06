@@ -1,0 +1,38 @@
+{
+  "summary": "Iter6 — Auto-detect branch, severity-tagged logs, BuildErrorPanel, SSE log stream all verified green. Backend: 58/58 pytest PASS. Added TestIter6LogParser (unit test of parse_log_line severity + extract_failure_summary prefix), TestIter6AutoDetectBranch (vercel/next.js → 'canary', shadcn-ui/ui stays 'main', non-GitHub URL falls back without crashing + logs 'auto'-detection line in first deployment), TestIter6DeploymentAnnotations (every deployment row carries parsed_logs[{text,severity}] and log_counts{total,error,warning,info,build,deploy}; at least one novabrew-web-renamed-x-t deployment has failure_summary starting with 'Git clone failed' / 'Build exited' / 'fatal' / 'error'), and TestIter6SSEStream (GET /api/deployments/{id}/stream returns 401 without cookie; with demo cookie returns 200 text/event-stream and emits 'event: line' / 'data:' within 8s). Frontend (demo@deployhub.dev, novabrew-web-renamed-x-t): all testids present — terminal-filters, build-error-panel (BEP text 'Git clone failed: branch main does not exist on the remote. Open Settings → Default branch and pick the actual default branch (e.g. main, master, or canary).' + redeploy button), site-preview, filter-all/error/warning/build/deploy/info, terminal-autoscroll. Pill counts on failed deployment: all=24 errors=6 warnings=0 build=0 deploy=3 info=15. Clicking filter-error reduces visible log-line testids from 24 → 6; filter-all restores 24. Autoscroll toggle 'follow'↔'paused' + class changes. terminal-live is NOT shown on failed deployment (correct) but IS shown with text 'LIVE' on the BUILDING test-autodetect-renamed-x app — also confirms branch auto-detection worked end-to-end (card shows 'canary' badge on a repo the user supplied with branch='main').",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TerminalLog", "issue": "data-testid='terminal-footer' not found on the visible footer element. All sibling testids (terminal-filters, terminal-autoscroll, filter-*, log-line-*) are present. The footer ('{visible}/{total} lines · X errors') likely renders but lacks the testid, so the 'footer shows visible/total · X errors' assertion had to be validated by counting log-line-* nodes instead.", "selector": "[data-testid='terminal-footer']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AppDetail → SitePreview iframe", "issues": ["Mixed-content: iframe src is http://...sslip.io loaded inside an https:// page → browser blocks the frame, user just sees a blank/white iframe body. The sslip.io URLs returned by Coolify are plain http. Consider switching to https on the Coolify side, or on the frontend render a 'preview unavailable (insecure origin)' placeholder when primary_url is http://. Non-blocking but user-visible."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_iter6.xml"],
+  "action_items": [
+    "Add data-testid='terminal-footer' to the footer row in /app/frontend/src/components/TerminalLog.jsx so tests can assert the '{visible}/{total} · X errors' summary without counting DOM nodes.",
+    "(optional) Handle http://...sslip.io mixed-content in SitePreview — show a 'preview unavailable over insecure origin — open in new tab' fallback when primary_url is not https."
+  ],
+  "critical_code_review_comments": [
+    "services/log_parser.py — parse_log_line severity rules are ordered correctly: bracket tags first, then keyword fallback. The heuristic list ('yarn install', 'nixpacks', 'docker build', 'compiling', 'installing') is pragmatic and matches real Coolify output.",
+    "services/log_parser.py::extract_failure_summary — 'Remote branch X not found' match is anchored to the true Coolify phrase and produces a user-actionable message pointing at Settings → Default branch. Auth-failure pattern is also covered. Nice defensive fallback to 'exit code N' message.",
+    "services/github_helpers.py — parse_repo handles both https and git@ forms with .git suffix; detect_default_branch falls back to None on 404/timeout/exception so the POST /apps path never crashes on a private or non-existent repo (verified by test_non_github_url_falls_back).",
+    "routers/apps.py POST /apps — correct ordering: parse repo → detect default branch → log autodetect line → create initial deployment. Keeps branch auto-detection transparent to the user via deployment logs.",
+    "routers/deployments.py — _annotate adds parsed_logs + log_counts without mutating the DB row (read-only enrichment). GET /deployments/{id}/stream correctly checks cookie auth first (401 verified) and flushes existing log lines before SSE'ing new ones — so the frontend always sees history + tail.",
+    "clients/coolify.py::list_deployments — unwrapping {count, deployments:[...]} is the fix for the root cause reported by the user. Worth adding a defensive isinstance(list) check for the unwrapped value (not blocking).",
+    "workers/monitor.py — Coolify log pull on status transition + backfill pass for failed deployments missing summary is a clean self-healing pattern; it ensured novabrew-web-renamed-x-t's failed deployments now carry a usable failure_summary (verified by test).",
+    "Frontend TerminalLog.jsx — filter pills + severity dots + autoscroll + LIVE indicator all present and wired; only missing the data-testid on the footer row (see action_items).",
+    "Frontend BuildErrorPanel.jsx — compact actionable copy ('redeploy' / 'tip: open Settings → Default branch') matches the failure_summary content. Clean separation of concerns with TerminalLog.",
+    "AppDetail.jsx approaching ~600 lines now; the SSE-stream hook (useDeploymentStream) is a good extraction — consider further splitting Settings panel into its own file next iteration."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (58/58)", "frontend": "~95% (all iter6 features verified; minor: terminal-footer testid missing, iframe mixed-content pre-existing)"},
+  "test_credentials": "demo@deployhub.dev / demo1234",
+  "seed_data_creation": "Three TEST_auto_*/TEST_main_*/TEST_nongh_* apps are created and immediately deleted inside TestIter6AutoDetectBranch. No persistent footprint added.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter6 is green. Backend regression suite is now 58/58 with four new TestIter6* classes. Playwright coverage for TerminalLog filters, BuildErrorPanel, LIVE indicator, autoscroll toggle is in this transcript (not committed to a file; re-run via the /app/login → click novabrew-web-renamed-x-t → inspect testids pattern above). Seeded demo apps include a building 'test-autodetect-renamed-x' (branch='canary', auto-detected from repo https://github.com/vercel/next.js) which is useful for live-stream / LIVE-indicator assertions. If the main agent adds a data-testid='terminal-footer' to TerminalLog.jsx, the filter-counter assertion can be done in one call instead of counting log-line-* nodes.",
+  "rca of the issue": "N/A — iteration is a feature add, not a bug fix. Root cause of the previous log-pulling bug (clients/coolify.py::list_deployments returning {count,deployments:[]} dict instead of a list) is fixed and validated: novabrew-web-renamed-x-t failed deployments now expose coolify_deployment_uuid + failure_summary, confirming Coolify logs are being consumed."
+}

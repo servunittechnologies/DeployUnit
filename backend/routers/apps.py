@@ -9,6 +9,8 @@ from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from models import AppIn, EnvVarUpdate, AppUpdate, RedeployIn
 from clients.coolify import coolify
+from services.github_helpers import detect_default_branch
+from services.log_parser import parse_log_lines, extract_failure_summary
 
 router = APIRouter(tags=["apps"])
 logger = logging.getLogger(__name__)
@@ -127,6 +129,15 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "developer"])
     db = get_db()
     repo = _validate_repo_url(payload.repo_url)
+
+    # Branch auto-detection: if caller passed nothing or "main", verify it actually exists.
+    requested_branch = (payload.branch or "main").strip()
+    branch_to_use = requested_branch
+    auto_detected = await detect_default_branch(repo, user_id=user["id"])
+    if auto_detected and (not payload.branch or payload.branch.lower() == "main") and auto_detected != requested_branch:
+        branch_to_use = auto_detected
+        logger.info("branch auto-detected %s -> %s for %s", requested_branch, branch_to_use, repo)
+
     app_id = str(uuid.uuid4())
     base_slug = slugify(f"{payload.name}-{app_id[:6]}")
     doc = {
@@ -137,18 +148,26 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "slug": base_slug,
         "framework": payload.framework,
         "repo_url": repo,
-        "branch": payload.branch or "main",
+        "branch": branch_to_use,
         "build_command": payload.build_command,
         "start_command": payload.start_command,
         "env_vars": payload.env_vars or {},
         "coolify_app_uuid": None,
         "status": "queued",
         "primary_url": None,
+        "tier": "development",
+        "protected_branches": ["main"],
+        "auto_deploy": True,
         "last_deploy_at": _now_iso(),
         "created_at": _now_iso(),
     }
     await db.apps.insert_one(doc)
     doc.pop("_id", None)
+
+    initial_logs = ["[QUEUE] deployment queued"]
+    if branch_to_use != requested_branch:
+        initial_logs.append(f"[QUEUE] branch auto-detected: requested '{requested_branch}', using '{branch_to_use}' (default on GitHub)")
+
     deploy_doc = {
         "id": str(uuid.uuid4()),
         "app_id": app_id,
@@ -156,8 +175,8 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "status": "queued",
         "commit_sha": None,
         "commit_message": "Initial deployment",
-        "branch": doc["branch"],
-        "logs": ["[QUEUE] deployment queued"],
+        "branch": branch_to_use,
+        "logs": initial_logs,
         "started_at": _now_iso(),
         "finished_at": None,
     }

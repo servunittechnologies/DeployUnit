@@ -13,15 +13,15 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 
 SAMPLE_REPOS = [
-    {"id": "1", "name": "novabrew/web", "framework": "nextjs", "default_branch": "main",
+    {"id": "1", "name": "vercel/next.js", "framework": "nextjs", "default_branch": "canary",
      "url": "https://github.com/vercel/next.js", "private": False, "is_sample": True},
-    {"id": "2", "name": "novabrew/api", "framework": "node", "default_branch": "main",
-     "url": "https://github.com/expressjs/express", "private": False, "is_sample": True},
-    {"id": "3", "name": "novabrew/admin", "framework": "nextjs", "default_branch": "develop",
+    {"id": "2", "name": "shadcn-ui/ui", "framework": "nextjs", "default_branch": "main",
      "url": "https://github.com/shadcn-ui/ui", "private": False, "is_sample": True},
-    {"id": "4", "name": "novabrew/billing-worker", "framework": "node", "default_branch": "main",
+    {"id": "3", "name": "expressjs/express", "framework": "node", "default_branch": "master",
+     "url": "https://github.com/expressjs/express", "private": False, "is_sample": True},
+    {"id": "4", "name": "nestjs/nest", "framework": "node", "default_branch": "master",
      "url": "https://github.com/nestjs/nest", "private": False, "is_sample": True},
-    {"id": "5", "name": "novabrew/landing", "framework": "nextjs", "default_branch": "main",
+    {"id": "5", "name": "vercel/commerce", "framework": "nextjs", "default_branch": "main",
      "url": "https://github.com/vercel/commerce", "private": False, "is_sample": True},
 ]
 

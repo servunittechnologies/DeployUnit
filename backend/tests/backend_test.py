@@ -466,6 +466,187 @@ class TestAppsIter5:
 
 
 
+# ----- Iteration 6: Auto-detect branch, log parser, SSE, failure summary -----
+class TestIter6LogParser:
+    """Unit tests for services.log_parser.parse_log_line."""
+    def test_severity_classification(self):
+        import sys
+        sys.path.insert(0, "/app/backend")
+        from services.log_parser import parse_log_line, extract_failure_summary
+        assert parse_log_line("[ERROR] foo")["severity"] == "error"
+        assert parse_log_line("[BUILD] yarn install")["severity"] == "build"
+        assert parse_log_line("fatal: clone failed")["severity"] == "error"
+        assert parse_log_line("WARN: deprecated")["severity"] == "warning"
+        assert parse_log_line("[DEPLOY] rolling out")["severity"] == "deploy"
+        assert parse_log_line("some ordinary log line")["severity"] == "info"
+        # Failure summary: recognisable pattern
+        summary = extract_failure_summary([
+            "cloning...",
+            "Remote branch wrong-name not found in upstream origin",
+        ])
+        assert summary and summary.startswith("Git clone failed: branch")
+
+
+class TestIter6AutoDetectBranch:
+    """POST /apps now auto-detects the default branch for GitHub repos."""
+    def test_autodetect_canary_for_vercel_nextjs(self, demo_session, demo_workspace_id):
+        name = f"TEST_auto_{uuid.uuid4().hex[:6]}"
+        r = demo_session.post(f"{API}/apps",
+                              json={
+                                  "workspace_id": demo_workspace_id, "name": name,
+                                  "framework": "nextjs",
+                                  "repo_url": "https://github.com/vercel/next.js",
+                                  "branch": "main",
+                              }, timeout=30)
+        assert r.status_code in (200, 201), r.text
+        app = r.json()
+        app_id = app["id"]
+        try:
+            # vercel/next.js default is 'canary' — should auto-switch
+            assert app["branch"] == "canary", f"expected 'canary', got {app['branch']}"
+            # First deployment should log the auto-detection
+            deps = demo_session.get(f"{API}/apps/{app_id}/deployments", timeout=10).json()
+            assert deps, "expected at least one deployment"
+            first = deps[-1]  # oldest
+            logs_text = " ".join((first.get("logs") or []))
+            assert "canary" in logs_text.lower() or "auto" in logs_text.lower(), \
+                f"expected autodetect line in first deployment logs: {logs_text[:300]}"
+        finally:
+            demo_session.delete(f"{API}/apps/{app_id}", timeout=10)
+
+    def test_shadcn_ui_main_stays_main(self, demo_session, demo_workspace_id):
+        name = f"TEST_main_{uuid.uuid4().hex[:6]}"
+        r = demo_session.post(f"{API}/apps",
+                              json={
+                                  "workspace_id": demo_workspace_id, "name": name,
+                                  "framework": "nextjs",
+                                  "repo_url": "https://github.com/shadcn-ui/ui",
+                                  "branch": "main",
+                              }, timeout=30)
+        assert r.status_code in (200, 201), r.text
+        app = r.json()
+        app_id = app["id"]
+        try:
+            assert app["branch"] == "main", f"expected 'main' to stay, got {app['branch']}"
+        finally:
+            demo_session.delete(f"{API}/apps/{app_id}", timeout=10)
+
+    def test_non_github_url_falls_back(self, demo_session, demo_workspace_id):
+        name = f"TEST_nongh_{uuid.uuid4().hex[:6]}"
+        r = demo_session.post(f"{API}/apps",
+                              json={
+                                  "workspace_id": demo_workspace_id, "name": name,
+                                  "framework": "nextjs",
+                                  "repo_url": "https://example.com/foo/bar.git",
+                                  "branch": "develop",
+                              }, timeout=20)
+        assert r.status_code in (200, 201), r.text
+        app = r.json()
+        try:
+            # Non-GitHub: should fall back to user-specified branch
+            assert app["branch"] in ("develop", "main"), f"unexpected branch {app['branch']}"
+            assert app["id"]  # Didn't crash
+        finally:
+            demo_session.delete(f"{API}/apps/{app['id']}", timeout=10)
+
+
+class TestIter6DeploymentAnnotations:
+    """GET /apps/{id}/deployments now returns parsed_logs + log_counts."""
+    def test_deployment_rows_have_parsed_logs_and_counts(self, demo_session, demo_workspace_id):
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        assert apps
+        for app in apps[:3]:
+            deps = demo_session.get(f"{API}/apps/{app['id']}/deployments", timeout=10).json()
+            if not deps:
+                continue
+            for d in deps[:3]:
+                assert "parsed_logs" in d, f"missing parsed_logs on deployment {d['id']}"
+                assert isinstance(d["parsed_logs"], list)
+                if d["parsed_logs"]:
+                    sample = d["parsed_logs"][0]
+                    assert "text" in sample and "severity" in sample
+                    assert sample["severity"] in ("error", "warning", "info", "build", "deploy", "debug")
+                assert "log_counts" in d
+                lc = d["log_counts"]
+                for k in ("total", "error", "warning", "info", "build", "deploy"):
+                    assert k in lc, f"missing {k} in log_counts"
+                    assert isinstance(lc[k], int)
+            return  # tested on first app with deployments
+        pytest.skip("no deployments to inspect")
+
+    def test_novabrew_web_has_failure_summary(self, demo_session, demo_workspace_id):
+        """At least one failed deployment on the renamed novabrew-web should have failure_summary populated."""
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        target = next((a for a in apps if "novabrew-web" in a["name"]), None)
+        if not target:
+            pytest.skip("novabrew-web app not found")
+        deps = demo_session.get(f"{API}/apps/{target['id']}/deployments", timeout=10).json()
+        failed_with_summary = [d for d in deps
+                                if d.get("status") == "failed"
+                                and d.get("failure_summary")]
+        assert failed_with_summary, \
+            f"expected at least one failed deployment with failure_summary, got {len(deps)} deps"
+        # Spot-check the summary begins with expected prefix
+        prefixes = ("Git clone failed", "Build exited", "fatal", "error")
+        assert any(
+            any(d["failure_summary"].lower().startswith(p.lower()) for p in prefixes)
+            for d in failed_with_summary
+        ), f"unexpected failure_summary shape: {[d['failure_summary'][:80] for d in failed_with_summary[:3]]}"
+
+
+class TestIter6SSEStream:
+    """GET /api/deployments/{id}/stream — auth gate + emits at least one event."""
+    def test_sse_unauthorized_without_cookie(self, demo_session, demo_workspace_id):
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        assert apps
+        deps = demo_session.get(f"{API}/apps/{apps[0]['id']}/deployments", timeout=10).json()
+        assert deps
+        dep_id = deps[0]["id"]
+        # No cookie
+        r = requests.get(f"{API}/deployments/{dep_id}/stream",
+                         headers={"Accept": "text/event-stream"},
+                         timeout=5)
+        assert r.status_code == 401, f"expected 401 without cookie, got {r.status_code}"
+
+    def test_sse_emits_event_line(self, demo_session, demo_workspace_id):
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        assert apps
+        # Find a deployment with logs
+        dep_with_logs = None
+        for app in apps[:3]:
+            deps = demo_session.get(f"{API}/apps/{app['id']}/deployments", timeout=10).json()
+            for d in deps:
+                if (d.get("logs") or []) and len(d["logs"]) > 0:
+                    dep_with_logs = d
+                    break
+            if dep_with_logs:
+                break
+        if not dep_with_logs:
+            pytest.skip("no deployment with logs available")
+        dep_id = dep_with_logs["id"]
+        # Streaming GET with short read timeout
+        with demo_session.get(f"{API}/deployments/{dep_id}/stream",
+                              headers={"Accept": "text/event-stream"},
+                              stream=True, timeout=(5, 8)) as r:
+            assert r.status_code == 200, f"expected 200, got {r.status_code}"
+            ctype = r.headers.get("Content-Type", "")
+            assert "text/event-stream" in ctype, f"unexpected content-type: {ctype}"
+            # Read up to ~8s of data
+            collected = b""
+            start = time.time()
+            for chunk in r.iter_content(chunk_size=512):
+                if chunk:
+                    collected += chunk
+                    if b"event: line" in collected or b"data:" in collected:
+                        break
+                if time.time() - start > 8:
+                    break
+            r.close()
+            text = collected.decode("utf-8", errors="replace")
+            assert ("event: line" in text) or ("data:" in text), \
+                f"expected 'event: line' / 'data:' in SSE stream, got: {text[:300]!r}"
+
+
 # ----- Domains -----
 class TestDomains:
     @pytest.fixture(scope="class")

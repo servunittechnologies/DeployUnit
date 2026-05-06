@@ -123,7 +123,11 @@ class CoolifyClient:
 
     async def list_deployments(self, app_uuid: str) -> list:
         data = await self._request("GET", f"/deployments/applications/{app_uuid}")
-        return data or []
+        if isinstance(data, dict) and "deployments" in data:
+            return data.get("deployments") or []
+        if isinstance(data, list):
+            return data
+        return []
 
     async def get_deployment(self, deployment_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/deployments/{deployment_uuid}")

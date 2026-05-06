@@ -7,6 +7,8 @@ import EnvVarsEditor from "../../components/EnvVarsEditor";
 import DeployModal from "../../components/DeployModal";
 import DeploymentStatus from "../../components/DeploymentStatus";
 import SitePreview from "../../components/SitePreview";
+import BuildErrorPanel from "../../components/BuildErrorPanel";
+import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
   ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
@@ -243,9 +245,20 @@ export default function AppDetail() {
   const verifyDomain = async (did) => { await api.post(`/domains/${did}/verify`); load(); };
   const removeDomain = async (did) => { await api.delete(`/domains/${did}`); load(); };
 
+  // Live SSE stream while the latest deployment is in-flight
+  const latestDeploy0 = deployments[0];
+  const isInFlight = !!latestDeploy0 && (latestDeploy0.status === "queued" || latestDeploy0.status === "building");
+  const initialLines = latestDeploy0?.parsed_logs || (latestDeploy0?.logs || []).map((t) => ({ text: t, severity: "info" }));
+  const stream = useDeploymentStream(latestDeploy0?.id, {
+    active: isInFlight,
+    initialLines,
+    onStatusChange: () => load(),
+  });
+
   if (!app) return <div className="p-6 text-zinc-500 font-mono text-sm">Loading app…</div>;
 
-  const latestDeploy = deployments[0];
+  const latestDeploy = latestDeploy0;
+  const liveLines = isInFlight ? stream.lines : initialLines;
 
   return (
     <div data-testid="app-detail">
@@ -310,11 +323,17 @@ export default function AppDetail() {
               <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">// build log</div>
               <TerminalLog
                 title={latestDeploy ? `${latestDeploy.status}.log` : "no.log"}
-                lines={latestDeploy?.logs || []}
+                lines={liveLines}
                 height={420}
+                live={isInFlight}
+                connected={stream.connected}
               />
             </div>
           </div>
+
+          {latestDeploy?.status === "failed" && (
+            <BuildErrorPanel deployment={latestDeploy} onRetry={() => setDeployOpen(true)} />
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
             <div className="bg-background p-4">

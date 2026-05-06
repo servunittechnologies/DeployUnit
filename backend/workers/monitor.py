@@ -13,6 +13,7 @@ import httpx
 
 from db import get_db
 from clients.coolify import coolify
+from services.log_parser import extract_failure_summary
 
 logger = logging.getLogger(__name__)
 
@@ -163,14 +164,11 @@ async def sync_deployments():
             continue
         cool_status = (info.get("status") or "").lower()
         new_status = "building"
-        # Coolify status strings include: "running:healthy", "running:unhealthy",
-        # "exited:0", "exited:1", "exited:unhealthy", "starting", "restarting".
         if cool_status.startswith("running"):
             new_status = "live"
         elif "exited:0" in cool_status:
             new_status = "live"
         elif "exited" in cool_status or "fail" in cool_status or "error" in cool_status:
-            # exited:1, exited:unhealthy, exited:* — mark failed
             new_status = "failed"
         fqdn = info.get("fqdn") or info.get("preview_fqdn")
         primary_url = None
@@ -182,7 +180,119 @@ async def sync_deployments():
         if new_status in ("live", "failed"):
             update["last_deploy_at"] = _now_iso()
         await db.apps.update_one({"id": a["id"]}, {"$set": update})
+
+        # Pull the latest Coolify deployment logs onto our deployment row
+        # so the user sees the real failure reason without opening the stream.
+        latest_cool_deploys = await coolify.list_deployments(a["coolify_app_uuid"])
+        cool_deploy_uuid = None
+        cool_log_lines: list[str] = []
+        if isinstance(latest_cool_deploys, list) and latest_cool_deploys:
+            head = latest_cool_deploys[0]
+            if isinstance(head, dict):
+                cool_deploy_uuid = head.get("deployment_uuid") or head.get("uuid")
+        if cool_deploy_uuid:
+            full = await coolify.get_deployment(cool_deploy_uuid)
+            if full:
+                raw = full.get("logs")
+                import json as _json
+                if isinstance(raw, str):
+                    try:
+                        raw = _json.loads(raw)
+                    except Exception:
+                        raw = [raw]
+                if isinstance(raw, list):
+                    for item in raw:
+                        if isinstance(item, dict):
+                            txt = item.get("output") or item.get("message") or ""
+                            if txt:
+                                cool_log_lines.append(str(txt).rstrip("\n"))
+                        elif isinstance(item, str):
+                            cool_log_lines.append(item)
+
+        deploy_update: dict = {
+            "status": new_status,
+            "finished_at": _now_iso() if new_status != "building" else None,
+        }
+        if cool_log_lines:
+            deploy_update["logs"] = cool_log_lines
+        if cool_deploy_uuid:
+            deploy_update["coolify_deployment_uuid"] = cool_deploy_uuid
+        if new_status == "failed":
+            summary = extract_failure_summary(cool_log_lines)
+            if summary:
+                deploy_update["failure_summary"] = summary
+
         await db.deployments.update_many(
             {"app_id": a["id"], "status": {"$in": ["queued", "building"]}},
-            {"$set": {"status": new_status, "finished_at": _now_iso() if new_status != "building" else None}},
+            {"$set": deploy_update},
         )
+
+    # 3) Backfill: any deployment that's already 'failed' but has no failure_summary
+    # — pull logs from Coolify if possible. Handles two cases:
+    #    (a) we already linked a coolify_deployment_uuid → fetch directly
+    #    (b) we didn't link one → look up via the app's coolify_app_uuid
+    backfill = await db.deployments.find(
+        {
+            "status": "failed",
+            "$or": [
+                {"failure_summary": None},
+                {"failure_summary": {"$exists": False}},
+                {"failure_summary": ""},
+            ],
+        },
+        {"_id": 0, "id": 1, "app_id": 1, "coolify_deployment_uuid": 1, "logs": 1},
+    ).sort("started_at", -1).limit(10).to_list(10)
+    if not backfill:
+        return
+
+    import json as _json
+
+    def _flatten_logs(raw):
+        if isinstance(raw, str):
+            try:
+                raw = _json.loads(raw)
+            except Exception:
+                return [raw]
+        out: list[str] = []
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict):
+                    txt = item.get("output") or item.get("message") or ""
+                    if txt:
+                        out.append(str(txt).rstrip("\n"))
+                elif isinstance(item, str):
+                    out.append(item)
+        return out
+
+    for entry in backfill:
+        cool_uuid = entry.get("coolify_deployment_uuid")
+        if not cool_uuid:
+            # Look up via app
+            app = await db.apps.find_one({"id": entry["app_id"]})
+            if not app or not app.get("coolify_app_uuid"):
+                continue
+            try:
+                cool_deps = await coolify.list_deployments(app["coolify_app_uuid"])
+            except Exception:
+                continue
+            if not cool_deps or not isinstance(cool_deps, list):
+                continue
+            head = cool_deps[0]
+            if isinstance(head, dict):
+                cool_uuid = head.get("deployment_uuid") or head.get("uuid")
+        if not cool_uuid:
+            continue
+        try:
+            full = await coolify.get_deployment(cool_uuid)
+        except Exception:
+            continue
+        if not full:
+            continue
+        log_lines = _flatten_logs(full.get("logs"))
+        if not log_lines:
+            continue
+        update = {"logs": log_lines, "coolify_deployment_uuid": cool_uuid}
+        summary = extract_failure_summary(log_lines)
+        if summary:
+            update["failure_summary"] = summary
+        await db.deployments.update_one({"id": entry["id"]}, {"$set": update})
