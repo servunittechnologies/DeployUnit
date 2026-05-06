@@ -113,6 +113,61 @@ async def run_monitor_tick():
         await asyncio.gather(*[_check_app(client, a) for a in apps], return_exceptions=True)
 
 
+async def deployment_watchdog():
+    """Pick up deployments that are stuck 'queued' or 'building' for >90s
+    without a Coolify deployment_uuid, and retry the /deploy trigger once.
+
+    This is the safety net for the silent-failure case where create_public_app
+    succeeded but the subsequent /deploy call never actually made it to the
+    Coolify worker. Runs every 15s alongside sync_deployments.
+    """
+    db = get_db()
+    if not coolify.configured:
+        return
+    cutoff_stuck = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
+    stuck = await db.deployments.find(
+        {
+            "status": {"$in": ["queued", "building"]},
+            "started_at": {"$lt": cutoff_stuck},
+            "$or": [
+                {"coolify_deployment_uuid": None},
+                {"coolify_deployment_uuid": {"$exists": False}},
+            ],
+        },
+        {"_id": 0, "id": 1, "app_id": 1, "logs": 1},
+    ).limit(25).to_list(25)
+    if not stuck:
+        return
+    for dep in stuck:
+        app = await db.apps.find_one({"id": dep["app_id"]})
+        if not app or not app.get("coolify_app_uuid"):
+            continue
+        logger.info(
+            "deployment_watchdog: retrying coolify deploy for %s (app=%s)",
+            dep["id"],
+            app["id"],
+        )
+        try:
+            res = await coolify.deploy(app["coolify_app_uuid"], force=True)
+        except Exception as e:
+            res = None
+            logger.warning("watchdog deploy raised for %s: %s", dep["id"], e)
+        update = {}
+        new_logs: list[str] = []
+        if res and (res.get("deployment_uuid") or res.get("uuid")):
+            cool_uuid = res.get("deployment_uuid") or res.get("uuid")
+            update["coolify_deployment_uuid"] = cool_uuid
+            update["status"] = "building"
+            new_logs.append(f"[WATCHDOG] coolify deploy reconciled (uuid={cool_uuid})")
+        else:
+            new_logs.append("[WATCHDOG] coolify /deploy still not returning a uuid — will retry in 60s")
+        if update or new_logs:
+            patch = {"$set": update} if update else {}
+            if new_logs:
+                patch.setdefault("$push", {})["logs"] = {"$each": new_logs}
+            await db.deployments.update_one({"id": dep["id"]}, patch)
+
+
 async def sync_deployments():
     """Reconcile in-flight deployments with Coolify (or stub-complete when no Coolify uuid)."""
     db = get_db()

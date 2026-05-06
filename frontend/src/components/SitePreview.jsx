@@ -56,7 +56,8 @@ export default function SitePreview({ appId, monitoring }) {
   };
 
   const url = health?.url;
-  const canIframe = url && health?.available && !health?.framing_blocked;
+  const isInsecureOrigin = !!(url && /^http:\/\//i.test(url));
+  const canIframe = url && health?.available && !health?.framing_blocked && !isInsecureOrigin;
   const showFallback = !canIframe || iframeFailed;
 
   return (
@@ -103,11 +104,17 @@ export default function SitePreview({ appId, monitoring }) {
         ) : showFallback ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 px-6 text-center" data-testid="preview-fallback">
             <ShieldX className="h-8 w-8 text-signal-queued mb-3" />
-            <div className="font-mono text-sm">Preview blocked by site headers</div>
-            <div className="text-xs text-zinc-500 mt-1 font-mono">
-              {health?.framing_blocked ? "X-Frame-Options / CSP frame-ancestors prevents embedding." : "Site is unreachable or blocked iframing."}
+            <div className="font-mono text-sm">
+              {isInsecureOrigin ? "Preview blocked by browser security" : "Preview blocked by site headers"}
             </div>
-            <a href={url} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1 px-3 py-1.5 border border-brand/40 text-brand text-xs font-mono uppercase tracking-wider hover:bg-brand/10">
+            <div className="text-xs text-zinc-500 mt-1 font-mono max-w-md">
+              {isInsecureOrigin
+                ? "Your site is served over http:// but this dashboard is https://. Browsers block mixed-content iframes. Enable SSL on Coolify to embed it here."
+                : health?.framing_blocked
+                  ? "X-Frame-Options / CSP frame-ancestors prevents embedding."
+                  : "Site is unreachable or blocked iframing."}
+            </div>
+            <a href={url} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1 px-3 py-1.5 border border-brand/40 text-brand text-xs font-mono uppercase tracking-wider hover:bg-brand/10" data-testid="preview-fallback-open">
               Open full site <ExternalLink className="h-3 w-3" />
             </a>
           </div>

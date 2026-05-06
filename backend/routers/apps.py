@@ -1,4 +1,5 @@
 """App management + Coolify deploy orchestration."""
+import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -20,12 +21,109 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def _coolify_deploy(app_id: str):
-    """Background task: create Coolify project+app and deploy."""
+async def _append_log(deployment_id: str, line: str) -> None:
+    """Best-effort append of a single log line to a deployment row."""
+    db = get_db()
+    try:
+        await db.deployments.update_one(
+            {"id": deployment_id}, {"$push": {"logs": line}}
+        )
+    except Exception as e:
+        logger.warning("append_log failed for %s: %s", deployment_id, e)
+
+
+async def _trigger_coolify_deploy_with_retry(
+    app_id: str, deployment_id: str, coolify_uuid: str, max_attempts: int = 3
+) -> str | None:
+    """Call coolify.deploy() with exponential backoff. Returns the Coolify
+    deployment_uuid on success, or None if every attempt fails. Logs each
+    attempt to the DeployHub deployment row so the user sees what happened.
+    """
+    delay = 2.0
+    last_error = "unknown"
+    for attempt in range(1, max_attempts + 1):
+        await _append_log(
+            deployment_id,
+            f"[BUILD] triggering coolify deploy — attempt {attempt}/{max_attempts}",
+        )
+        try:
+            res = await coolify.deploy(coolify_uuid, force=True)
+        except Exception as e:
+            res = None
+            last_error = str(e)[:200]
+        if res and (res.get("deployment_uuid") or res.get("uuid")):
+            cool_dep_uuid = res.get("deployment_uuid") or res.get("uuid")
+            await _append_log(
+                deployment_id,
+                f"[BUILD] coolify deployment triggered (uuid={cool_dep_uuid})",
+            )
+            db = get_db()
+            await db.deployments.update_one(
+                {"id": deployment_id},
+                {"$set": {"coolify_deployment_uuid": cool_dep_uuid}},
+            )
+            return cool_dep_uuid
+        last_error = (res or {}).get("message") if isinstance(res, dict) else last_error
+        await _append_log(
+            deployment_id,
+            f"[WARN] coolify deploy returned no uuid ({last_error or 'empty'}), retrying in {delay:.0f}s",
+        )
+        if attempt < max_attempts:
+            await asyncio.sleep(delay)
+            delay *= 2
+    await _append_log(
+        deployment_id,
+        f"[ERROR] coolify failed to trigger deploy after {max_attempts} attempts — watchdog will reconcile",
+    )
+    return None
+
+
+async def _redeploy_background(
+    app_id: str, deployment_id: str, coolify_uuid: str, coolify_patch: dict | None = None
+) -> None:
+    """Background task for /redeploy: apply Coolify patch (branch/commit) then
+    call deploy with retries. Runs outside the HTTP request so the API
+    returns in <100ms."""
+    if coolify_patch:
+        await _append_log(deployment_id, f"[BUILD] applying coolify patch: {', '.join(coolify_patch.keys())}")
+        try:
+            await coolify.update_application(coolify_uuid, coolify_patch)
+        except Exception as e:
+            await _append_log(deployment_id, f"[WARN] coolify PATCH failed: {str(e)[:160]}")
+    await _trigger_coolify_deploy_with_retry(app_id, deployment_id, coolify_uuid)
+
+
+async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
+    """Background task: create Coolify project+app and deploy.
+
+    Uses a 2-step flow — first create the app with instant_deploy=False, then
+    explicitly call /deploy with retries. This avoids the silent-failure mode
+    of instant_deploy=True when the Coolify queue is busy or the network
+    hiccups (Coolify returns 200 but never actually queues the deployment).
+    """
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
     if not app:
         return
+
+    # Resolve which deployment row we're tracking.
+    if deployment_id is None:
+        doc = await db.deployments.find_one(
+            {"app_id": app_id, "status": "queued"},
+            {"_id": 0, "id": 1},
+            sort=[("started_at", -1)],
+        )
+        deployment_id = doc["id"] if doc else None
+
+    async def _fail_deploy(msg: str):
+        await db.apps.update_one({"id": app_id}, {"$set": {"status": "failed"}})
+        if deployment_id:
+            await _append_log(deployment_id, f"[ERROR] {msg}")
+            await db.deployments.update_one(
+                {"id": deployment_id},
+                {"$set": {"status": "failed", "finished_at": _now_iso()}},
+            )
+
     if not coolify.configured:
         # Mark as deployed-stub so the UX doesn't get stuck.
         await db.apps.update_one(
@@ -41,12 +139,7 @@ async def _coolify_deploy(app_id: str):
 
     server_uuid = await coolify.get_default_server_uuid()
     if not server_uuid:
-        await db.apps.update_one({"id": app_id}, {"$set": {"status": "failed"}})
-        await db.deployments.update_one(
-            {"app_id": app_id, "status": "queued"},
-            {"$set": {"status": "failed", "finished_at": _now_iso(),
-                      "logs": ["[ERROR] no coolify server available"]}},
-        )
+        await _fail_deploy("no coolify server available")
         return
 
     # Create or reuse a coolify project per workspace
@@ -61,20 +154,19 @@ async def _coolify_deploy(app_id: str):
             await db.workspaces.update_one({"id": app["workspace_id"]}, {"$set": {"coolify_project_uuid": project_uuid}})
 
     if not project_uuid:
-        await db.apps.update_one({"id": app_id}, {"$set": {"status": "failed"}})
-        await db.deployments.update_one(
-            {"app_id": app_id, "status": "queued"},
-            {"$set": {"status": "failed", "finished_at": _now_iso(),
-                      "logs": ["[ERROR] could not create coolify project"]}},
-        )
+        await _fail_deploy("could not create coolify project")
         return
 
     await db.apps.update_one({"id": app_id}, {"$set": {"status": "building"}})
-    await db.deployments.update_one(
-        {"app_id": app_id, "status": "queued"},
-        {"$set": {"status": "building", "logs": ["[BUILD] coolify project ready", "[BUILD] creating application..."]}},
-    )
+    if deployment_id:
+        await db.deployments.update_one(
+            {"id": deployment_id},
+            {"$set": {"status": "building"}},
+        )
+        await _append_log(deployment_id, "[BUILD] coolify project ready")
+        await _append_log(deployment_id, "[BUILD] creating application on coolify...")
 
+    # Step 1 — create without instant_deploy so we keep control of the deploy trigger.
     res = await coolify.create_public_app(
         project_uuid=project_uuid,
         server_uuid=server_uuid,
@@ -82,25 +174,31 @@ async def _coolify_deploy(app_id: str):
         git_repository=app["repo_url"],
         git_branch=app.get("branch") or "main",
         ports_exposes="3000",
-        instant_deploy=True,
+        instant_deploy=False,
     )
     if not res or not res.get("uuid"):
-        await db.apps.update_one({"id": app_id}, {"$set": {"status": "failed"}})
-        await db.deployments.update_one(
-            {"app_id": app_id, "status": "building"},
-            {"$set": {"status": "failed", "finished_at": _now_iso(),
-                      "logs": ["[ERROR] coolify create app failed"]}},
-        )
+        await _fail_deploy("coolify create app failed — check token, server, and repo URL")
         return
 
     coolify_uuid = res["uuid"]
     await db.apps.update_one({"id": app_id}, {"$set": {"coolify_app_uuid": coolify_uuid}})
+    if deployment_id:
+        await _append_log(deployment_id, f"[BUILD] coolify created app (uuid={coolify_uuid})")
     if app.get("env_vars"):
         await coolify.update_env(coolify_uuid, app["env_vars"])
-    await db.deployments.update_one(
-        {"app_id": app_id, "status": "building"},
-        {"$set": {"logs": ["[BUILD] coolify created app", "[BUILD] deploy triggered"]}},
-    )
+        if deployment_id:
+            await _append_log(deployment_id, f"[BUILD] pushed {len(app['env_vars'])} env vars to coolify")
+
+    # Step 2 — explicitly trigger the deploy with retries.
+    if deployment_id:
+        cool_dep_uuid = await _trigger_coolify_deploy_with_retry(
+            app_id, deployment_id, coolify_uuid
+        )
+        if not cool_dep_uuid:
+            await _fail_deploy(
+                "coolify /deploy returned no deployment uuid after 3 retries. "
+                "The monitor watchdog will retry if a Coolify deployment becomes visible."
+            )
 
 
 def _validate_repo_url(url: str) -> str:
@@ -182,7 +280,7 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
     }
     await db.deployments.insert_one(deploy_doc)
     deploy_doc.pop("_id", None)
-    background.add_task(_coolify_deploy, app_id)
+    background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
     return doc
 
 
@@ -213,7 +311,7 @@ async def delete_app(app_id: str, request: Request):
 
 
 @router.patch("/apps/{app_id}")
-async def update_app(app_id: str, payload: AppUpdate, request: Request):
+async def update_app(app_id: str, payload: AppUpdate, request: Request, background: BackgroundTasks):
     user = await get_current_user(request)
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
@@ -230,7 +328,9 @@ async def update_app(app_id: str, payload: AppUpdate, request: Request):
 
     await db.apps.update_one({"id": app_id}, {"$set": update})
 
-    # Sync to Coolify if connected
+    # Sync to Coolify if connected — fire-and-forget so the HTTP response
+    # is fast. Coolify PATCH can occasionally take >10s when the instance
+    # is under load.
     if coolify.configured and app.get("coolify_app_uuid"):
         coolify_payload = {}
         if "branch" in update and update["branch"]:
@@ -242,7 +342,7 @@ async def update_app(app_id: str, payload: AppUpdate, request: Request):
         if "name" in update:
             coolify_payload["name"] = update["slug"]
         if coolify_payload:
-            await coolify.update_application(app["coolify_app_uuid"], coolify_payload)
+            background.add_task(coolify.update_application, app["coolify_app_uuid"], coolify_payload)
 
     return await db.apps.find_one({"id": app_id}, {"_id": 0})
 
@@ -299,25 +399,28 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks, p
     await db.apps.update_one({"id": app_id}, {"$set": app_update})
 
     if coolify.configured and app.get("coolify_app_uuid"):
-        # If switching branch / commit, update Coolify app first
+        # Build Coolify patch (branch/commit) and hand off to background task.
+        # The background task applies the patch, then retries coolify /deploy
+        # with exponential backoff. Keeps the HTTP response fast.
         coolify_patch = {}
         if payload.branch:
             coolify_patch["git_branch"] = target_branch
         if target_commit:
             coolify_patch["git_commit_sha"] = target_commit
-        if coolify_patch:
-            await coolify.update_application(app["coolify_app_uuid"], coolify_patch)
-        await coolify.deploy(app["coolify_app_uuid"], force=True)
         await db.apps.update_one({"id": app_id}, {"$set": {"status": "building"}})
         await db.deployments.update_one(
             {"id": deploy_doc["id"]},
-            {"$set": {
-                "status": "building",
-                "logs": (deploy_doc.get("logs") or []) + ["[BUILD] redeploy triggered on coolify"],
-            }},
+            {"$set": {"status": "building"}},
+        )
+        background.add_task(
+            _redeploy_background,
+            app_id,
+            deploy_doc["id"],
+            app["coolify_app_uuid"],
+            coolify_patch or None,
         )
     else:
-        background.add_task(_coolify_deploy, app_id)
+        background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
 
     return {**deploy_doc, "status": "building" if coolify.configured else "queued"}
 
@@ -431,7 +534,7 @@ async def get_env(app_id: str, request: Request):
 
 
 @router.put("/apps/{app_id}/env")
-async def update_env(app_id: str, payload: EnvVarUpdate, request: Request):
+async def update_env(app_id: str, payload: EnvVarUpdate, request: Request, background: BackgroundTasks):
     user = await get_current_user(request)
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
@@ -440,5 +543,5 @@ async def update_env(app_id: str, payload: EnvVarUpdate, request: Request):
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
     await db.apps.update_one({"id": app_id}, {"$set": {"env_vars": payload.env_vars}})
     if coolify.configured and app.get("coolify_app_uuid"):
-        await coolify.update_env(app["coolify_app_uuid"], payload.env_vars)
+        background.add_task(coolify.update_env, app["coolify_app_uuid"], payload.env_vars)
     return {"env_vars": payload.env_vars}

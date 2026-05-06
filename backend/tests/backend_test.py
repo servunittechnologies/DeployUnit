@@ -926,6 +926,111 @@ class TestIntegrations:
         assert "configured" in data["coolify"] and "configured" in data["whmcs"]
 
 
+# ----- Iteration 7: P0 — fast endpoints (BackgroundTask) + retry logs + watchdog -----
+class TestIter7P0Fast:
+    """All Coolify-touching endpoints must return in <2s; retry logs must be visible."""
+
+    @pytest.fixture(scope="class")
+    def fresh_app(self, demo_session, demo_workspace_id):
+        # POST /apps must itself return <2s (Coolify create+deploy moved to BackgroundTask)
+        name = f"TEST_p0_{uuid.uuid4().hex[:6]}"
+        t0 = time.time()
+        r = demo_session.post(f"{API}/apps",
+                              json={"workspace_id": demo_workspace_id, "name": name,
+                                    "framework": "nextjs",
+                                    "repo_url": "https://github.com/vercel/next.js",
+                                    "branch": "main"}, timeout=10)
+        elapsed = time.time() - t0
+        assert r.status_code in (200, 201), r.text
+        assert elapsed < 2.5, f"POST /apps took {elapsed:.2f}s (>2.5s) — Coolify call not backgrounded"
+        app = r.json()
+        yield app
+        try:
+            demo_session.delete(f"{API}/apps/{app['id']}", timeout=10)
+        except Exception:
+            pass
+
+    def test_redeploy_returns_under_2s(self, demo_session, fresh_app):
+        app_id = fresh_app["id"]
+        t0 = time.time()
+        r = demo_session.post(f"{API}/apps/{app_id}/redeploy", json={}, timeout=10)
+        elapsed = time.time() - t0
+        assert r.status_code in (200, 201), r.text
+        assert elapsed < 2.5, f"POST /apps/{{id}}/redeploy took {elapsed:.2f}s — must be backgrounded"
+        # Returned deployment row should be queued/building immediately
+        d = r.json()
+        assert d["status"] in ("queued", "building")
+
+    def test_patch_app_returns_under_2s(self, demo_session, fresh_app):
+        app_id = fresh_app["id"]
+        t0 = time.time()
+        r = demo_session.patch(f"{API}/apps/{app_id}",
+                               json={"build_command": "yarn build", "start_command": "yarn start"},
+                               timeout=10)
+        elapsed = time.time() - t0
+        assert r.status_code == 200, r.text
+        assert elapsed < 2.5, f"PATCH /apps/{{id}} took {elapsed:.2f}s — Coolify PATCH not backgrounded"
+
+    def test_put_env_returns_under_2s(self, demo_session, fresh_app):
+        app_id = fresh_app["id"]
+        t0 = time.time()
+        r = demo_session.put(f"{API}/apps/{app_id}/env",
+                             json={"env_vars": {"P0_TEST": "ok"}}, timeout=10)
+        elapsed = time.time() - t0
+        assert r.status_code == 200, r.text
+        assert elapsed < 2.5, f"PUT /apps/{{id}}/env took {elapsed:.2f}s — Coolify env push not backgrounded"
+        assert r.json()["env_vars"].get("P0_TEST") == "ok"
+
+    def test_redeploy_logs_show_attempt_lines(self, demo_session, demo_workspace_id):
+        """deployment.logs must contain 'attempt N/3' from _trigger_coolify_deploy_with_retry.
+        Use a seeded app that already has coolify_app_uuid (so the retry codepath fires)."""
+        # Pick an app with coolify_app_uuid set (skip otherwise — Coolify not configured)
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        target = next((a for a in apps if a.get("coolify_app_uuid")), None)
+        if not target:
+            pytest.skip("no app with coolify_app_uuid available — Coolify not configured in this env")
+        rd = demo_session.post(f"{API}/apps/{target['id']}/redeploy", json={}, timeout=10)
+        assert rd.status_code in (200, 201)
+        dep_id = rd.json()["id"]
+        attempt_seen = False
+        for _ in range(15):
+            time.sleep(2)
+            g = demo_session.get(f"{API}/deployments/{dep_id}", timeout=10)
+            if g.status_code != 200:
+                continue
+            logs_text = " ".join((g.json().get("logs") or [])).lower()
+            if "attempt" in logs_text and "1/3" in logs_text:
+                attempt_seen = True
+                break
+        assert attempt_seen, f"expected 'attempt 1/3' log line in deployment {dep_id}"
+
+    def test_watchdog_scheduler_registered(self):
+        """Verify backend log shows the deployment_watchdog APScheduler job registered + running."""
+        import subprocess
+        out = subprocess.run(
+            ["bash", "-c",
+             "grep -E 'Added job .deployment_watchdog|Scheduler started' /var/log/supervisor/backend.*.log | tail -10"],
+            capture_output=True, text=True, timeout=10
+        )
+        text = out.stdout + out.stderr
+        assert "deployment_watchdog" in text, f"deployment_watchdog not registered in logs: {text[:300]}"
+        assert "Scheduler started" in text, f"Scheduler start not logged: {text[:300]}"
+
+
+# ----- Iteration 7: P1 — SitePreview mixed-content fallback (component logic) -----
+class TestIter7SitePreview:
+    def test_site_preview_component_has_insecure_origin_fallback(self):
+        """Inspect SitePreview.jsx for the http:// → fallback branch and preview-fallback-open testid."""
+        path = "/app/frontend/src/components/SitePreview.jsx"
+        with open(path) as f:
+            src = f.read()
+        assert "preview-fallback" in src, "preview-fallback testid missing in SitePreview.jsx"
+        assert "preview-fallback-open" in src, "preview-fallback-open testid missing in SitePreview.jsx"
+        # Must check for http:// origin (insecure) somewhere
+        assert ("http://" in src and ("insecure" in src.lower() or "mixed" in src.lower() or "isInsecure" in src)), \
+            "SitePreview.jsx does not appear to handle http:// mixed-content origins"
+
+
 # ----- Workspace isolation -----
 class TestIsolation:
     def test_stranger_cannot_read_others_apps(self, demo_workspace_id):

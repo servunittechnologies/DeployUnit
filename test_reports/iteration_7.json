@@ -1,0 +1,48 @@
+{
+  "summary": "Iter7 — P0 Coolify deploy fix + futuristic UI revamp verified end-to-end. Backend 63/64 (only pre-known external Coolify-host flake on /api/integrations/health). All 5 new TestIter7P0Fast assertions GREEN: POST /apps/{id}/redeploy, PATCH /apps/{id}, PUT /apps/{id}/env each returned in <2.5s on the public URL, deployment.logs contained '[BUILD] triggering coolify deploy — attempt 1/3' and '[BUILD] coolify deployment triggered (uuid=…)' lines from _trigger_coolify_deploy_with_retry, and APScheduler logs confirmed 'Added job deployment_watchdog' + 'Scheduler started' + the 30s interval running real retries (e.g. 'deployment_watchdog: retrying coolify deploy for ff0b331d-… (app=313e169b-…)'). SitePreview.jsx component scan confirmed isInsecureOrigin → preview-fallback / preview-fallback-open render path for http:// primary_url. Frontend Playwright smoke: Landing renders all 12 expected testids (nav-pricing, nav-signin, nav-signup, hero-cta-start, hero-cta-pricing, bento-deploy, bento-monitor, bento-branches, bento-domains, bento-security, bento-agency, bento-github), 3 sections (#bento, #agency, #features), 1 <canvas> for ConstellationCanvas, animated terminal + latency-SVG + stat strip (42ms / 47s / 99.99% / 6) all painted, framer-motion animations cause zero pageerrors. Pricing page testids (plan-hobby/pro/agency + plan-cta-*) all present. Login + Register pages keep all existing testids; demo@deployhub.dev / demo1234 login flows successfully to the dashboard route /app (not /dashboard — that's the actual route).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/integrations/health", "issue": "ReadTimeout from external Coolify host (149.12.246.205) — same pre-existing infra flake noted in iter6, NOT a regression."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing hero H1", "issues": ["Typewriter renders 'Ship Next.js & Nodein two clicks.' with a missing space between 'Node' and 'in' in the rendered DOM string (caused by line break + no trailing space in the typed segments). Visually OK because there is a <br> between the two lines, but textContent contains 'Nodein'. Cosmetic; consider appending a trailing space or splitting the strings differently in useTypewriter so screen readers + scrapers don't see 'Nodein'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_iter7.xml"
+  ],
+  "action_items": [
+    "(optional, cosmetic) Fix the 'Nodein' joining in Landing.jsx hero typewriter so the rendered textContent includes a space between 'Node' and 'in two clicks.'",
+    "(known) /api/integrations/health is gated by the external Coolify host responsiveness — consider increasing the upstream client timeout or returning 'unknown' instead of letting the request hang ~15s."
+  ],
+  "critical_code_review_comments": [
+    "routers/apps.py::_trigger_coolify_deploy_with_retry — clean exponential backoff (2s→4s→8s), DB writes are isolated per-attempt via _append_log so logs are visible on the deployment row even mid-retry. Good defensive str(e)[:200] truncation.",
+    "routers/apps.py::_redeploy_background — applies coolify PATCH (branch/commit) before /deploy. Order is correct so the redeploy actually picks up the new ref.",
+    "routers/apps.py — POST /apps, POST /apps/{id}/redeploy, PATCH /apps/{id}, PUT /apps/{id}/env all hand off to BackgroundTasks for Coolify I/O. Verified <2.5s wall-time on the public URL for all four. P0 met.",
+    "workers/monitor.py::deployment_watchdog — runs every 30s, picks up deployments stuck >90s without coolify_deployment_uuid and retries once. Note: the 20:04:17 log shows one ERROR raised by deployment_watchdog itself; subsequent runs (20:05:02 onward) are clean and 'executed successfully'. Worth double-checking the line that crashed once on first start (it self-recovered on supervisor reload).",
+    "workers/monitor.py — 'Execution skipped: maximum number of running instances reached (1)' warnings appear when an attempt exceeds 30s. Configuring max_instances=2 or moving the per-deployment retry into asyncio.create_task instead of awaiting inline would prevent the watchdog from blocking subsequent ticks.",
+    "frontend/src/components/SitePreview.jsx — isInsecureOrigin = /^http:\\/\\//i.test(url) is correct, and canIframe explicitly excludes it. Fallback branch renders preview-fallback + preview-fallback-open with a clear explanation pointing to the Coolify SSL config — exactly what was requested.",
+    "frontend/src/pages/Landing.jsx — futuristic revamp ships: aurora background blobs, ConstellationCanvas (1 <canvas>), animated terminal, response-latency SVG with 4.2M / 0.01% / 38 metric strip, 7 bento cards with hover spotlight, agency section, features section. 0 console pageerrors during load.",
+    "frontend/src/components/ConstellationCanvas.jsx — canvas-based; respects requestAnimationFrame and cleans up on unmount (assumed; not regressed). No leaked listeners observed in 30s of session.",
+    "Demo login flow lands on /app (not /dashboard). The review_request mentioned 'wait_for_url(\"**/dashboard**\")' as success — main agent should align expectations: the dashboard route is /app in this codebase. Existing testids are intact."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {
+    "backend": "98.4% (63/64 — same pre-existing /integrations/health flake)",
+    "frontend": "100% (all required testids + sections + canvas present, demo login works, no pageerrors)"
+  },
+  "test_credentials": "demo@deployhub.dev / demo1234 (verified working in this run)",
+  "seed_data_creation": "TestIter7P0Fast creates one TEST_p0_* app via POST /apps (used as the fixture target_app) and deletes it on teardown. test_redeploy_logs_show_attempt_lines uses an existing seeded app with coolify_app_uuid (no new data).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter7 is GREEN. Backend regression suite is now 64 tests; the only red one is TestIntegrations::test_integrations_health which has been flaking on the external Coolify host since iter6 — treat it as infra-dependent, not a regression. New TestIter7P0Fast class covers the response-time SLA + retry-log assertion + watchdog-scheduler check; reuse it next time you touch routers/apps.py or workers/monitor.py. Dashboard route is /app, not /dashboard — keep this in any UI navigation tests.",
+  "rca of the issue": "P0 root cause (silent Coolify deploy failures) is fixed by: (1) splitting create from deploy (instant_deploy=False) so each step has its own retry budget, (2) wrapping coolify.deploy() in _trigger_coolify_deploy_with_retry with 3 attempts × exponential backoff and per-attempt DB log writes, (3) running everything in BackgroundTasks so the HTTP API stays <2s, and (4) APScheduler deployment_watchdog every 30s as a self-healing net for any deployment stuck >90s without a coolify_deployment_uuid. All four mechanisms verified in this run."
+}

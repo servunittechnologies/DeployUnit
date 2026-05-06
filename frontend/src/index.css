@@ -154,3 +154,188 @@ body {
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 999px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(0, 229, 255, 0.3); }
+
+/* ============================================================
+   FUTURISTIC REVAMP — unique animations & effects
+   ============================================================ */
+
+/* 1. Aurora / orbiting gradient blobs */
+@keyframes aurora-1 {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    33%  { transform: translate3d(18%, -12%, 0) scale(1.15); }
+    66%  { transform: translate3d(-14%, 10%, 0) scale(0.92); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes aurora-2 {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    40%  { transform: translate3d(-22%, 18%, 0) scale(1.2); }
+    80%  { transform: translate3d(20%, -6%, 0) scale(0.88); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+.aurora-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(120px);
+    opacity: 0.55;
+    mix-blend-mode: screen;
+    pointer-events: none;
+    will-change: transform;
+}
+
+/* 2. Scanline overlay (old-CRT vibe, subtle) */
+@keyframes scanline-drift {
+    0%   { transform: translateY(-2%); }
+    100% { transform: translateY(2%); }
+}
+.scanlines::before {
+    content: "";
+    position: absolute;
+    inset: -4%;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        0deg,
+        rgba(0, 229, 255, 0.035) 0px,
+        rgba(0, 229, 255, 0.035) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    animation: scanline-drift 4s linear infinite alternate;
+    mix-blend-mode: screen;
+}
+
+/* 3. Pulse-glow ring (used on live status dots) */
+@keyframes pulse-glow {
+    0%   { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.55); }
+    70%  { box-shadow: 0 0 0 14px rgba(0, 229, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
+}
+.pulse-glow { animation: pulse-glow 2.2s ease-out infinite; }
+
+/* 4. Shimmer / data-tape marquee (existing code references animate-[shimmer_*]) */
+@keyframes shimmer {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+/* 5. Typewriter caret */
+@keyframes caret-blink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+.caret::after {
+    content: "▋";
+    display: inline-block;
+    margin-left: 2px;
+    color: #00E5FF;
+    animation: caret-blink 1.05s steps(1, end) infinite;
+}
+
+/* 6. Rising reveal (existing name) */
+@keyframes rise {
+    from { opacity: 0; transform: translateY(22px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* 7. Floating lift */
+@keyframes float-y {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+}
+.animate-float { animation: float-y 7s ease-in-out infinite; }
+
+/* 8. Mouse-tracked spotlight on bento cards */
+.spotlight {
+    position: relative;
+    isolation: isolate;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s;
+}
+.spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+        380px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(0, 229, 255, 0.14),
+        transparent 45%
+    );
+    opacity: 0;
+    transition: opacity 0.35s;
+    pointer-events: none;
+    z-index: 0;
+}
+.spotlight:hover::before { opacity: 1; }
+.spotlight:hover {
+    border-color: rgba(0, 229, 255, 0.4) !important;
+    transform: translateY(-2px);
+}
+.spotlight > * { position: relative; z-index: 1; }
+
+/* 9. Magnetic button hover ring */
+.magnetic-btn {
+    position: relative;
+    isolation: isolate;
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.magnetic-btn::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(120deg, transparent, rgba(0, 229, 255, 0.6), transparent);
+    z-index: -1;
+    opacity: 0;
+    filter: blur(12px);
+    transition: opacity 0.3s;
+}
+.magnetic-btn:hover { transform: translateY(-1px); }
+.magnetic-btn:hover::after { opacity: 1; }
+
+/* 10. Holographic text — subtle hue shift */
+@keyframes holo {
+    0%, 100% { filter: hue-rotate(0deg); }
+    50%      { filter: hue-rotate(22deg); }
+}
+.holo { animation: holo 6s ease-in-out infinite; }
+
+/* 11. Ambient spark dots (used inside hero constellation) */
+@keyframes twinkle {
+    0%, 100% { opacity: 0.25; transform: scale(1); }
+    50%      { opacity: 1;    transform: scale(1.6); }
+}
+
+/* 12. Bento tile sweep for the "status" card */
+@keyframes sweep {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+.sweep-bg {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 229, 255, 0.15),
+        transparent
+    );
+    background-size: 200% 100%;
+    animation: sweep 3.2s linear infinite;
+}
+
+/* 13. Matrix text-scramble helper (font only — the logic is JS-driven) */
+.scramble {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+/* 14. Ping-soft (existing name used throughout the app) */
+@keyframes ping-soft {
+    0%   { box-shadow: 0 0 0 0 rgba(57, 255, 20, 0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(57, 255, 20, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(57, 255, 20, 0); }
+}
+.animate-ping-soft { animation: ping-soft 2.4s ease-out infinite; }
+
+/* 15. Conic ring rotation — for the orbital hero ornament */
+@keyframes spin-slow {
+    to { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 24s linear infinite; }
