@@ -10,7 +10,14 @@ from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from models import AppIn, EnvVarUpdate, AppUpdate, RedeployIn
 from clients.coolify import coolify
-from services.github_helpers import detect_default_branch
+from services.github_helpers import (
+    detect_default_branch,
+    inject_github_token,
+    is_github_https,
+    probe_repo_visibility,
+    strip_token_from_url,
+    workspace_github_token,
+)
 from services.log_parser import parse_log_lines, extract_failure_summary
 
 router = APIRouter(tags=["apps"])
@@ -81,13 +88,32 @@ async def _trigger_coolify_deploy_with_retry(
 async def _redeploy_background(
     app_id: str, deployment_id: str, coolify_uuid: str, coolify_patch: dict | None = None
 ) -> None:
-    """Background task for /redeploy: apply Coolify patch (branch/commit) then
-    call deploy with retries. Runs outside the HTTP request so the API
-    returns in <100ms."""
-    if coolify_patch:
-        await _append_log(deployment_id, f"[BUILD] applying coolify patch: {', '.join(coolify_patch.keys())}")
+    """Background task for /redeploy: refresh the Coolify app's git_repository
+    with a fresh GitHub token (so subscription / rotation works), apply any
+    branch/commit patch, then call deploy with retries. Runs outside the HTTP
+    request so the API returns in <100ms."""
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    patch = dict(coolify_patch or {})
+    if app and is_github_https(app.get("repo_url") or ""):
+        gh_token = await workspace_github_token(app["workspace_id"])
+        if gh_token:
+            patch["git_repository"] = inject_github_token(app["repo_url"], gh_token)
+            await _append_log(deployment_id, "[BUILD] refreshing Coolify clone URL with current GitHub token")
+        else:
+            visibility = await probe_repo_visibility(app["repo_url"])
+            if visibility == "private":
+                await _append_log(
+                    deployment_id,
+                    "[ERROR] repo is private but no GitHub account is linked on this workspace — "
+                    "connect GitHub in Settings and try again.",
+                )
+                # Still try a deploy so user sees Coolify's own error context,
+                # but we already know it will fail.
+    if patch:
+        await _append_log(deployment_id, f"[BUILD] applying coolify patch: {', '.join(patch.keys())}")
         try:
-            await coolify.update_application(coolify_uuid, coolify_patch)
+            await coolify.update_application(coolify_uuid, patch)
         except Exception as e:
             await _append_log(deployment_id, f"[WARN] coolify PATCH failed: {str(e)[:160]}")
     await _trigger_coolify_deploy_with_retry(app_id, deployment_id, coolify_uuid)
@@ -166,12 +192,38 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         await _append_log(deployment_id, "[BUILD] coolify project ready")
         await _append_log(deployment_id, "[BUILD] creating application on coolify...")
 
+    # Resolve which repo URL Coolify will see. Private GitHub repos need
+    # embedded credentials because Coolify otherwise asks for a username on
+    # stdin (no TTY) and the build container dies with:
+    #   "fatal: could not read Username for 'https://github.com'".
+    repo_for_coolify = app["repo_url"]
+    if is_github_https(repo_for_coolify):
+        gh_token = await workspace_github_token(app["workspace_id"])
+        visibility = await probe_repo_visibility(repo_for_coolify)
+        if gh_token:
+            repo_for_coolify = inject_github_token(app["repo_url"], gh_token)
+            if deployment_id:
+                await _append_log(
+                    deployment_id,
+                    "[BUILD] injecting workspace GitHub token into clone URL (enables private repo access)",
+                )
+        elif visibility == "private":
+            if deployment_id:
+                await _append_log(
+                    deployment_id,
+                    "[ERROR] repo looks private and no GitHub account is linked on this workspace. "
+                    "Go to Settings → Connect GitHub, then redeploy. "
+                    "Without a token Coolify cannot clone private repositories.",
+                )
+            await _fail_deploy("private repo but no GitHub token on workspace")
+            return
+
     # Step 1 — create without instant_deploy so we keep control of the deploy trigger.
     res = await coolify.create_public_app(
         project_uuid=project_uuid,
         server_uuid=server_uuid,
         name=app["slug"],
-        git_repository=app["repo_url"],
+        git_repository=repo_for_coolify,
         git_branch=app.get("branch") or "main",
         ports_exposes="3000",
         instant_deploy=False,
