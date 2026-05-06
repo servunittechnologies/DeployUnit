@@ -3,15 +3,18 @@ import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import StatusBadge from "../../components/StatusBadge";
-import { Globe, ExternalLink } from "lucide-react";
+import AddDomainWizard from "../../components/AddDomainWizard";
+import { Globe, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Domains() {
   const { active } = useWorkspace();
   const [domains, setDomains] = useState([]);
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     if (!active) return;
     setLoading(true);
     Promise.all([
@@ -21,7 +24,20 @@ export default function Domains() {
       setDomains(d.data);
       setApps(a.data);
     }).finally(() => setLoading(false));
-  }, [active]);
+  };
+
+  useEffect(() => { load(); }, [active]);
+
+  const removeDomain = async (id, domain) => {
+    if (!window.confirm(`Remove ${domain}? The DNS record on your side stays put — you may want to remove it too.`)) return;
+    try {
+      await api.delete(`/domains/${id}`);
+      toast.success(`${domain} removed`);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Remove failed");
+    }
+  };
 
   const appById = Object.fromEntries(apps.map((a) => [a.id, a]));
 
@@ -33,6 +49,14 @@ export default function Domains() {
           <h1 className="font-display text-4xl font-semibold tracking-tighter">Custom domains</h1>
           <p className="mt-1 text-sm text-zinc-400">Link any domain to your app. SSL is issued automatically.</p>
         </div>
+        <button
+          onClick={() => setWizardOpen(true)}
+          disabled={apps.length === 0}
+          className="magnetic-btn inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-50"
+          data-testid="domains-add-btn"
+        >
+          <Plus className="h-4 w-4" /> Add domain
+        </button>
       </div>
 
       {loading ? (
@@ -41,7 +65,18 @@ export default function Domains() {
         <div className="border border-dashed border-white/10 p-16 text-center">
           <Globe className="h-10 w-10 text-zinc-600 mx-auto mb-4" />
           <h3 className="font-display text-2xl">No domains linked yet</h3>
-          <p className="mt-2 text-zinc-400">Open an app and link a domain from its Domains tab.</p>
+          <p className="mt-2 text-zinc-400">Link your first custom domain and get free SSL.</p>
+          {apps.length > 0 ? (
+            <button
+              onClick={() => setWizardOpen(true)}
+              className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90"
+              data-testid="domains-add-empty"
+            >
+              <Plus className="h-4 w-4" /> Add your first domain
+            </button>
+          ) : (
+            <p className="mt-2 text-xs text-zinc-500">Create an app first, then link a domain.</p>
+          )}
         </div>
       ) : (
         <div className="border-t border-l border-white/[0.06]">
@@ -64,11 +99,26 @@ export default function Domains() {
                     manage <ExternalLink className="h-3 w-3" />
                   </Link>
                 )}
+                <button
+                  onClick={() => removeDomain(d.id, d.domain)}
+                  className="text-xs text-zinc-500 hover:text-signal-failed"
+                  data-testid={`domain-delete-${d.id}`}
+                  title="Remove domain"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <AddDomainWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={load}
+        apps={apps}
+      />
     </div>
   );
 }

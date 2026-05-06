@@ -8,6 +8,7 @@ import DeployModal from "../../components/DeployModal";
 import DeploymentStatus from "../../components/DeploymentStatus";
 import SitePreview from "../../components/SitePreview";
 import BuildErrorPanel from "../../components/BuildErrorPanel";
+import AddDomainWizard from "../../components/AddDomainWizard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
@@ -176,7 +177,7 @@ export default function AppDetail() {
   const [monitoring, setMonitoring] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [domainInput, setDomainInput] = useState("");
+  const [domainWizardOpen, setDomainWizardOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -233,15 +234,6 @@ export default function AppDetail() {
     setEnvVars(next);
   };
 
-  const addDomain = async (e) => {
-    e.preventDefault();
-    setError("");
-    try {
-      await api.post("/domains", { app_id: id, domain: domainInput.trim() });
-      setDomainInput("");
-      load();
-    } catch (e) { setError(getApiErrorMessage(e)); }
-  };
   const verifyDomain = async (did) => { await api.post(`/domains/${did}/verify`); load(); };
   const removeDomain = async (did) => { await api.delete(`/domains/${did}`); load(); };
 
@@ -415,23 +407,25 @@ export default function AppDetail() {
 
       {tab === "domains" && (
         <div className="p-6 max-w-3xl">
-          <form onSubmit={addDomain} className="flex gap-2 mb-6">
-            <input
-              value={domainInput} onChange={(e) => setDomainInput(e.target.value)}
-              placeholder="app.yourdomain.com"
-              className="flex-1 bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
-              data-testid="domain-input"
-            />
-            <button type="submit" className="px-4 py-2 bg-brand text-brand-fg font-medium" data-testid="domain-add">
-              <Plus className="h-4 w-4 inline" /> Link
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <div className="font-display text-xl tracking-tight">Custom domains</div>
+              <div className="text-xs font-mono text-zinc-500 mt-1">Each domain gets its own Let's Encrypt certificate automatically.</div>
+            </div>
+            <button
+              onClick={() => setDomainWizardOpen(true)}
+              className="magnetic-btn inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90"
+              data-testid="domain-add"
+            >
+              <Plus className="h-4 w-4" /> Add domain
             </button>
-          </form>
+          </div>
           {error && <div className="mb-4 text-signal-failed text-sm">{error}</div>}
           <div className="border-t border-l border-white/[0.06]">
             {domains.map((d) => (
               <div key={d.id} className="flex items-center justify-between p-4 border-r border-b border-white/[0.06]">
                 <div>
-                  <div className="font-mono text-sm">{d.domain}</div>
+                  <a href={`https://${d.domain}`} target="_blank" rel="noreferrer" className="font-mono text-sm hover:text-brand">{d.domain}</a>
                   <div className="mt-1 flex items-center gap-2 text-xs font-mono text-zinc-500">
                     <StatusBadge status={d.dns_verified ? "live" : "pending"} />
                     SSL: {d.ssl_status}
@@ -439,21 +433,20 @@ export default function AppDetail() {
                 </div>
                 <div className="flex items-center gap-2">
                   {!d.dns_verified && (
-                    <button onClick={() => verifyDomain(d.id)} className="text-xs font-mono text-brand hover:underline" data-testid={`domain-verify-${d.id}`}>verify dns</button>
+                    <button onClick={() => verifyDomain(d.id)} className="text-xs font-mono text-brand hover:underline" data-testid={`domain-verify-${d.id}`}>check dns</button>
                   )}
                   <button onClick={() => removeDomain(d.id)} className="text-xs font-mono text-signal-failed hover:underline">remove</button>
                 </div>
               </div>
             ))}
-            {domains.length === 0 && <div className="p-10 text-zinc-500 text-sm">No custom domains yet.</div>}
+            {domains.length === 0 && <div className="p-10 text-zinc-500 text-sm text-center">No custom domains yet. Click "Add domain" to get started.</div>}
           </div>
-          <div className="mt-6 p-4 border border-white/10 bg-black/30 font-mono text-xs leading-6 text-zinc-400">
-            <div className="text-brand">// dns instructions</div>
-            <div>type:&nbsp;&nbsp;&nbsp;&nbsp;A</div>
-            <div>name:&nbsp;&nbsp;&nbsp;&nbsp;your-subdomain</div>
-            <div>value:&nbsp;&nbsp;&nbsp;149.12.246.205</div>
-            <div className="mt-2">After adding the record, click "verify dns".</div>
-          </div>
+          <AddDomainWizard
+            open={domainWizardOpen}
+            onClose={() => setDomainWizardOpen(false)}
+            onCreated={load}
+            presetAppId={id}
+          />
         </div>
       )}
 
