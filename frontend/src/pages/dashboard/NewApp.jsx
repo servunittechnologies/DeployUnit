@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api, getApiErrorMessage } from "../../lib/api";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
-import { Github, Loader2, ChevronLeft, Boxes, ArrowRight, Lock } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import GitHubButton from "../../components/GitHubButton";
+import { Github, Loader2, ChevronLeft, Boxes, ArrowRight, CheckCircle2 } from "lucide-react";
 
 const FRAMEWORKS = [
   { id: "nextjs", label: "Next.js", build: "yarn build", start: "yarn start", port: 3000 },
@@ -12,6 +14,7 @@ const FRAMEWORKS = [
 
 export default function NewApp() {
   const { active } = useWorkspace();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [repos, setRepos] = useState([]);
@@ -85,26 +88,46 @@ export default function NewApp() {
 
       {step === 1 && (
         <div className="p-6">
-          <div className="mb-4 p-4 border border-white/10 flex items-center gap-3">
-            <Github className="h-5 w-5" />
-            <div className="flex-1 text-sm">
-              <div>GitHub OAuth not connected yet — using a sample repo list.</div>
-              <div className="text-xs text-zinc-500 font-mono">Or paste a public repo URL below.</div>
+          {!user?.github_login ? (
+            <div className="mb-6 p-5 border border-brand/30 bg-brand/[0.04] flex flex-wrap items-center gap-4 justify-between">
+              <div className="flex items-center gap-3">
+                <Github className="h-5 w-5 text-brand" />
+                <div>
+                  <div className="text-sm">Connect your GitHub to deploy your real repos</div>
+                  <div className="text-xs text-zinc-500 font-mono">Or scroll down to use a sample / paste any public repo URL.</div>
+                </div>
+              </div>
+              <div className="w-full sm:w-auto sm:min-w-[260px]">
+                <GitHubButton redirectTo="new_app" link label="Connect GitHub" testId="newapp-connect-github" />
+              </div>
             </div>
-            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-500 inline-flex items-center gap-1">
-              <Lock className="h-3 w-3" /> mocked
-            </span>
-          </div>
+          ) : (
+            <div className="mb-6 p-4 border border-signal-live/30 bg-signal-live/5 flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-signal-live" />
+              <div className="text-sm">
+                Connected as <span className="font-mono text-brand">@{user.github_login}</span>
+                <div className="text-xs text-zinc-500 font-mono">Showing your repositories below — newest first.</div>
+              </div>
+            </div>
+          )}
 
           <div className="border-l border-t border-white/[0.06] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {repos.map((r) => (
               <button
                 key={r.id}
                 onClick={() => pickRepo(r)}
-                className="text-left p-5 border-r border-b border-white/[0.06] hover:bg-white/[0.02] transition"
+                className="text-left p-5 border-r border-b border-white/[0.06] hover:bg-white/[0.02] transition relative"
                 data-testid={`repo-${r.id}`}
               >
-                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">{r.framework}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">{r.framework}</div>
+                  {r.private && (
+                    <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-signal-queued border border-signal-queued/30 px-1.5 py-0.5">private</span>
+                  )}
+                  {r.is_sample && (
+                    <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-zinc-500 border border-white/10 px-1.5 py-0.5">sample</span>
+                  )}
+                </div>
                 <div className="mt-1 font-display text-lg group-hover:text-brand">{r.name}</div>
                 <div className="mt-2 flex items-center gap-2 text-xs font-mono text-zinc-500">
                   <Github className="h-3 w-3" /> {r.default_branch}

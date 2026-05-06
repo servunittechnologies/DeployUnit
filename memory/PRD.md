@@ -67,3 +67,4 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 
 ## Latest dates
 - 2026-05-06 — Phase 1 MVP shipped, full-stack tested green (25/25 backend, all frontend flows).
+- 2026-05-06 — **GitHub OAuth wired live** (`/api/auth/github/start` + `/api/auth/github/callback`). Buttons on Login + Register; per-user repo listing on NewApp; Connect/Disconnect on Settings. Real repos replace mocked samples once the user links. Tokens encrypted at rest with Fernet (`ENCRYPTION_KEY` in .env). State CSRF token stored in `oauth_states` collection with 10-min TTL.

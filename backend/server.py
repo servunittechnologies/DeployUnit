@@ -29,7 +29,8 @@ from routers import (
     billing as billing_router,
     notifications as notifications_router,
     settings as settings_router,
-    github_mock as github_router,
+    github as github_router,
+    github_oauth as github_oauth_router,
 )
 
 
@@ -70,6 +71,7 @@ async def health():
 
 
 api_router.include_router(auth_router.router)
+api_router.include_router(github_oauth_router.router)
 api_router.include_router(workspaces_router.router)
 api_router.include_router(projects_router.router)
 api_router.include_router(apps_router.router)

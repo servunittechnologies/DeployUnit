@@ -23,6 +23,8 @@ def _user_public(u: dict) -> dict:
         "email": u["email"],
         "name": u.get("name", ""),
         "role": u.get("role", "user"),
+        "github_login": u.get("github_login"),
+        "github_avatar_url": u.get("github_avatar_url"),
         "created_at": u.get("created_at"),
     }
 

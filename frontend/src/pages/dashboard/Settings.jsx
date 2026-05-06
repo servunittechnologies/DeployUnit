@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { api, getApiErrorMessage } from "../../lib/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
-import { Save, UserPlus, Trash2 } from "lucide-react";
+import GitHubButton from "../../components/GitHubButton";
+import { Save, UserPlus, Trash2, Github, CheckCircle2 } from "lucide-react";
 
 export default function Settings() {
   const { user, refresh } = useAuth();
@@ -165,6 +166,42 @@ export default function Settings() {
       <section className="border border-white/[0.06] p-6 space-y-3">
         <h2 className="font-display text-xl">Integrations</h2>
         <p className="text-xs text-zinc-500">Status of platform-level integrations.</p>
+
+        {/* GitHub OAuth — per-user */}
+        <div className="bg-elevated/30 border border-white/[0.06] p-4 mt-2">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Github className="h-5 w-5" />
+              <div>
+                <div className="text-sm font-medium flex items-center gap-2">
+                  GitHub
+                  {user?.github_login && <CheckCircle2 className="h-4 w-4 text-signal-live" />}
+                </div>
+                <div className="text-xs font-mono text-zinc-500">
+                  {user?.github_login ? `Connected as @${user.github_login}` : "Not connected — link to deploy your repos."}
+                </div>
+              </div>
+            </div>
+            <div className="min-w-[220px]">
+              {user?.github_login ? (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm("Disconnect GitHub from this account?")) return;
+                    await api.post("/auth/github/disconnect");
+                    await refresh();
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 py-2 border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10"
+                  data-testid="github-disconnect"
+                >
+                  <Trash2 className="h-4 w-4" /> Disconnect
+                </button>
+              ) : (
+                <GitHubButton link label="Connect GitHub" testId="settings-connect-github" />
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06]">
           {[
             ["coolify", "Coolify (deploy engine)"],

@@ -31,6 +31,8 @@ class UserOut(BaseModel):
     email: str
     name: str
     role: str = "user"
+    github_login: Optional[str] = None
+    github_avatar_url: Optional[str] = None
     created_at: datetime
 
 

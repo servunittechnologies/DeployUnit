@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
+import GitHubButton from "../components/GitHubButton";
 import { Loader2, ArrowRight } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const oauthError = searchParams.get("error");
   const from = location.state?.from?.pathname || "/app";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,7 +61,22 @@ export default function Login() {
           <h1 className="font-display text-3xl font-semibold tracking-tighter">Sign in</h1>
           <p className="mt-1 text-sm text-zinc-400">Welcome back to DeployHub.</p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4" data-testid="login-form">
+          {oauthError && (
+            <div className="mt-4 px-3 py-2 border border-signal-failed/30 bg-signal-failed/10 text-signal-failed text-sm" data-testid="oauth-error">
+              GitHub sign-in failed ({oauthError.replace(/_/g, " ")}). Try again.
+            </div>
+          )}
+
+          <div className="mt-6">
+            <GitHubButton testId="login-github" />
+          </div>
+          <div className="mt-4 flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-600">
+            <span className="flex-1 h-px bg-white/10" />
+            or with email
+            <span className="flex-1 h-px bg-white/10" />
+          </div>
+
+          <form onSubmit={submit} className="mt-4 space-y-4" data-testid="login-form">
             <div>
               <label className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono">Email</label>
               <input

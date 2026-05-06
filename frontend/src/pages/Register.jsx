@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
+import GitHubButton from "../components/GitHubButton";
 import { Loader2, ArrowRight, Check } from "lucide-react";
 
 export default function Register() {
@@ -35,7 +36,16 @@ export default function Register() {
           <h1 className="font-display text-3xl font-semibold tracking-tighter">Create account</h1>
           <p className="mt-1 text-sm text-zinc-400">Free forever for 1 app. No credit card.</p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4" data-testid="register-form">
+          <div className="mt-6">
+            <GitHubButton label="Sign up with GitHub" testId="register-github" />
+          </div>
+          <div className="mt-4 flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-600">
+            <span className="flex-1 h-px bg-white/10" />
+            or with email
+            <span className="flex-1 h-px bg-white/10" />
+          </div>
+
+          <form onSubmit={submit} className="mt-4 space-y-4" data-testid="register-form">
             <div>
               <label className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono">Full name</label>
               <input
