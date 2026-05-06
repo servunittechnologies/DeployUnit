@@ -107,7 +107,7 @@ export default function Alerts() {
             <form onSubmit={create} className="mt-5 space-y-4">
               <div>
                 <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Type</label>
-                <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none">
+                <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="alert-type-select">
                   {TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
               </div>
@@ -117,11 +117,12 @@ export default function Alerts() {
                   type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)}
                   className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
                   placeholder={TYPES.find((t) => t.id === type)?.placeholder}
+                  data-testid="alert-threshold-input"
                 />
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Apply to</label>
-                <select value={appId} onChange={(e) => setAppId(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none">
+                <select value={appId} onChange={(e) => setAppId(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="alert-app-select">
                   <option value="">All apps in this workspace</option>
                   {apps.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>

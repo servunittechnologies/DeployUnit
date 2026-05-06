@@ -4,6 +4,7 @@ import { api, getApiErrorMessage } from "../../lib/api";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import StatusBadge from "../../components/StatusBadge";
 import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Billing() {
   const { active } = useWorkspace();
@@ -31,9 +32,22 @@ export default function Billing() {
     setBusy(plan);
     setError("");
     try {
-      await api.post("/billing/checkout", { workspace_id: active.id, plan });
+      const { data } = await api.post("/billing/checkout", { workspace_id: active.id, plan });
+      if (data.status === "active") {
+        toast.success(`Switched to ${plan} plan.`);
+      } else if (data.status === "pending") {
+        toast.success(`Plan ${plan} upgrade pending — invoice generated.`, {
+          action: data.invoice_link ? { label: "View", onClick: () => window.open(data.invoice_link, "_blank") } : undefined,
+        });
+      } else {
+        toast.success(`Plan switched to ${plan}.`);
+      }
       load();
-    } catch (e) { setError(getApiErrorMessage(e)); }
+    } catch (e) {
+      const msg = getApiErrorMessage(e);
+      setError(msg);
+      toast.error(msg);
+    }
     finally { setBusy(""); }
   };
 
