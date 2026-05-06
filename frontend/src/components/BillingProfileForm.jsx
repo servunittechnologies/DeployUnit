@@ -163,7 +163,7 @@ export default function BillingProfileForm({
 
       <button type="submit" disabled={saving || disabled}
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-brand-fg font-medium hover:bg-brand/90 active:scale-95 transition disabled:opacity-50 shadow-[0_0_20px_rgba(0,229,255,0.25)]"
-        data-testid="profile-submit"
+        data-testid="profile-save-btn"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : submitLabel}
       </button>

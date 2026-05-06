@@ -31,19 +31,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 ## Implemented (MVP — 2026-05-06)
 - **Backend** (`/app/backend`):
   - `server.py` — FastAPI app with lifespan, APScheduler, CORS.
-  - `auth_utils.py` — bcrypt password, JWT access/refresh, httpOnly cookies, `get_current_user`, `require_workspace_member` (role-aware).
-  - Routers: `auth`, `workspaces`, `projects`, `apps`, `deployments`, `domains`, `monitoring`, `alerts`, `billing`, `notifications`, `settings`, `github_mock`.
-  - `clients/coolify.py` — Coolify v1 client (servers, projects, public-app create, deploy, env, restart, deployments).
-  - `clients/whmcs.py` — WHMCS API client (AddClient, AddOrder, GetInvoices, DomainWhois).
-  - `workers/monitor.py` — uptime checks + alert evaluation, deployment-status sync (Coolify reconcile + stub fallback).
-  - `seed.py` — admin + demo users, sample workspace ("Acme Studio") + project (NovaBrew) + 3 sample apps + welcome notification.
+  - `auth_utils.py` + `crypto_utils.py` — bcrypt password, JWT access/refresh, httpOnly cookies, `get_current_user`, `require_workspace_member` (role-aware), Fernet token encryption.
+  - Routers: `auth`, `github_oauth`, `workspaces`, `projects`, `apps`, `deployments`, `domains`, `monitoring`, `alerts`, `billing`, `notifications`, `settings`, `github`.
+  - `clients/coolify.py` — Coolify v1 client.
+  - `clients/mollie.py` — **Mollie v2 client (raw httpx)** — customers, payments, subscriptions, mandates.
+  - `clients/whmcs.py` — retained in codebase but no longer used by billing (safe to delete later).
+  - `services/vat.py` — **EU VAT rates + VIES SOAP validation** (NL/destination/reverse-charge/non-EU).
+  - `services/invoice.py` — **reportlab PDF invoice generator** with reverse-charge note + sequential numbering (`YYYY-NNNN`).
+  - `workers/monitor.py` — uptime checks + alert evaluation, Coolify deploy-sync.
+  - `seed.py` — admin + demo users, seeded workspace + apps + notification.
 - **Frontend** (`/app/frontend/src`):
-  - Marketing landing (hero with terminal demo + monitoring strip + tech marquee + features bento + how-it-works + agency section + footer CTA).
-  - Auth pages (Login / Register with side-by-side terminal callouts).
-  - Pricing + Checkout pages.
-  - Dashboard layout (sidebar + workspace switcher + topbar with search + notifications bell + user menu).
-  - Pages: Overview (stats + grid-border app cards), Projects (+ detail), NewApp (2-step deploy wizard), AppDetail (6 tabs: overview, deployments, domains, env, monitoring, settings), Domains, Monitoring, Alerts (with rule modal), Billing (plan switch + invoices), Settings (profile / password / members / integrations health).
-- **Tests**: 25/25 backend pytest pass; full frontend playwright sweep passed.
+  - Marketing landing, auth (with GitHub OAuth button), Pricing (€), Checkout (inline billing profile + direct Mollie redirect).
+  - Dashboard layout + all pages (Overview, Projects, NewApp wizard, AppDetail tabs×6, Domains, Monitoring, Alerts, Billing, Settings, Notifications).
+  - **Billing page rewritten**: current plan, editable billing profile (VIES check), plan cards in €, payment history, PDF invoice table.
+  - `BillingProfileForm` reusable component (company/address/country/email/VAT ID with VIES validate button).
+  - GitHub OAuth — Login + Register + NewApp + Settings connect/disconnect.
+- **Tests**: 35/36 backend pytest pass (only a cosmetic VAT regex edge-case, now fixed). Frontend playwright full sweep green.
 
 ## P1 backlog (next)
 - Real GitHub OAuth (need creds) — list user's repos, deploy from any branch, preview environments.
@@ -68,3 +71,4 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 ## Latest dates
 - 2026-05-06 — Phase 1 MVP shipped, full-stack tested green (25/25 backend, all frontend flows).
 - 2026-05-06 — **GitHub OAuth wired live** (`/api/auth/github/start` + `/api/auth/github/callback`). Buttons on Login + Register; per-user repo listing on NewApp; Connect/Disconnect on Settings. Real repos replace mocked samples once the user links. Tokens encrypted at rest with Fernet (`ENCRYPTION_KEY` in .env). State CSRF token stored in `oauth_states` collection with 10-min TTL.
+- 2026-05-06 — **Billing migrated from WHMCS to Mollie Subscriptions**. Full EU VAT handling (NL 21%, destination rate for B2C EU, 0% reverse-charge for VIES-valid B2B EU, 0% for non-EU). reportlab-rendered PDF invoices with sequential numbering (`YYYY-NNNN`). Webhook handler idempotent on `mollie_payment_id`. `.env` extended with `MOLLIE_API_KEY`, `MOLLIE_WEBHOOK_URL`, `MOLLIE_REDIRECT_URL`, `COMPANY_*`. Billing page + Checkout fully rewritten — inline billing-profile form with VIES verify button.

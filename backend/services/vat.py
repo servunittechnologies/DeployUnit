@@ -48,7 +48,7 @@ def normalize_vat_id(vat_id: str) -> tuple[str, str] | None:
     if not vat_id:
         return None
     cleaned = re.sub(r"[\s\-\.]", "", vat_id.upper())
-    m = re.match(r"^([A-Z]{2})([A-Z0-9]+)$", cleaned)
+    m = re.match(r"^([A-Z]{2})([A-Z0-9]{2,})$", cleaned)
     if not m:
         return None
     return m.group(1), m.group(2)

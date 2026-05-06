@@ -131,7 +131,7 @@ export default function Billing() {
             <h2 className="font-display text-xl mt-1">Who's on the invoice?</h2>
           </div>
           {profile && !editingProfile && (
-            <button onClick={() => setEditingProfile(true)} className="text-xs font-mono uppercase tracking-[0.25em] text-zinc-400 hover:text-brand" data-testid="billing-edit-profile">
+            <button onClick={() => setEditingProfile(true)} className="text-xs font-mono uppercase tracking-[0.25em] text-zinc-400 hover:text-brand" data-testid="profile-edit-btn">
               Edit
             </button>
           )}
@@ -192,7 +192,7 @@ export default function Billing() {
                     onClick={() => goCheckout(p.id)}
                     disabled={busy === p.id}
                     className={`mt-5 w-full inline-flex items-center justify-center gap-2 py-2 text-sm font-medium ${p.highlight ? "bg-brand text-brand-fg hover:bg-brand/90" : "border border-white/15 hover:border-white/40"}`}
-                    data-testid={`billing-switch-${p.id}`}
+                    data-testid={`upgrade-${p.id}`}
                   >
                     {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : p.id === "hobby" ? "Downgrade" : `Go ${p.name} · €${p.price}`}
                   </button>
