@@ -31,6 +31,7 @@ from routers import (
     settings as settings_router,
     github as github_router,
     github_oauth as github_oauth_router,
+    admin as admin_router,
 )
 
 
@@ -84,6 +85,7 @@ api_router.include_router(billing_router.router)
 api_router.include_router(notifications_router.router)
 api_router.include_router(settings_router.router)
 api_router.include_router(github_router.router)
+api_router.include_router(admin_router.router)
 
 app.include_router(api_router)
 

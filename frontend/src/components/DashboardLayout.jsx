@@ -6,7 +6,8 @@ import { api } from "../lib/api";
 import Logo from "./Logo";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, CreditCard, Settings, LogOut,
-  Plus, Boxes, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon
+  Plus, Boxes, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
+  ShieldCheck,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -23,6 +24,7 @@ const NAV = [
   { to: "/app/billing", label: "Billing", icon: CreditCard },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];
+const ADMIN_NAV = { to: "/app/admin", label: "Admin Console", icon: ShieldCheck };
 
 function WorkspaceSwitcher() {
   const { workspaces, active, setActive, createWorkspace } = useWorkspace();
@@ -186,6 +188,7 @@ function UserMenu() {
 }
 
 export default function DashboardLayout() {
+  const { user } = useAuth();
   return (
     <div className="min-h-screen flex bg-background text-foreground">
       <aside className="w-64 hidden lg:flex flex-col border-r border-white/[0.06] sticky top-0 h-screen">
@@ -214,6 +217,25 @@ export default function DashboardLayout() {
               {n.label}
             </NavLink>
           ))}
+          {user?.role === "admin" && (
+            <>
+              <div className="mx-5 my-4 h-px bg-white/[0.06]" />
+              <NavLink
+                to={ADMIN_NAV.to}
+                data-testid="nav-admin"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
+                    isActive
+                      ? "border-brand text-white bg-white/[0.03]"
+                      : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
+                  }`
+                }
+              >
+                <ADMIN_NAV.icon className="h-4 w-4 text-brand" />
+                {ADMIN_NAV.label}
+              </NavLink>
+            </>
+          )}
         </nav>
         <Link
           to="/app/apps/new"

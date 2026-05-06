@@ -22,6 +22,7 @@ import Monitoring from "./pages/dashboard/Monitoring";
 import Alerts from "./pages/dashboard/Alerts";
 import Billing from "./pages/dashboard/Billing";
 import Settings from "./pages/dashboard/Settings";
+import Admin from "./pages/dashboard/Admin";
 
 function App() {
   return (
@@ -60,6 +61,7 @@ function App() {
                 <Route path="alerts" element={<Alerts />} />
                 <Route path="billing" element={<Billing />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="admin" element={<Admin />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

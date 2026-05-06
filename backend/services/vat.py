@@ -87,13 +87,24 @@ async def validate_vies(vat_id: str) -> dict:
     if r.status_code != 200:
         return {"valid": False, "error": f"vies_http_{r.status_code}"}
     text = r.text
-    valid = bool(re.search(r"<valid>\s*true\s*</valid>", text, re.I))
-    name_match = re.search(r"<name>([^<]*)</name>", text, re.I)
-    addr_match = re.search(r"<address>([^<]*)</address>", text, re.I)
+    # VIES responses have a namespace prefix (e.g. <ns2:valid>) — we have to
+    # tolerate it. Older VIES versions emit plain <valid>; both forms must
+    # match. "countryCode" is unique enough to skip any "invalidVatNumber"
+    # element found in a fault response.
+    valid = bool(re.search(r"<(?:[A-Za-z0-9]+:)?valid>\s*true\s*</(?:[A-Za-z0-9]+:)?valid>", text, re.I))
+    name_match = re.search(r"<(?:[A-Za-z0-9]+:)?name>([^<]*)</(?:[A-Za-z0-9]+:)?name>", text, re.I)
+    addr_match = re.search(r"<(?:[A-Za-z0-9]+:)?address>([^<]*)</(?:[A-Za-z0-9]+:)?address>", text, re.I | re.S)
+    name = (name_match.group(1).strip() if name_match else None) or None
+    # VIES returns literal "---" for privacy-suppressed names; treat as None
+    if name in ("---", ""):
+        name = None
+    address = (addr_match.group(1).strip() if addr_match else None) or None
+    if address in ("---", ""):
+        address = None
     return {
         "valid": valid,
-        "name": name_match.group(1).strip() if name_match else None,
-        "address": addr_match.group(1).strip() if addr_match else None,
+        "name": name,
+        "address": address,
         "error": None if valid else "invalid",
     }
 
