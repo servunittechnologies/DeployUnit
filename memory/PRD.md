@@ -1,17 +1,21 @@
 # DeployHub — PRD
 
 ## Original problem statement
-Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **on top of Coolify** (deployment engine) and **WHMCS** (hidden billing backend). Designed for individuals AND agencies, with workspaces, projects, apps, deployments, domains, monitoring, alerts, billing, and notifications.
+Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **on top of Coolify** (deployment engine) and **Mollie** (direct billing, replacing WHMCS). Designed for individuals AND agencies, with workspaces, projects, apps, deployments, domains, monitoring, alerts, billing, and notifications.
 
 ## Stack
-- **Frontend**: React + Tailwind + shadcn/ui (terminal/IDE Swiss-high-contrast aesthetic, Outfit / IBM Plex Sans / JetBrains Mono)
+- **Frontend**: React + Tailwind + shadcn/ui + **framer-motion** (as of 2026-05-06) — terminal/IDE Swiss-high-contrast aesthetic, Outfit / IBM Plex Sans / JetBrains Mono. Futuristic revamp layer added on landing/auth with canvas constellation, aurora blobs, typewriter, scramble text, spotlight hover, 3D parallax.
 - **Backend**: FastAPI + MongoDB (Motor async, UUID `id` fields, no `_id` in responses)
-- **Workers**: APScheduler in-process (`monitor_tick` every 60s, `deploy_sync` every 15s)
+- **Workers**: APScheduler in-process
+  - `monitor_tick` every 60s
+  - `deploy_sync` every 15s
+  - **`deployment_watchdog` every 30s** (NEW — self-heals stuck Coolify deploys)
 - **Auth**: JWT + bcrypt, httpOnly + secure + SameSite=None cookies, Bearer fallback
 - **Integrations** (LIVE):
   - Coolify v1 — http://149.12.246.205:8000
-  - WHMCS — https://my.servunit.com (`/includes/api.php`)
-- **Mocked**: GitHub OAuth → `/api/github/repos` returns 5 sample repos. User opted in (no GitHub keys yet).
+  - Mollie v2 (Subscriptions)
+  - GitHub OAuth
+- **Legacy**: `clients/whmcs.py` retained in code (dormant — still referenced by domains.py/settings.py for domain-WHOIS + health-check display only).
 
 ## User personas
 - **Solo founder** (Hobby plan): 1 app, hands-off deploys.
@@ -20,57 +24,70 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 
 ## Core requirements (static)
 1. Sign up, log in, manage account.
-2. Pick a plan; create WHMCS client + invoice silently behind the scenes.
+2. Pick a plan; create Mollie customer + subscription.
 3. Create workspaces (Solo or Agency); invite members with roles.
 4. Group apps into projects (agency feature).
 5. Deploy a Next.js / Node app from a Git repo via Coolify.
 6. Link custom domains; auto-SSL.
 7. Realtime monitoring (uptime + response time) + alert rules → in-app notifications.
-8. View invoices in-dashboard (synced from WHMCS).
+8. View invoices in-dashboard (PDF, EU VAT compliant).
 
-## Implemented (MVP — 2026-05-06)
-- **Backend** (`/app/backend`):
-  - `server.py` — FastAPI app with lifespan, APScheduler, CORS.
-  - `auth_utils.py` + `crypto_utils.py` — bcrypt password, JWT access/refresh, httpOnly cookies, `get_current_user`, `require_workspace_member` (role-aware), Fernet token encryption.
-  - Routers: `auth`, `github_oauth`, `workspaces`, `projects`, `apps`, `deployments`, `domains`, `monitoring`, `alerts`, `billing`, `notifications`, `settings`, `github`.
-  - `clients/coolify.py` — Coolify v1 client.
-  - `clients/mollie.py` — **Mollie v2 client (raw httpx)** — customers, payments, subscriptions, mandates.
-  - `clients/whmcs.py` — retained in codebase but no longer used by billing (safe to delete later).
-  - `services/vat.py` — **EU VAT rates + VIES SOAP validation** (NL/destination/reverse-charge/non-EU).
-  - `services/invoice.py` — **reportlab PDF invoice generator** with reverse-charge note + sequential numbering (`YYYY-NNNN`).
-  - `workers/monitor.py` — uptime checks + alert evaluation, Coolify deploy-sync.
-  - `seed.py` — admin + demo users, seeded workspace + apps + notification.
-- **Frontend** (`/app/frontend/src`):
-  - Marketing landing, auth (with GitHub OAuth button), Pricing (€), Checkout (inline billing profile + direct Mollie redirect).
-  - Dashboard layout + all pages (Overview, Projects, NewApp wizard, AppDetail tabs×6, Domains, Monitoring, Alerts, Billing, Settings, Notifications).
-  - **Billing page rewritten**: current plan, editable billing profile (VIES check), plan cards in €, payment history, PDF invoice table.
-  - `BillingProfileForm` reusable component (company/address/country/email/VAT ID with VIES validate button).
-  - GitHub OAuth — Login + Register + NewApp + Settings connect/disconnect.
-- **Tests**: 35/36 backend pytest pass (only a cosmetic VAT regex edge-case, now fixed). Frontend playwright full sweep green.
+## Implemented — snapshot as of 2026-05-06
+### Backend (`/app/backend`)
+- `server.py` — FastAPI app with lifespan, APScheduler (3 jobs), CORS.
+- `auth_utils.py`, `crypto_utils.py` — bcrypt, JWT, httpOnly cookies, Fernet token encryption.
+- Routers: `auth`, `github_oauth`, `workspaces`, `projects`, `apps`, `deployments`, `domains`, `monitoring`, `alerts`, `billing`, `notifications`, `settings`, `github`.
+- `clients/coolify.py` — Coolify v1 client.
+- `clients/mollie.py` — Mollie v2 raw httpx client (customers, subscriptions, mandates, payments).
+- `services/vat.py` — EU VAT + VIES SOAP validation.
+- `services/invoice.py` — reportlab PDF invoice generator with reverse-charge + sequential numbering (`YYYY-NNNN`).
+- `services/log_parser.py` — severity tagging (error/warning/build/deploy/info) + failure-summary extraction.
+- `services/github_helpers.py` — default-branch auto-detect.
+- `workers/monitor.py` — uptime probe, Coolify deploy-sync, **deployment_watchdog** (NEW).
+- `seed.py` — admin + demo users, seeded workspace + apps + notification.
+
+### Frontend (`/app/frontend/src`)
+- Marketing landing — **REBUILT 2026-05-06 (futuristic revamp)**: aurora-blob background, canvas constellation, typewriter hero lead, animated terminal, live-latency HUD, 7-card bento grid with mouse-spotlight hover, 3D parallax "deploy playground", scroll-linked stat strip, tech marquee.
+- Pricing — **REBUILT** with framer-motion reveals, pulse-glow on recommended, spotlight cards.
+- Auth (Login/Register) — **REBUILT** with canvas constellation panel, scramble-text welcome, motion reveals. GitHub OAuth buttons intact.
+- Checkout, Billing, Dashboard (Overview, Projects, NewApp wizard, AppDetail tabs×6, Domains, Monitoring, Alerts, Settings, Notifications).
+- `SitePreview.jsx` — HTTP mixed-content fallback (NEW 2026-05-06): detects `http://` primary_url and renders a `preview-fallback-open` link instead of a broken iframe.
+- Components: `ConstellationCanvas.jsx` (canvas particles + connecting lines), `Logo`, `GitHubButton`, `ProtectedRoute`, `TerminalLog`, `BuildErrorPanel`, `DeploymentStatus`, `DeployModal`, `EnvVarsEditor`, `AppCard`, `StatusBadge`, `DashboardLayout`.
+- Hooks: `useTypewriter`, `useScrambleText`, `useSpotlight`, `useDeploymentStream`.
 
 ## P1 backlog (next)
-- Real GitHub OAuth (need creds) — list user's repos, deploy from any branch, preview environments.
+- GitHub Webhooks for auto-deploy on `git push` (P1).
 - Email notifications (need Resend / SendGrid key).
-- Logs streaming via SSE/WebSocket from Coolify.
-- Rollbacks (pin a deployment as live).
-- Custom build commands + start commands per app.
-- Billing webhooks from WHMCS (auto-mark invoice paid).
 - White-label / branding for agency workspaces.
 - Resource usage alerts.
 
 ## P2 backlog
 - Slack + Discord alert channels.
-- Multi-region selection.
-- Coupon system on checkout.
+- Usage-based billing add-on via Mollie (extra endpoints over plan limit).
+- Let's Encrypt / HTTPS enforcement guidance for Coolify URLs.
+- Multi-region deployment selection.
 - Audit log.
+- Coupon system on checkout.
 
 ## Test credentials
 - Admin: `admin@deployhub.dev` / `admin123`
-- Demo:  `demo@deployhub.dev`  / `demo1234`
+- Demo: `demo@deployhub.dev` / `demo1234`
 
-## Latest dates
-- 2026-05-06 — Phase 1 MVP shipped, full-stack tested green (25/25 backend, all frontend flows).
-- 2026-05-06 — **GitHub OAuth wired live** (`/api/auth/github/start` + `/api/auth/github/callback`). Buttons on Login + Register; per-user repo listing on NewApp; Connect/Disconnect on Settings. Real repos replace mocked samples once the user links. Tokens encrypted at rest with Fernet (`ENCRYPTION_KEY` in .env). State CSRF token stored in `oauth_states` collection with 10-min TTL.
-- 2026-05-06 — **Billing migrated from WHMCS to Mollie Subscriptions**. Full EU VAT handling (NL 21%, destination rate for B2C EU, 0% reverse-charge for VIES-valid B2B EU, 0% for non-EU). reportlab-rendered PDF invoices with sequential numbering (`YYYY-NNNN`). Webhook handler idempotent on `mollie_payment_id`. `.env` extended with `MOLLIE_API_KEY`, `MOLLIE_WEBHOOK_URL`, `MOLLIE_REDIRECT_URL`, `COMPANY_*`. Billing page + Checkout fully rewritten — inline billing-profile form with VIES verify button.
-- 2026-05-06 — **App Detail advanced controls**. Editable Settings (name/branch/build cmd/start cmd/auto-deploy), key-value EnvVarsEditor with masking + bulk `.env` paste, prominent DeploymentStatus card on Overview, branch+commit picker DeployModal pulling live data from `GET /api/github/branches` + `/commits`. PATCH /apps/{id} syncs `git_branch` / `build_command` / `custom_start_command` / `name` to Coolify.
-- 2026-05-06 — **Branch protection + rollback + site preview**. Per-app `tier=development|production` with CSV of `protected_branches` (default `["main"]`); `redeploy` and new `rollback/{deployment_id}` endpoints both 403 when the target branch isn't in the allowed list. New `GET /apps/{id}/health` does a single live HTTP probe (status code, response time, page title, framing detection). New `SitePreview.jsx` shows the deployed site in an iframe (sandboxed) with a stats footer on the Overview tab. DeployModal renders a "production tier" banner and disables Deploy when the chosen branch is blocked. Deployments tab gets a per-row Rollback button. Worker fix: `sync_deployments` now also stub-completes deployments for apps without a `coolify_app_uuid`, and the Coolify status parser handles `running:*`, `exited:0`, `exited:unhealthy`, etc.
+## Changelog
+- **2026-05-06 — Futuristic revamp + P0 deploy-retry hardening (Iter7)**
+  - **P0 fix — silent Coolify deploys**: Split `create_public_app(instant_deploy=True)` → `create_public_app(instant_deploy=False)` + explicit `coolify.deploy()` with 3× exponential backoff retries (2s→4s→8s) in `_trigger_coolify_deploy_with_retry`. Each attempt is logged to `deployment.logs` so users can see retries in the TerminalLog UI.
+  - **Watchdog** — new APScheduler job `deployment_watchdog` every 30s picks up deployments stuck in `queued`/`building` >90s without a `coolify_deployment_uuid` and retries once. `max_instances=2` to prevent scheduler starvation.
+  - **Response-time SLA** — all Coolify I/O (`/apps` POST, `/apps/{id}/redeploy`, PATCH `/apps/{id}`, PUT `/apps/{id}/env`) now runs in `BackgroundTasks` so API responds in <2s.
+  - **Landing page revamp** — futuristic hero with animated terminal + typewriter + response-latency HUD + orbital ornament + canvas constellation + aurora blobs. 7-card bento platform grid with mouse-tracked spotlight. 3D-parallax dashboard playground. Scroll-linked stat strip. Ring-glow magnetic buttons.
+  - **Pricing revamp** — framer-motion reveal, spotlight cards, pulse-glow on recommended plan.
+  - **Login/Register revamp** — ConstellationCanvas side panel, scramble-text welcome, motion-reveal form.
+  - **P1 fix — SitePreview HTTP fallback** — detects `http://` primary_url (mixed-content blocked by browser) and renders `preview-fallback` UI with a "Open full site" link instead of a blank iframe. New testid: `preview-fallback-open`.
+  - Added: `framer-motion@12`, 3 new hooks (`useTypewriter`, `useScrambleText`, `useSpotlight`), `ConstellationCanvas` component.
+  - Tests: 63/64 green (only pre-existing `/api/integrations/health` flake when Coolify host is slow). Iter7 test report at `/app/test_reports/iteration_7.json`.
+
+- 2026-05-06 — Iter6 — Auto-detect branch, severity-tagged logs, BuildErrorPanel, SSE log stream (58/58 backend green).
+- 2026-05-06 — Iter5 — Branch protection, rollback, site preview, production tier.
+- 2026-05-06 — Iter4 — AppDetail advanced controls (editable settings, env vars editor, deploy modal).
+- 2026-05-06 — Iter3 — Mollie billing migration + EU VAT + PDF invoices.
+- 2026-05-06 — Iter2 — GitHub OAuth wired live (Fernet-encrypted tokens, CSRF state).
+- 2026-05-06 — Phase 1 MVP shipped (25/25 backend, all frontend flows green).

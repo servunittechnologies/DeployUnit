@@ -450,7 +450,7 @@ export default function Landing() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9 }}
               className="font-display text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tighter leading-[0.95]"
             >
-              Ship Next.js & Node<br />
+              Ship Next.js & Node{" "}<br />
               <span className="relative inline-block">
                 <span className="relative z-10 text-brand holo">in two clicks.</span>
                 <span className="absolute inset-x-0 bottom-1 h-3 bg-brand/20 -z-0 blur-md" />

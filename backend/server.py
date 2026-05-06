@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     await seed_initial_data()
     scheduler.add_job(run_monitor_tick, "interval", seconds=60, id="monitor", replace_existing=True)
     scheduler.add_job(sync_deployments, "interval", seconds=15, id="deploy_sync", replace_existing=True)
-    scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True)
+    scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True, max_instances=2)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
