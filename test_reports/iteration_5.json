@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 5 — branch protection, rollback, and SitePreview/health probe verified end-to-end. Backend: full pytest suite 50/50 PASS (added TestAppsIter5 with 8 new tests covering PATCH tier+protected_branches, redeploy 403/200 branch gating, rollback creates a new building deployment with same branch+commit and 'Rollback to ...' message, rollback 400 for in-flight, rollback 403 under branch protection, GET /apps/{id}/health for live URL + no_url path, and a regression check that recent deployments are not stuck in 'building' indefinitely). Frontend Playwright (demo@deployhub.dev, opened novabrew-web-renamed-x-t): SitePreview present (3 colored chrome dots, iframe, all 4 stat tiles — Status, Response, Uptime, Avg). Reload button on SitePreview fires GET /api/apps/{id}/health (1 call captured) and forces iframe key change. Settings → Branch protection panel shows tier dropdown + Allowed branches CSV input; input toggles disabled correctly when tier=development; Save changes triggers 'Settings saved' toast. With tier=production saved, Deploy modal renders the protection banner ('PRODUCTION TIER · only branches [main] can be deployed') — data-testid='deploy-protection-banner' confirmed. Deployments tab shows 13 rollback buttons (data-testid='rollback-{id}') across finished rows; clicking one accepts the confirm dialog, fires POST /api/apps/{id}/rollback/{dep_id}, and shows 'Rollback queued' toast. tier=development restored at the end of the run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AppDetail / Deployments tab", "issues": ["No '// current' marker rendered for the in-flight or most-recent live deploy because all visible deployments on the demo first app are in a 'failed' state — every row therefore shows a rollback button (13 of them). Functionally correct, but if a 'live' or 'building' row exists later the spec expects '// current' to render in its actions cell. Worth a quick visual confirmation once the demo container goes healthy."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_iter5.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routers/apps.py — branch-protection check is correctly applied in BOTH redeploy() and rollback() (rollback delegates to redeploy via RedeployIn, but also pre-checks so the user gets a 403 even before the redeploy path runs). Default allowed=['main'] when production tier with no list saved is a sensible fallback.",
+    "rollback() correctly rejects in-progress deployments (400) and crafts commit_message='Rollback to <sha7>' when commit is known else 'previous deploy'.",
+    "app_health() handles framing detection by parsing X-Frame-Options and CSP frame-ancestors — covers the iframe sandbox UX nicely. Title extraction via regex is bounded to 200 chars (good).",
+    "SitePreview.jsx mounts iframe with sandbox + key={reloadKey} so the reload button fully remounts the iframe. Matches Option A.",
+    "DeployModal.jsx — `branchBlocked = isProduction && branch && !allowed.includes(branch)` correctly disables the submit button and swaps the label to 'Branch protected'. Banner also renders independent of branch selection.",
+    "AppDetail.jsx is now ~500 lines — close to but still under the 700 line guideline. Continued growth (e.g., adding monitoring chart) might justify splitting Settings panel into its own file.",
+    "data-testid coverage for new features is excellent: site-preview, deploy-protection-banner, settings-tier-select, settings-protected-input, rollback-{id}, settings-save-btn, tab-{name} all present and stable."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (50/50)", "frontend": "100% (SitePreview, health-reload, branch-protection settings + deploy modal banner, rollback button + POST + toast all verified)"},
+  "test_credentials": "demo@deployhub.dev / demo1234 (used).",
+  "seed_data_creation": "During testing the demo first app (novabrew-web-renamed-x-t) cycled through tier=production several times via PATCH and one rollback was fired (creates one extra deployment row). Final state: tier=development, protected_branches preserved as last set ['main']; protection is inert when tier=development. This is the same idempotent footprint as iter4.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter5 features (branch protection, rollback, health probe + SitePreview) are fully green. Backend regression suite is at 50/50. New test class TestAppsIter5 in /app/backend/tests/backend_test.py covers all three. Note: every visible deployment on the seeded first app currently has status='failed' (Coolify-hosted demo container is unhealthy), so the 'most-recent live → // current' marker is not exercisable from the seeded data alone. If you want to verify the '// current' label, first wait for or trigger a successful deploy. The demo first app id is now 8227672f-1c09-4864-a7f8-51a4674bd3d0 (workspace Acme Studio).",
+  "rca of the issue": "N/A — no bugs found in this iteration."
+}

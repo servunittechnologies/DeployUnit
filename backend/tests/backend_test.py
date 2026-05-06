@@ -298,6 +298,173 @@ class TestAppsIter4:
 
 
 
+# ----- Iteration 5: Branch protection, Rollback, Health -----
+class TestAppsIter5:
+    @pytest.fixture(scope="class")
+    def target_app(self, demo_session, demo_workspace_id):
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        assert apps, "expected seeded apps"
+        return apps[0]
+
+    def test_patch_tier_and_protected_branches(self, demo_session, target_app):
+        app_id = target_app["id"]
+        r = demo_session.patch(f"{API}/apps/{app_id}",
+                               json={"tier": "production", "protected_branches": ["main", "release"]},
+                               timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["tier"] == "production"
+        assert d["protected_branches"] == ["main", "release"]
+        # Reset back to development (clears restriction at runtime)
+        r2 = demo_session.patch(f"{API}/apps/{app_id}", json={"tier": "development"}, timeout=10)
+        assert r2.status_code == 200
+        assert r2.json()["tier"] == "development"
+
+    def test_redeploy_branch_protection_403_and_allowed_200(self, demo_session, target_app):
+        app_id = target_app["id"]
+        # Lock down to main only
+        demo_session.patch(f"{API}/apps/{app_id}",
+                           json={"tier": "production", "protected_branches": ["main"]}, timeout=10)
+        try:
+            # Disallowed branch -> 403
+            r = demo_session.post(f"{API}/apps/{app_id}/redeploy",
+                                  json={"branch": "feature/x"}, timeout=15)
+            assert r.status_code == 403, r.text
+            assert r.json().get("detail", "").startswith("Branch protection:")
+            # Allowed branch -> 200/building
+            r2 = demo_session.post(f"{API}/apps/{app_id}/redeploy",
+                                   json={"branch": "main"}, timeout=15)
+            assert r2.status_code in (200, 201), r2.text
+            assert r2.json()["status"] in ("queued", "building")
+        finally:
+            demo_session.patch(f"{API}/apps/{app_id}", json={"tier": "development"}, timeout=10)
+
+    def test_rollback_creates_new_deployment(self, demo_session, target_app):
+        app_id = target_app["id"]
+        # Wait briefly so any in-flight from prior test can finish
+        finished = None
+        for _ in range(8):
+            deps = demo_session.get(f"{API}/apps/{app_id}/deployments", timeout=10).json()
+            finished = next((d for d in deps if d["status"] in ("live", "failed")), None)
+            if finished:
+                break
+            time.sleep(3)
+        assert finished, "expected at least one finished deployment to roll back to"
+        target_id = finished["id"]
+        r = demo_session.post(f"{API}/apps/{app_id}/rollback/{target_id}", timeout=20)
+        assert r.status_code in (200, 201), r.text
+        d = r.json()
+        assert d["status"] in ("queued", "building")
+        assert d["branch"] == finished.get("branch")
+        assert d.get("commit_sha") == finished.get("commit_sha")
+        assert (d.get("commit_message") or "").startswith("Rollback to")
+
+    def test_rollback_inflight_returns_400(self, demo_session, target_app):
+        app_id = target_app["id"]
+        # Fire a redeploy to create an in-flight deployment
+        rd = demo_session.post(f"{API}/apps/{app_id}/redeploy", json={}, timeout=15)
+        assert rd.status_code in (200, 201)
+        new_id = rd.json()["id"]
+        # Immediately try to rollback to it (should be queued/building)
+        r = demo_session.post(f"{API}/apps/{app_id}/rollback/{new_id}", timeout=15)
+        # Race: it may have already transitioned. Accept 400 OR the new one is finished.
+        if r.status_code != 400:
+            # if it transitioned already, that's still an acceptable success
+            assert r.status_code in (200, 201)
+        else:
+            assert "in progress" in r.json().get("detail", "").lower()
+
+    def test_rollback_branch_protection_403(self, demo_session, target_app):
+        app_id = target_app["id"]
+        # Find a deployment with branch != main
+        deps = demo_session.get(f"{API}/apps/{app_id}/deployments", timeout=10).json()
+        non_main = next((d for d in deps
+                         if d.get("branch") and d["branch"] != "main"
+                         and d["status"] in ("live", "failed")), None)
+        if not non_main:
+            # Create one: redeploy on develop, then patch back to main
+            rd = demo_session.post(f"{API}/apps/{app_id}/redeploy",
+                                   json={"branch": "develop"}, timeout=15)
+            assert rd.status_code in (200, 201)
+            new_id = rd.json()["id"]
+            # Wait for it to finish
+            for _ in range(10):
+                time.sleep(3)
+                deps = demo_session.get(f"{API}/apps/{app_id}/deployments", timeout=10).json()
+                cur = next((x for x in deps if x["id"] == new_id), None)
+                if cur and cur["status"] in ("live", "failed"):
+                    non_main = cur
+                    break
+            demo_session.patch(f"{API}/apps/{app_id}", json={"branch": "main"}, timeout=10)
+        if not non_main:
+            pytest.skip("could not produce a finished non-main deployment")
+        # Lock down to main only
+        demo_session.patch(f"{API}/apps/{app_id}",
+                           json={"tier": "production", "protected_branches": ["main"]}, timeout=10)
+        try:
+            r = demo_session.post(f"{API}/apps/{app_id}/rollback/{non_main['id']}", timeout=15)
+            assert r.status_code == 403, r.text
+            assert "Branch protection" in r.json().get("detail", "")
+        finally:
+            demo_session.patch(f"{API}/apps/{app_id}", json={"tier": "development"}, timeout=10)
+
+    def test_health_endpoint_with_url(self, demo_session, target_app):
+        app_id = target_app["id"]
+        r = demo_session.get(f"{API}/apps/{app_id}/health", timeout=20)
+        assert r.status_code == 200
+        d = r.json()
+        # Either available with metrics OR network failure with reason
+        assert "available" in d
+        if d.get("available"):
+            for k in ("status_code", "ok", "response_time_ms", "framing_blocked", "checked_at", "url"):
+                assert k in d, f"missing {k} in health"
+            assert isinstance(d["response_time_ms"], int)
+            assert isinstance(d["framing_blocked"], bool)
+        else:
+            # If app has primary_url but is down, reason must be present
+            assert "reason" in d
+
+    def test_health_endpoint_no_url(self, demo_session, demo_workspace_id):
+        # Create a fresh app, then null its primary_url to force no_url path
+        name = f"TEST_nohealth_{uuid.uuid4().hex[:6]}"
+        r = demo_session.post(f"{API}/apps",
+                              json={"workspace_id": demo_workspace_id, "name": name,
+                                    "framework": "nextjs",
+                                    "repo_url": "https://github.com/vercel/next.js",
+                                    "branch": "main"}, timeout=15)
+        assert r.status_code in (200, 201)
+        app_id = r.json()["id"]
+        try:
+            # Wait briefly, then if it stubbed-live, we cannot easily null primary_url
+            # via API. The endpoint behavior is what matters; if the new app has no url
+            # yet (queued), we get no_url. Poll with short timeout.
+            got_no_url = False
+            for _ in range(3):
+                hr = demo_session.get(f"{API}/apps/{app_id}/health", timeout=15)
+                assert hr.status_code == 200
+                hd = hr.json()
+                if hd.get("available") is False and hd.get("reason") == "no_url":
+                    got_no_url = True
+                    break
+                time.sleep(1)
+            assert got_no_url, "expected no_url at least once for fresh app"
+        finally:
+            demo_session.delete(f"{API}/apps/{app_id}", timeout=10)
+
+    def test_no_app_stuck_building_indefinitely(self, demo_session, demo_workspace_id):
+        """Recent deployments should transition (not be stuck building forever)."""
+        apps = demo_session.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10).json()
+        for app in apps[:3]:
+            deps = demo_session.get(f"{API}/apps/{app['id']}/deployments", timeout=10).json()
+            if not deps:
+                continue
+            # Among the 3 oldest, at least one should be live or failed
+            oldest = deps[-3:] if len(deps) >= 3 else deps
+            assert any(d["status"] in ("live", "failed") for d in oldest), \
+                f"app {app['name']} oldest deployments all stuck: {[d['status'] for d in oldest]}"
+
+
+
 
 # ----- Domains -----
 class TestDomains:

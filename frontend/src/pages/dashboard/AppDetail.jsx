@@ -6,9 +6,10 @@ import TerminalLog from "../../components/TerminalLog";
 import EnvVarsEditor from "../../components/EnvVarsEditor";
 import DeployModal from "../../components/DeployModal";
 import DeploymentStatus from "../../components/DeploymentStatus";
+import SitePreview from "../../components/SitePreview";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
-  ExternalLink, Plus, Save, Loader2, Rocket,
+  ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,14 +41,21 @@ function SettingsForm({ app, onSaved }) {
   const [build, setBuild] = useState(app.build_command || "");
   const [start, setStart] = useState(app.start_command || "");
   const [auto, setAuto] = useState(app.auto_deploy !== false);
+  const [tier, setTier] = useState(app.tier || "development");
+  const [protectedBranches, setProtectedBranches] = useState((app.protected_branches || ["main"]).join(", "));
   const [saving, setSaving] = useState(false);
+
+  const protectedList = protectedBranches.split(",").map((s) => s.trim()).filter(Boolean);
+  const initialProtected = (app.protected_branches || ["main"]).join(",");
 
   const dirty =
     name !== (app.name || "") ||
     branch !== (app.branch || "main") ||
     build !== (app.build_command || "") ||
     start !== (app.start_command || "") ||
-    auto !== (app.auto_deploy !== false);
+    auto !== (app.auto_deploy !== false) ||
+    tier !== (app.tier || "development") ||
+    protectedList.join(",") !== initialProtected;
 
   const save = async (e) => {
     e.preventDefault();
@@ -55,6 +63,7 @@ function SettingsForm({ app, onSaved }) {
     try {
       const res = await api.patch(`/apps/${app.id}`, {
         name, branch, build_command: build, start_command: start, auto_deploy: auto,
+        tier, protected_branches: protectedList.length ? protectedList : ["main"],
       });
       toast.success("Settings saved");
       onSaved?.(res.data);
@@ -106,6 +115,39 @@ function SettingsForm({ app, onSaved }) {
         <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} data-testid="settings-auto-deploy" />
         Auto-deploy on every push to <span className="font-mono text-brand">{branch}</span>
       </label>
+
+      {/* Tier + branch protection */}
+      <div className="border border-white/10 p-4 bg-elevated/30 space-y-3">
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
+          <ShieldCheck className="h-3 w-3 text-brand" /> Branch protection
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-mono text-zinc-400">Environment tier</label>
+            <select value={tier} onChange={(e) => setTier(e.target.value)}
+              className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+              data-testid="settings-tier-select"
+            >
+              <option value="development">Development — anyone can deploy any branch</option>
+              <option value="production">Production — only protected branches allowed</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-mono text-zinc-400">Allowed branches (CSV)</label>
+            <input value={protectedBranches} onChange={(e) => setProtectedBranches(e.target.value)}
+              placeholder="main, release"
+              disabled={tier !== "production"}
+              className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none disabled:opacity-50"
+              data-testid="settings-protected-input"
+            />
+          </div>
+        </div>
+        <div className="text-[11px] font-mono text-zinc-500">
+          {tier === "production"
+            ? `Production tier: deploys + rollbacks are blocked unless the branch is one of [${protectedList.join(", ") || "main"}].`
+            : "Development tier: any branch can be deployed."}
+        </div>
+      </div>
 
       <div className="flex items-center gap-2">
         <button type="submit" disabled={!dirty || saving}
@@ -171,6 +213,17 @@ export default function AppDetail() {
     if (!window.confirm("Delete this app? This cannot be undone.")) return;
     await api.delete(`/apps/${id}`);
     navigate("/app");
+  };
+
+  const rollback = async (deploymentId) => {
+    if (!window.confirm("Rollback to this deployment? A new deploy will be triggered with that branch and commit.")) return;
+    try {
+      const { data } = await api.post(`/apps/${id}/rollback/${deploymentId}`);
+      toast.success(`Rollback queued · ${data.branch}${data.commit_sha ? ` @ ${data.commit_sha.slice(0, 7)}` : ""}`);
+      load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    }
   };
 
   const saveEnv = async (next) => {
@@ -249,32 +302,39 @@ export default function AppDetail() {
         <div className="p-6 space-y-6">
           <DeploymentStatus app={app} latest={latestDeploy} history={deployments} onRedeploy={() => setDeployOpen(true)} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
-            <div className="bg-background p-5 lg:col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3">
+              <SitePreview appId={id} monitoring={monitoring} />
+            </div>
+            <div className="lg:col-span-2 border border-white/[0.06] bg-background p-5">
               <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">// build log</div>
               <TerminalLog
                 title={latestDeploy ? `${latestDeploy.status}.log` : "no.log"}
                 lines={latestDeploy?.logs || []}
-                height={320}
+                height={420}
               />
             </div>
-            <div className="bg-background p-5 space-y-4">
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Repository</div>
-                <div className="text-sm font-mono break-all">{app.repo_url}</div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
+            <div className="bg-background p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Repository</div>
+              <div className="text-sm font-mono break-all mt-1 truncate">{app.repo_url.replace(/^https?:\/\//, "")}</div>
+            </div>
+            <div className="bg-background p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Last deploy</div>
+              <div className="text-sm mt-1">{timeAgo(app.last_deploy_at)}</div>
+            </div>
+            <div className="bg-background p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Tier</div>
+              <div className="text-sm mt-1 inline-flex items-center gap-1.5 capitalize">
+                {app.tier === "production" ? <ShieldCheck className="h-3 w-3 text-brand" /> : null}
+                {app.tier || "development"}
               </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Last deploy</div>
-                <div className="text-sm">{timeAgo(app.last_deploy_at)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Uptime 24h</div>
-                <div className="text-sm">{monitoring?.uptime_pct != null ? `${monitoring.uptime_pct}%` : "collecting…"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Avg response</div>
-                <div className="text-sm">{monitoring?.avg_response_ms != null ? `${monitoring.avg_response_ms}ms` : "—"}</div>
-              </div>
+            </div>
+            <div className="bg-background p-4">
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Auto-deploy</div>
+              <div className="text-sm mt-1">{app.auto_deploy === false ? "off" : `on · ${app.branch}`}</div>
             </div>
           </div>
         </div>
@@ -285,28 +345,50 @@ export default function AppDetail() {
           <div className="border-t border-l border-white/[0.06]">
             <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 border-r border-b border-white/[0.06]">
               <div className="col-span-2">Status</div>
-              <div className="col-span-3">Commit</div>
+              <div className="col-span-2">Commit</div>
               <div className="col-span-3">Branch / message</div>
               <div className="col-span-2">Duration</div>
-              <div className="col-span-2 text-right">Started</div>
+              <div className="col-span-2">Started</div>
+              <div className="col-span-1 text-right">Actions</div>
             </div>
-            {deployments.map((d) => (
-              <div key={d.id} className="grid grid-cols-12 px-4 py-3 border-r border-b border-white/[0.06] items-center text-sm" data-testid={`deployment-${d.id}`}>
-                <div className="col-span-2"><StatusBadge status={d.status} /></div>
-                <div className="col-span-3 font-mono text-xs flex items-center gap-1.5">
-                  <GitCommit className="h-3 w-3 text-brand" />
-                  {d.commit_sha ? d.commit_sha.slice(0, 7) : "HEAD"}
-                </div>
-                <div className="col-span-3">
-                  <div className="text-xs font-mono text-zinc-400 inline-flex items-center gap-1.5">
-                    <GitBranch className="h-3 w-3" /> {d.branch || app.branch}
+            {deployments.map((d, idx) => {
+              const isCurrent = idx === 0 && (d.status === "live" || d.status === "building" || d.status === "queued");
+              const inFlight = d.status === "queued" || d.status === "building";
+              const canRollback = !isCurrent && !inFlight;
+              return (
+                <div key={d.id} className="grid grid-cols-12 px-4 py-3 border-r border-b border-white/[0.06] items-center text-sm" data-testid={`deployment-${d.id}`}>
+                  <div className="col-span-2"><StatusBadge status={d.status} /></div>
+                  <div className="col-span-2 font-mono text-xs flex items-center gap-1.5">
+                    <GitCommit className="h-3 w-3 text-brand" />
+                    {d.commit_sha ? d.commit_sha.slice(0, 7) : "HEAD"}
                   </div>
-                  <div className="text-xs text-zinc-500 truncate">{d.commit_message}</div>
+                  <div className="col-span-3">
+                    <div className="text-xs font-mono text-zinc-400 inline-flex items-center gap-1.5">
+                      <GitBranch className="h-3 w-3" /> {d.branch || app.branch}
+                    </div>
+                    <div className="text-xs text-zinc-500 truncate">{d.commit_message}</div>
+                  </div>
+                  <div className="col-span-2 font-mono text-xs">{fmtDuration(d.started_at, d.finished_at)}</div>
+                  <div className="col-span-2 text-xs font-mono text-zinc-500">{timeAgo(d.started_at)}</div>
+                  <div className="col-span-1 text-right">
+                    {canRollback ? (
+                      <button
+                        onClick={() => rollback(d.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 border border-white/15 hover:border-brand hover:text-brand text-[11px] font-mono uppercase tracking-wider"
+                        data-testid={`rollback-${d.id}`}
+                        title="Rollback to this deployment"
+                      >
+                        <Undo2 className="h-3 w-3" /> rollback
+                      </button>
+                    ) : isCurrent ? (
+                      <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-brand">// current</span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-zinc-600">—</span>
+                    )}
+                  </div>
                 </div>
-                <div className="col-span-2 font-mono text-xs">{fmtDuration(d.started_at, d.finished_at)}</div>
-                <div className="col-span-2 text-right text-xs font-mono text-zinc-500">{timeAgo(d.started_at)}</div>
-              </div>
-            ))}
+              );
+            })}
             {deployments.length === 0 && <div className="p-10 text-zinc-500 text-sm">No deployments yet.</div>}
           </div>
         </div>

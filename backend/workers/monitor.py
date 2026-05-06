@@ -113,27 +113,47 @@ async def run_monitor_tick():
 
 
 async def sync_deployments():
-    """Reconcile in-flight deployments with Coolify."""
+    """Reconcile in-flight deployments with Coolify (or stub-complete when no Coolify uuid)."""
     db = get_db()
-    if not coolify.configured:
-        # advance our stub-deploys (queued -> live after ~20s) so the demo feels alive
-        old = (datetime.now(timezone.utc) - timedelta(seconds=20)).isoformat()
-        async for d in db.deployments.find({"status": "queued", "started_at": {"$lt": old}}, {"_id": 0}):
+    cutoff_old = (datetime.now(timezone.utc) - timedelta(seconds=20)).isoformat()
+
+    # 1) Stub-complete deployments for apps that have no Coolify uuid.
+    # This covers both: Coolify not configured, and seeded apps that never
+    # got created in Coolify.
+    apps_without_uuid = await db.apps.find(
+        {"$or": [{"coolify_app_uuid": None}, {"coolify_app_uuid": {"$exists": False}}]},
+        {"_id": 0, "id": 1},
+    ).to_list(2000)
+    app_ids_no_uuid = [a["id"] for a in apps_without_uuid]
+    if app_ids_no_uuid:
+        cur = db.deployments.find(
+            {"status": {"$in": ["queued", "building"]},
+             "started_at": {"$lt": cutoff_old},
+             "app_id": {"$in": app_ids_no_uuid}},
+            {"_id": 0},
+        )
+        async for d in cur:
             await db.deployments.update_one(
                 {"id": d["id"]},
                 {"$set": {
                     "status": "live",
                     "finished_at": _now_iso(),
-                    "logs": (d.get("logs") or []) + ["[BUILD] stub build complete", "[STATUS] live"]
+                    "logs": (d.get("logs") or []) + ["[BUILD] stub build complete", "[STATUS] live"],
                 }},
             )
             await db.apps.update_one(
                 {"id": d["app_id"]},
-                {"$set": {"status": "live", "primary_url": f"https://{d['app_id'][:8]}.deploy.example", "last_deploy_at": _now_iso()}},
+                {"$set": {
+                    "status": "live",
+                    "primary_url": f"https://{d['app_id'][:8]}.deploy.example",
+                    "last_deploy_at": _now_iso(),
+                }},
             )
+
+    if not coolify.configured:
         return
 
-    # Real Coolify reconcile
+    # 2) Real Coolify reconcile for apps that DO have a uuid.
     apps = await db.apps.find(
         {"coolify_app_uuid": {"$ne": None}, "status": {"$in": ["queued", "building"]}}, {"_id": 0}
     ).to_list(200)
@@ -143,9 +163,14 @@ async def sync_deployments():
             continue
         cool_status = (info.get("status") or "").lower()
         new_status = "building"
-        if "running" in cool_status or "exited:0" in cool_status:
+        # Coolify status strings include: "running:healthy", "running:unhealthy",
+        # "exited:0", "exited:1", "exited:unhealthy", "starting", "restarting".
+        if cool_status.startswith("running"):
             new_status = "live"
-        elif "fail" in cool_status or "exited:1" in cool_status:
+        elif "exited:0" in cool_status:
+            new_status = "live"
+        elif "exited" in cool_status or "fail" in cool_status or "error" in cool_status:
+            # exited:1, exited:unhealthy, exited:* — mark failed
             new_status = "failed"
         fqdn = info.get("fqdn") or info.get("preview_fqdn")
         primary_url = None

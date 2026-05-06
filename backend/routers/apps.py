@@ -240,6 +240,16 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks, p
     payload = payload or RedeployIn()
     target_branch = (payload.branch or app.get("branch") or "main").strip()
     target_commit = (payload.commit_sha or "").strip() or None
+
+    # Branch protection — production-tier apps may only deploy from listed branches
+    if app.get("tier") == "production":
+        allowed = app.get("protected_branches") or ["main"]
+        if target_branch not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Branch protection: '{target_branch}' is not allowed for this production-tier app. Allowed: {', '.join(allowed)}",
+            )
+
     msg = payload.commit_message or "Manual redeploy"
     if target_commit:
         msg = f"{msg} ({target_branch}@{target_commit[:7]})"
@@ -304,6 +314,90 @@ async def restart_app(app_id: str, request: Request):
     if coolify.configured and app.get("coolify_app_uuid"):
         await coolify.restart(app["coolify_app_uuid"])
     return {"ok": True}
+
+
+@router.post("/apps/{app_id}/rollback/{deployment_id}")
+async def rollback(app_id: str, deployment_id: str, request: Request, background: BackgroundTasks):
+    """Pin a past deployment as live by re-running it (its branch + commit)."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    target = await db.deployments.find_one({"id": deployment_id, "app_id": app_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    if target.get("status") in ("queued", "building"):
+        raise HTTPException(status_code=400, detail="That deployment is still in progress.")
+
+    branch = target.get("branch") or app.get("branch") or "main"
+    commit_sha = target.get("commit_sha")
+
+    if app.get("tier") == "production":
+        allowed = app.get("protected_branches") or ["main"]
+        if branch not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Branch protection: '{branch}' is not allowed for this production-tier app.",
+            )
+
+    redeploy_payload = RedeployIn(
+        branch=branch,
+        commit_sha=commit_sha,
+        commit_message=f"Rollback to {target.get('commit_sha', '?')[:7] if target.get('commit_sha') else 'previous deploy'}",
+    )
+    return await redeploy(app_id, request, background, redeploy_payload)
+
+
+@router.get("/apps/{app_id}/health")
+async def app_health(app_id: str, request: Request):
+    """Single live health probe for the Overview preview card."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    url = app.get("primary_url")
+    if not url:
+        return {"available": False, "reason": "no_url"}
+    import time
+    import httpx as _httpx
+    start = time.perf_counter()
+    try:
+        async with _httpx.AsyncClient(timeout=8.0, follow_redirects=True) as cli:
+            r = await cli.get(url, headers={"User-Agent": "DeployHub-Health/1.0"})
+        elapsed = int((time.perf_counter() - start) * 1000)
+        title = None
+        if r.headers.get("content-type", "").lower().startswith("text/html"):
+            import re as _re
+            m = _re.search(r"<title[^>]*>([^<]{1,200})</title>", r.text, _re.I)
+            if m:
+                title = m.group(1).strip()
+        # Detect framing — sites that disallow iframe via X-Frame-Options or CSP
+        xfo = (r.headers.get("x-frame-options") or "").lower()
+        csp = r.headers.get("content-security-policy") or ""
+        framing_blocked = xfo in ("deny", "sameorigin") or "frame-ancestors" in csp
+        return {
+            "available": True,
+            "url": url,
+            "status_code": r.status_code,
+            "ok": 200 <= r.status_code < 400,
+            "response_time_ms": elapsed,
+            "title": title,
+            "framing_blocked": framing_blocked,
+            "checked_at": _now_iso(),
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "url": url,
+            "reason": str(e)[:200],
+            "ok": False,
+            "checked_at": _now_iso(),
+        }
 
 
 @router.get("/apps/{app_id}/env")

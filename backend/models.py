@@ -106,6 +106,8 @@ class AppOut(BaseModel):
     last_deploy_at: Optional[datetime] = None
     primary_url: Optional[str] = None
     auto_deploy: bool = True
+    tier: Literal["development", "production"] = "development"
+    protected_branches: List[str] = Field(default_factory=lambda: ["main"])
     created_at: datetime
 
 
@@ -116,6 +118,8 @@ class AppUpdate(BaseModel):
     start_command: Optional[str] = None
     auto_deploy: Optional[bool] = None
     project_id: Optional[str] = None
+    tier: Optional[Literal["development", "production"]] = None
+    protected_branches: Optional[List[str]] = None
 
 
 class EnvVarUpdate(BaseModel):

@@ -63,6 +63,9 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
 
   if (!open) return null;
   const onlyMain = branches.length === 1 && branches[0]?.commit_sha === null;
+  const isProduction = app?.tier === "production";
+  const allowed = app?.protected_branches || ["main"];
+  const branchBlocked = isProduction && branch && !allowed.includes(branch);
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" data-testid="deploy-modal">
       <div className="bg-elevated border border-white/10 w-full max-w-lg p-6 relative animate-rise">
@@ -84,6 +87,16 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
           <div className="mt-4 p-3 border border-signal-queued/30 bg-signal-queued/5 text-xs flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-signal-queued" />
             Connect GitHub in Settings to pick from real branches & commits.
+          </div>
+        )}
+
+        {isProduction && (
+          <div className="mt-4 p-3 border border-brand/30 bg-brand/5 text-xs flex items-center gap-2" data-testid="deploy-protection-banner">
+            <AlertTriangle className="h-4 w-4 text-brand" />
+            <span>
+              <span className="font-mono uppercase tracking-wider text-brand">production tier</span> · only branches
+              <span className="font-mono mx-1">[{allowed.join(", ")}]</span> can be deployed.
+            </span>
           </div>
         )}
 
@@ -158,11 +171,11 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
           <div className="flex gap-2">
             <button
               onClick={submit}
-              disabled={submitting || !branch}
+              disabled={submitting || !branch || branchBlocked}
               className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-brand text-brand-fg font-medium hover:bg-brand/90 active:scale-95 transition disabled:opacity-50 shadow-[0_0_20px_rgba(0,229,255,0.25)]"
               data-testid="deploy-submit"
             >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Rocket className="h-4 w-4" /> Deploy</>}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : branchBlocked ? <>Branch protected</> : <><Rocket className="h-4 w-4" /> Deploy</>}
             </button>
             <button onClick={onClose} className="px-4 py-2 border border-white/15">Cancel</button>
           </div>
