@@ -64,7 +64,7 @@ export default function TerminalLog({
   }, [filtered, autoScroll]);
 
   return (
-    <div className="terminal flex flex-col" style={{ minHeight: height }} data-testid="terminal-log">
+    <div className="terminal flex flex-col overflow-hidden" style={{ height }} data-testid="terminal-log">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-black/60">
         <span className="h-2 w-2 rounded-full bg-signal-failed/70" />
