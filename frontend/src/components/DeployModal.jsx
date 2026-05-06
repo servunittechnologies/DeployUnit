@@ -15,7 +15,7 @@ function timeAgo(iso) {
 }
 
 export default function DeployModal({ app, open, onClose, onDeployed }) {
-  const [branches, setBranches] = useState([]);
+  const [branches, setBranches] = useState(() => app?.branch ? [{ name: app.branch, commit_sha: null, default: true }] : []);
   const [commits, setCommits] = useState([]);
   const [branch, setBranch] = useState(app?.branch || "main");
   const [commitSha, setCommitSha] = useState("");
@@ -30,8 +30,9 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
     setCommitSha("");
     setPickCommit(false);
     setLoadingBranches(true);
+    setBranches((prev) => prev.length ? prev : [{ name: app.branch || "main", commit_sha: null, default: true }]);
     api.get("/github/branches", { params: { repo_url: app.repo_url } })
-      .then((r) => setBranches(r.data || []))
+      .then((r) => setBranches((r.data && r.data.length) ? r.data : [{ name: app.branch || "main", commit_sha: null, default: true }]))
       .catch(() => setBranches([{ name: app.branch || "main", commit_sha: null, default: true }]))
       .finally(() => setLoadingBranches(false));
   }, [open, app]);
