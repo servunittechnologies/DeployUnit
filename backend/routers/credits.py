@@ -76,7 +76,7 @@ async def credits_checkout(payload: CreditCheckoutIn, request: Request):
     )
     totals = compute_totals(subtotal=pack["price_eur"], vat_rate=vat["rate"])
 
-    redirect = os.environ.get("FRONTEND_URL", "https://vercel-clone-test.preview.emergentagent.com").rstrip("/")
+    redirect = os.environ.get("FRONTEND_URL", "https://coolify-hosted.preview.emergentagent.com").rstrip("/")
     webhook = (os.environ.get("MOLLIE_WEBHOOK_URL") or
                f"{os.environ.get('BACKEND_PUBLIC_URL', redirect)}/api/billing/mollie/webhook")
     try:

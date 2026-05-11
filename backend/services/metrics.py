@@ -92,13 +92,23 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
     if not samples:
         return {"accepted": 0, "skipped": 0}
 
-    # Bulk lookup of apps by their coolify_app_uuid
+    # Bulk lookup of apps by their coolify_app_uuid — and also resolve
+    # database-container UUIDs so the agent's DB samples don't get skipped.
     uuids = list({s.get("coolify_app_uuid") for s in samples if s.get("coolify_app_uuid")})
-    apps = {}
+    apps: dict[str, dict] = {}
     if uuids:
         cur = db.apps.find({"coolify_app_uuid": {"$in": uuids}}, {"_id": 0, "id": 1, "workspace_id": 1, "coolify_app_uuid": 1})
         async for a in cur:
             apps[a["coolify_app_uuid"]] = a
+        cur2 = db.databases.find({"coolify_app_uuid": {"$in": uuids}}, {"_id": 0, "id": 1, "workspace_id": 1, "coolify_app_uuid": 1})
+        async for d in cur2:
+            # Store under same dict — DB samples land in container_metrics_samples
+            # with `app_id` pointing at the database's id; the analytics layer
+            # treats them as their own resource type.
+            apps.setdefault(d["coolify_app_uuid"], {
+                "id": d["id"], "workspace_id": d["workspace_id"],
+                "coolify_app_uuid": d["coolify_app_uuid"], "_kind": "database",
+            })
 
     now_iso = _now().isoformat()
     accepted = 0

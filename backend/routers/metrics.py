@@ -204,10 +204,10 @@ AGENT_PY = r'''"""DeployHub metrics agent — runs inside `python:3.11-slim` nex
 on the build engine VPS. Loops every $INTERVAL_SEC, posts a JSON batch to
 DeployHub. Lean by design (one file, two deps)."""
 import os
+import re
 import sys
 import time
 import logging
-import json as _json
 from datetime import datetime, timezone
 
 import docker
@@ -227,6 +227,30 @@ if not API_URL or not API_KEY:
 client = docker.from_env()
 
 
+# Coolify container names look like:
+#   <24-char-uuid>           — for databases / services
+#   <24-char-uuid>-<digits>  — for application revisions
+# The `coolify.applicationId` label is the integer Laravel DB id, NOT the
+# UUID we use in DeployHub, so we recover the uuid from the name instead.
+NAME_RE = re.compile(r"^([a-z0-9]{20,32})(?:-\d+)?$")
+
+
+def _resource_uuid_from(c) -> str | None:
+    name = (c.name or "").lstrip("/")
+    m = NAME_RE.match(name)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _is_coolify_app(c) -> bool:
+    labels = c.labels or {}
+    # Anything Coolify-managed and matching the app naming convention counts.
+    # We skip platform internals (coolify-proxy, coolify-realtime, coolify-db
+    # etc.) which don't follow the uuid pattern.
+    return labels.get("coolify.managed") == "true" and _resource_uuid_from(c) is not None
+
+
 def _cpu_pct(stats: dict) -> float:
     try:
         cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"].get("total_usage", 0)
@@ -242,7 +266,6 @@ def _cpu_pct(stats: dict) -> float:
 def _mem(stats: dict):
     m = stats.get("memory_stats", {}) or {}
     used = int(m.get("usage") or 0)
-    # Subtract cache to match `docker stats` displayed value
     cache = ((m.get("stats") or {}).get("inactive_file") or 0) or ((m.get("stats") or {}).get("cache") or 0)
     used = max(0, used - cache)
     limit = int(m.get("limit") or 0)
@@ -279,17 +302,9 @@ def collect_samples() -> list[dict]:
         log.error("list containers: %s", e)
         return out
     for c in containers:
-        labels = c.labels or {}
-        # Coolify v4 sets coolify.applicationId on every app container.
-        # Also tolerate service / database containers if labels are present.
-        coolify_uuid = (
-            labels.get("coolify.applicationId")
-            or labels.get("coolify.serviceId")
-            or labels.get("coolify.databaseId")
-            or labels.get("coolify.application.uuid")
-        )
-        if not coolify_uuid:
+        if not _is_coolify_app(c):
             continue
+        coolify_uuid = _resource_uuid_from(c)
         try:
             stats = c.stats(stream=False)
         except Exception as e:
@@ -317,7 +332,7 @@ def collect_samples() -> list[dict]:
 
 def push(samples: list[dict]) -> None:
     if not samples:
-        log.info("no matching containers this tick (need coolify.applicationId labels)")
+        log.info("no Coolify-managed app containers found this tick")
         return
     try:
         r = httpx.post(
@@ -334,13 +349,13 @@ def push(samples: list[dict]) -> None:
                 log.info("pushed %d samples (accepted=%d, skipped=%d)",
                          len(samples), resp.get("accepted", 0), resp.get("skipped", 0))
             except Exception:
-                log.info("pushed %d samples (no JSON response)", len(samples))
+                log.info("pushed %d samples", len(samples))
     except Exception as e:
         log.error("push: %s", e)
 
 
 def main() -> None:
-    log.info("DeployHub agent starting — endpoint=%s interval=%ss", API_URL, INTERVAL)
+    log.info("DeployHub agent starting endpoint=%s interval=%ss", API_URL, INTERVAL)
     while True:
         t0 = time.time()
         push(collect_samples())
