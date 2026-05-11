@@ -2,6 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from slugify import slugify
 
 from db import get_db
@@ -71,6 +72,115 @@ async def get_workspace(workspace_id: str, request: Request):
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return ws
+
+
+class WorkspaceUpdateIn(BaseModel):
+    name: str | None = None
+    type: str | None = None  # "solo" | "agency"
+
+
+@router.put("/workspaces/{workspace_id}")
+async def update_workspace(workspace_id: str, payload: WorkspaceUpdateIn, request: Request):
+    """Rename a workspace or change its type. Only the owner can do this."""
+    user = await get_current_user(request)
+    await require_workspace_member(workspace_id, user, ["owner"])
+    db = get_db()
+    ws = await db.workspaces.find_one({"id": workspace_id})
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    update = {}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name or len(name) > 80:
+            raise HTTPException(status_code=400, detail="Name must be 1-80 chars")
+        update["name"] = name
+    if payload.type is not None:
+        if payload.type not in ("solo", "agency"):
+            raise HTTPException(status_code=400, detail="Type must be solo or agency")
+        update["type"] = payload.type
+    if not update:
+        return {**ws, "_id": None}
+    await db.workspaces.update_one({"id": workspace_id}, {"$set": update})
+    from services.audit import log as audit_log
+    audit_log(action="workspace.update", actor=user, workspace_id=workspace_id,
+              resource_type="workspace", resource_id=workspace_id,
+              meta=update, request=request)
+    fresh = await db.workspaces.find_one({"id": workspace_id}, {"_id": 0})
+    return fresh
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(workspace_id: str, request: Request, force: bool = False):
+    """Permanently delete a workspace. Owner-only. Blocks if it's the user's
+    last workspace, or if the workspace still holds apps/databases — unless
+    `?force=true` is passed, in which case those resources are also wiped
+    (and their Coolify counterparts deleted)."""
+    user = await get_current_user(request)
+    await require_workspace_member(workspace_id, user, ["owner"])
+    db = get_db()
+    ws = await db.workspaces.find_one({"id": workspace_id})
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Don't let users lock themselves out
+    owned_ids = await db.workspaces.distinct("id", {"owner_id": user["id"]})
+    if len(owned_ids) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete your last workspace — create another one first.")
+
+    # Check for resources unless force=true
+    apps_count = await db.apps.count_documents({"workspace_id": workspace_id})
+    dbs_count = await db.databases.count_documents({"workspace_id": workspace_id})
+    if (apps_count > 0 or dbs_count > 0) and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Workspace still has {apps_count} app(s) and {dbs_count} database(s). Pass ?force=true to delete everything, or move/delete them first.",
+        )
+
+    # Hard cascade with build-engine cleanup when force=true.
+    if force:
+        from clients.coolify import coolify
+        from services.subdomains import release_subdomain
+        from services.github_webhooks import unregister_webhook as wh_unregister
+        # Apps
+        apps = await db.apps.find({"workspace_id": workspace_id}).to_list(500)
+        for app in apps:
+            if app.get("cloudflare_dns_record_id"):
+                try: await release_subdomain(app)
+                except Exception: pass
+            if app.get("webhook_github_id"):
+                try: await wh_unregister(app=app, workspace_id=workspace_id)
+                except Exception: pass
+            if app.get("coolify_app_uuid"):
+                try: await coolify.delete_application(app["coolify_app_uuid"])
+                except Exception: pass
+        # Databases
+        dbs = await db.databases.find({"workspace_id": workspace_id}).to_list(200)
+        for d in dbs:
+            if d.get("coolify_db_uuid"):
+                try: await coolify.delete_database(d["coolify_db_uuid"])
+                except Exception: pass
+        # Drop everything
+        await db.apps.delete_many({"workspace_id": workspace_id})
+        await db.deployments.delete_many({"workspace_id": workspace_id})
+        await db.domains.delete_many({"workspace_id": workspace_id})
+        await db.databases.delete_many({"workspace_id": workspace_id})
+        await db.cron_jobs.delete_many({"workspace_id": workspace_id})
+        await db.pr_previews.delete_many({"workspace_id": workspace_id})
+
+    # Workspace itself + membership + billing-side artefacts
+    await db.workspaces.delete_one({"id": workspace_id})
+    await db.workspace_members.delete_many({"workspace_id": workspace_id})
+    await db.subscriptions.delete_many({"workspace_id": workspace_id})
+    await db.billing_profiles.delete_many({"workspace_id": workspace_id})
+    # Keep payments + invoices + audit_log as historical record.
+
+    from services.audit import log as audit_log
+    audit_log(action="workspace.delete", actor=user,
+              resource_type="workspace", resource_id=workspace_id,
+              meta={"name": ws.get("name"), "force": force,
+                    "apps_deleted": apps_count, "databases_deleted": dbs_count},
+              request=request)
+    return {"deleted": True, "force": force, "apps_deleted": apps_count, "databases_deleted": dbs_count}
 
 
 @router.get("/workspaces/{workspace_id}/members")

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../../lib/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import GitHubButton from "../../components/GitHubButton";
-import { Save, UserPlus, Trash2, Github, CheckCircle2, Send, MessageSquare, Phone, Mail } from "lucide-react";
+import { Save, UserPlus, Trash2, Github, CheckCircle2, Send, MessageSquare, Phone, Mail, Building2, AlertTriangle, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 
 const EVENT_LABELS = {
   deploy_failed: "Deploy failed",
@@ -25,8 +27,14 @@ const CHANNEL_META = {
 
 export default function Settings() {
   const { user, refresh } = useAuth();
-  const { active } = useWorkspace();
+  const { active, refresh: refreshWorkspaces, setActive, workspaces } = useWorkspace();
+  const nav = useNavigate();
   const [name, setName] = useState(user?.name || "");
+  // Workspace settings (rename + delete)
+  const [wsName, setWsName] = useState(active?.name || "");
+  const [wsType, setWsType] = useState(active?.type || "solo");
+  const [wsBusy, setWsBusy] = useState(false);
+  const [wsUsage, setWsUsage] = useState(null);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pwError, setPwError] = useState("");
@@ -55,6 +63,51 @@ export default function Settings() {
   useEffect(() => {
     setName(user?.name || "");
   }, [user]);
+
+  useEffect(() => {
+    if (active) { setWsName(active.name); setWsType(active.type || "solo"); }
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return;
+    api.get(`/workspaces/${active.id}/usage`).then((r) => setWsUsage(r.data)).catch(() => setWsUsage(null));
+  }, [active]);
+
+  const saveWorkspace = async () => {
+    if (!active) return;
+    if (!wsName.trim()) { toast.error("Name required"); return; }
+    setWsBusy(true);
+    try {
+      await api.put(`/workspaces/${active.id}`, { name: wsName.trim(), type: wsType });
+      await refreshWorkspaces();
+      toast.success("Workspace updated");
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setWsBusy(false); }
+  };
+
+  const deleteWorkspace = async () => {
+    if (!active) return;
+    const apps = wsUsage?.apps_used ?? 0;
+    const dbs = wsUsage?.databases_used ?? 0;
+    const hasResources = apps > 0 || dbs > 0;
+    const warning = hasResources
+      ? `Delete "${active.name}"?\n\nThis workspace has ${apps} app(s) and ${dbs} database(s) — they will be PERMANENTLY DESTROYED on the build engine and DeployHub. This cannot be undone.\n\nType the workspace name to confirm:`
+      : `Delete "${active.name}"?\n\nThis cannot be undone. Type the workspace name to confirm:`;
+    const confirmation = window.prompt(warning);
+    if (confirmation !== active.name) {
+      if (confirmation !== null) toast.error("Name did not match — not deleted");
+      return;
+    }
+    setWsBusy(true);
+    try {
+      await api.delete(`/workspaces/${active.id}`, { params: hasResources ? { force: true } : {} });
+      toast.success("Workspace deleted");
+      const others = (workspaces || []).filter((w) => w.id !== active.id);
+      if (others[0] && setActive) setActive(others[0].id);
+      await refreshWorkspaces();
+      nav("/app");
+    } catch (e) { toast.error(getApiErrorMessage(e)); setWsBusy(false); }
+  };
 
   const loadMembers = () => {
     if (!active) return;
@@ -187,6 +240,105 @@ export default function Settings() {
         <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// settings</div>
         <h1 className="font-display text-4xl font-semibold tracking-tighter">Account & workspace</h1>
       </div>
+
+      {/* Workspace settings (rename + type + delete + plan info) */}
+      {active && (
+        <section className="border border-white/[0.06] p-6 space-y-5" data-testid="workspace-section">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Workspace</h2>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Each workspace has its <strong>own plan</strong>, <strong>own team</strong>, and <strong>own credit wallet</strong>.
+            Agencies typically use one workspace per client; solo devs use one for everything.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Name</label>
+              <input
+                value={wsName}
+                onChange={(e) => setWsName(e.target.value)}
+                className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+                data-testid="ws-name-input"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Type</label>
+              <select
+                value={wsType}
+                onChange={(e) => setWsType(e.target.value)}
+                className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+                data-testid="ws-type-select"
+              >
+                <option value="solo" className="bg-black">Solo (personal projects)</option>
+                <option value="agency" className="bg-black">Agency (client work)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Plan + usage snapshot */}
+          {wsUsage && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
+              <div className="bg-background p-3">
+                <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Plan</div>
+                <div className="mt-1 font-display text-base text-zinc-200 capitalize">{wsUsage.plan || "free"}</div>
+              </div>
+              <div className="bg-background p-3">
+                <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Apps</div>
+                <div className="mt-1 font-display text-base text-zinc-200">{wsUsage.apps_used ?? 0}{wsUsage.apps_limit ? `/${wsUsage.apps_limit}` : ""}</div>
+              </div>
+              <div className="bg-background p-3">
+                <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Credits</div>
+                <div className="mt-1 font-display text-base text-brand">{wsUsage.credits_balance ?? 0}</div>
+              </div>
+              <div className="bg-background p-3">
+                <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Members</div>
+                <div className="mt-1 font-display text-base text-zinc-200">{members.length || 1}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <button
+              onClick={saveWorkspace}
+              disabled={wsBusy || (wsName === active.name && wsType === (active.type || "solo"))}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-40"
+              data-testid="ws-save"
+            >
+              <Save className="h-4 w-4" /> Save
+            </button>
+            <a
+              href="/app/billing"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-white/10 hover:border-brand/50 text-xs font-mono"
+            >
+              Change plan / top up credits <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+
+          {/* Danger zone */}
+          <div className="mt-2 pt-4 border-t border-signal-failed/20">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-failed">Danger zone</div>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Delete this workspace permanently. {(wsUsage?.apps_used ?? 0) > 0 || (wsUsage?.databases_used ?? 0) > 0
+                    ? <span className="text-signal-failed">Will also destroy {wsUsage?.apps_used ?? 0} app(s) and {wsUsage?.databases_used ?? 0} database(s) on the build engine.</span>
+                    : "Workspace is empty."}
+                </p>
+              </div>
+              <button
+                onClick={deleteWorkspace}
+                disabled={wsBusy}
+                className="inline-flex items-center gap-2 px-3 py-2 border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10 text-sm disabled:opacity-50"
+                data-testid="ws-delete"
+              >
+                <Trash2 className="h-4 w-4" /> Delete workspace
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Profile */}
       <section className="border border-white/[0.06] p-6 space-y-3">
