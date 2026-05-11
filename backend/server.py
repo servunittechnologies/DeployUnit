@@ -19,6 +19,7 @@ from workers.monitor import run_monitor_tick, sync_deployments, deployment_watch
 from services.plans import seed_default_plans
 from services.credits import monthly_grant_tick
 from services.resources import charge_due_addons
+from services.metrics import downsample_and_gc
 from services.account_migration import migrate_accounts, needs_migration
 
 from routers import (
@@ -46,6 +47,7 @@ from routers import (
     admin_users as admin_users_router,
     account as account_router,
     resources as resources_router,
+    metrics as metrics_router,
 )
 
 
@@ -81,6 +83,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(charge_due_addons, "interval", hours=1, id="resource_billing", replace_existing=True)
     # Periodic status snapshot for the analytics tab (healthy/down timeline).
     scheduler.add_job(status_sampler, "interval", minutes=5, id="status_sampler", replace_existing=True)
+    # Container-metrics downsampling: roll raw 30s samples up to 5-min buckets
+    # for anything older than 24h, drop anything older than 30 days.
+    scheduler.add_job(downsample_and_gc, "interval", hours=1, id="metrics_rollup", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
@@ -127,6 +132,7 @@ api_router.include_router(pr_previews_router.router)
 api_router.include_router(admin_users_router.router)
 api_router.include_router(account_router.router)
 api_router.include_router(resources_router.router)
+api_router.include_router(metrics_router.router)
 
 app.include_router(api_router)
 

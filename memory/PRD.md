@@ -72,6 +72,16 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Real container metrics via agent (CPU/Mem/Disk/Network — live + history)**
+  - **`services/metrics.py`**: agent-key auth (sha256-hashed in `platform_settings.metrics_agent`), `ingest_samples()` (resolves `coolify_app_uuid` → app), `downsample_and_gc()` (30s raw → 5m rollup after 24h, drop after 30d), `app_metrics_series(app, window)`.
+  - **`routers/metrics.py`**: `POST /api/metrics/ingest` (X-Agent-Key auth), `GET/POST /api/admin/metrics/agent[/rotate]`, `GET /api/agent/install.sh` (public installer), `GET /api/agent/agent.py` (public python script), `GET /api/apps/{id}/metrics`.
+  - **Metrics agent**: 60-lijns Python script in een `python:3.11-slim` docker-compose container met read-only `/var/run/docker.sock` mount. Filtert op `coolify.applicationId` label, berekent CPU%/Memory%/Network/Disk per 30s, POST naar DeployHub.
+  - **Frontend `AppMetricsCharts.jsx`**: 4 KPI tiles (CPU now, Memory now, Net in/out, Disk I/O) + 6 SVG sparklines (CPU%, Mem%, Net rx/tx, Disk read/write). Auto-refresh 30s. Falls back to "Install agent" CTA als geen samples.
+  - **Frontend `AppAnalyticsPanel`**: metrics-section toegevoegd bovenaan, naast existing uptime/response/timeline.
+  - **Admin → Integrations → Metrics agent**: statusbadge (live/stale/awaiting), last-sample-count, install-command met copy, "Generate/Rotate key" knop met one-time reveal.
+  - **Scheduler**: nieuwe `downsample_and_gc` job elke uur. Geen kans op DB-bloat.
+  - **Eindgebruiker-flow**: 1) Rotate key in Admin → 2) Run `curl … | bash` op Coolify VPS → 3) Paste key → 4) charts vullen binnen 30s.
+
 - **2026-05-11 — Usage Analytics (Live + Historical) in Overview & Monitoring**
   - **App-level analytics** (`GET /api/apps/{id}/analytics?window=1h|24h|7d|30d`):
     - Uptime %, avg + p95 response time, # samples

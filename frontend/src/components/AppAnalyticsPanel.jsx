@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { Activity, Cpu, MemoryStick, HardDrive, Clock, Zap, GitCommit, AlertTriangle, TrendingUp } from "lucide-react";
+import AppMetricsCharts from "./AppMetricsCharts";
 
 const WINDOWS = [
   { id: "1h",  label: "Last hour"  },
@@ -45,6 +47,7 @@ export default function AppAnalyticsPanel({ appId }) {
   const [window, setWindow] = useState("24h");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setLoading(true);
@@ -115,6 +118,11 @@ export default function AppAnalyticsPanel({ appId }) {
           color={data.status === "live" ? "text-signal-live" : data.status === "failed" ? "text-signal-failed" : "text-zinc-300"}
         />
       </div>
+
+      {/* Live container metrics from the agent */}
+      <section data-testid="metrics-section">
+        <AppMetricsCharts appId={appId} onInstallAgent={() => navigate("/app/admin?tab=integrations")} />
+      </section>
 
       {/* Response time chart */}
       <section className="border border-white/[0.06]">

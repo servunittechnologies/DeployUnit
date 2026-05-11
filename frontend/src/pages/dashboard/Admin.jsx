@@ -118,6 +118,9 @@ function IntegrationsTab() {
         )}
       </Section>
 
+      <MetricsAgentSection />
+
+
       <Section
         title="Mollie (payments)"
         description="Handles subscriptions, EU VAT calculation + payments."
@@ -332,6 +335,111 @@ function PlanRow({ plan, onSaved }) {
     </div>
   );
 }
+
+/* ─────────────────────── Metrics agent ─────────────────────── */
+function MetricsAgentSection() {
+  const [info, setInfo] = useState(null);
+  const [revealedKey, setRevealedKey] = useState(null);
+  const [rotating, setRotating] = useState(false);
+
+  const load = () => api.get("/admin/metrics/agent").then((r) => setInfo(r.data)).catch(() => setInfo(null));
+  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
+
+  const rotate = async () => {
+    const verb = info?.configured ? "Rotate" : "Generate";
+    if (!window.confirm(`${verb} agent key?\n\nAny installed agent will need to be reinstalled with the new key.`)) return;
+    setRotating(true);
+    try {
+      const r = await api.post("/admin/metrics/agent/rotate");
+      setRevealedKey(r.data.api_key);
+      await load();
+    } catch (e) { toast.error(e.response?.data?.detail || e.message); }
+    finally { setRotating(false); }
+  };
+
+  const copy = (text) => { navigator.clipboard.writeText(text); toast.success("Copied"); };
+
+  if (!info) return null;
+  const seenAgo = info.last_seen_at
+    ? Math.max(0, Math.round((Date.now() - new Date(info.last_seen_at).getTime()) / 1000))
+    : null;
+  const live = seenAgo !== null && seenAgo < 120;
+
+  return (
+    <Section
+      title="Metrics agent"
+      description="Pushes container CPU/memory/disk/network stats from your build engine VPS so the analytics tabs show live + historical data."
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono mb-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
+          {!info.configured ? (
+            <StatusPill ok={false} label="not configured" />
+          ) : live ? (
+            <StatusPill ok={true} label={`live · ${seenAgo}s ago`} />
+          ) : info.last_seen_at ? (
+            <span className="inline-flex items-center gap-1.5 text-signal-queued text-xs font-mono" data-testid="admin-agent-stale">
+              <AlertCircle className="h-3.5 w-3.5" /> configured · last seen {Math.round(seenAgo / 60)} min ago
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-signal-queued text-xs font-mono" data-testid="admin-agent-pending">
+              <AlertCircle className="h-3.5 w-3.5" /> configured · awaiting first sample
+            </span>
+          )}
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">last sample count</div>
+          <div className="text-zinc-300">{info.last_sample_count ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">key issued</div>
+          <div className="text-zinc-300">{info.created_at ? new Date(info.created_at).toLocaleString() : "—"}</div>
+        </div>
+      </div>
+
+      {revealedKey && (
+        <div className="bg-brand/10 border border-brand/40 p-4 mb-4" data-testid="agent-key-revealed">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-1">⚠ store this key NOW — shown once</div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-black/40 px-3 py-2 text-xs font-mono break-all">{revealedKey}</code>
+            <button onClick={() => copy(revealedKey)} className="px-3 py-2 border border-white/15 hover:border-brand text-xs font-mono"><Copy className="h-3 w-3 inline mr-1" /> copy</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-elevated/30 border border-white/[0.06] p-4 space-y-3">
+        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">// install on your build engine VPS</div>
+        <div className="text-xs text-zinc-400">
+          Run this once on the same VPS that hosts your build engine (Docker required). The script will pull and
+          start a tiny agent container that reports container stats every 30s.
+        </div>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 bg-black/40 px-3 py-2 text-xs font-mono break-all" data-testid="agent-install-cmd">
+            {info.install_command}
+          </code>
+          <button onClick={() => copy(info.install_command)} className="px-3 py-2 border border-white/15 hover:border-brand text-xs font-mono" data-testid="agent-install-copy">
+            <Copy className="h-3 w-3 inline mr-1" /> copy
+          </button>
+        </div>
+        <div className="text-[10px] font-mono text-zinc-500">
+          During install you'll be prompted to paste the agent key (use the "Generate" button below if you don't have one yet).
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 mt-4">
+        <button
+          onClick={rotate}
+          disabled={rotating}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-40"
+          data-testid="agent-key-rotate"
+        >
+          <Key className="h-4 w-4" /> {info.configured ? "Rotate key" : "Generate key"}
+        </button>
+      </div>
+    </Section>
+  );
+}
+
 
 function PlansTab() {
   const [plans, setPlans] = useState([]);
