@@ -41,6 +41,7 @@ from routers import (
     cron as cron_router,
     databases as databases_router,
     pr_previews as pr_previews_router,
+    admin_users as admin_users_router,
 )
 
 
@@ -106,6 +107,7 @@ api_router.include_router(audit_router.router)
 api_router.include_router(cron_router.router)
 api_router.include_router(databases_router.router)
 api_router.include_router(pr_previews_router.router)
+api_router.include_router(admin_users_router.router)
 
 app.include_router(api_router)
 

@@ -261,9 +261,10 @@ export default function AppDetail() {
         </Link>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="font-display text-4xl font-semibold tracking-tighter">{app.name}</h1>
               <StatusBadge status={app.status} />
+              <EnvBadge env={app.environment} paired={!!app.paired_app_id} />
             </div>
             <div className="mt-2 flex items-center gap-4 text-xs font-mono text-zinc-500">
               <span className="inline-flex items-center gap-1.5"><GitBranch className="h-3 w-3" /> {app.branch}</span>
@@ -496,6 +497,7 @@ export default function AppDetail() {
       {tab === "settings" && (
         <div className="p-6 space-y-10">
           <SettingsForm app={app} onSaved={(updated) => setApp(updated)} />
+          <EnvironmentPairSection app={app} onChange={load} />
           <WebhookSection appId={app.id} />
           <CronJobsSection appId={app.id} />
           <PRPreviewsSection appId={app.id} />
@@ -838,6 +840,164 @@ function PRPreviewsSection({ appId }) {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+
+/* ─────────────────────── Environment badge ─────────────────────── */
+function EnvBadge({ env, paired }) {
+  const isProd = (env || "production") === "production";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.25em] border ${
+        isProd ? "border-signal-live/40 text-signal-live" : "border-signal-queued/40 text-signal-queued"
+      }`}
+      title={paired ? "Linked to a counterpart" : "Not yet paired"}
+      data-testid={`env-badge-${env || "production"}`}
+    >
+      {isProd ? "production" : "staging"}{paired ? " · linked" : ""}
+    </span>
+  );
+}
+
+/* ─────────────────────── Staging ↔ Production pair section ─────────────────────── */
+function EnvironmentPairSection({ app, onChange }) {
+  const [candidates, setCandidates] = useState([]);
+  const [peer, setPeer] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState("");
+  const myEnv = app.environment || "production";
+  const peerEnvLabel = myEnv === "production" ? "staging" : "production";
+
+  const loadPeer = useCallback(async () => {
+    if (!app.paired_app_id) { setPeer(null); return; }
+    try {
+      const r = await api.get(`/apps/${app.paired_app_id}`);
+      setPeer(r.data);
+    } catch (e) { setPeer({ id: app.paired_app_id, name: "(missing)", _stale: true }); }
+  }, [app.paired_app_id]);
+
+  const loadCandidates = useCallback(async () => {
+    try {
+      const r = await api.get(`/apps/${app.id}/pair-candidates`);
+      setCandidates(r.data.candidates || []);
+    } catch (e) { setCandidates([]); }
+  }, [app.id]);
+
+  useEffect(() => { loadPeer(); }, [loadPeer]);
+
+  const startPick = async () => {
+    await loadCandidates();
+    setPicking(true);
+  };
+
+  const pair = async (peerId) => {
+    setBusy("pair");
+    try {
+      await api.post(`/apps/${app.id}/pair`, { peer_app_id: peerId });
+      toast.success("Linked");
+      setPicking(false);
+      onChange();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  const unpair = async () => {
+    if (!window.confirm("Unlink this app from its counterpart? Promote will no longer work until you link again.")) return;
+    setBusy("unpair");
+    try {
+      await api.post(`/apps/${app.id}/unpair`);
+      toast.success("Unlinked");
+      setPeer(null);
+      onChange();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  const promote = async () => {
+    if (!peer) return;
+    const direction = `${app.name} (${myEnv}) → ${peer.name} (${peer.environment})`;
+    if (!window.confirm(`Promote? This copies env vars + branch from "${app.name}" to "${peer.name}" and triggers a deploy on ${peer.name}.\n\nDirection: ${direction}`)) return;
+    setBusy("promote");
+    try {
+      const r = await api.post(`/apps/${app.id}/promote`);
+      toast.success(`Promoted → ${r.data.to.name} (deployment queued)`);
+      onChange();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  return (
+    <section className="max-w-3xl border border-white/[0.06] p-6 space-y-5" data-testid="env-pair-section">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Staging & production</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mt-1">
+            Link a {peerEnvLabel} counterpart so you can promote env vars + the branch in one click after QA.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {peer && !peer._stale && (
+            <button onClick={promote} disabled={busy === "promote"} className="inline-flex items-center gap-2 px-3 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-50 text-sm" data-testid="env-promote">
+              <Rocket className="h-3.5 w-3.5" /> Promote {myEnv} → {peer.environment}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* This app */}
+        <div className="border border-white/[0.08] p-4">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">This app</div>
+          <div className="mt-2 flex items-center gap-2"><EnvBadge env={myEnv} paired /></div>
+          <div className="text-sm mt-1 font-medium">{app.name}</div>
+          <div className="text-[11px] font-mono text-zinc-500 mt-0.5">{app.branch}</div>
+        </div>
+
+        {/* Peer */}
+        <div className="border border-white/[0.08] p-4 relative">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">{peerEnvLabel} counterpart</div>
+          {peer && !peer._stale ? (
+            <div className="mt-2">
+              <div className="flex items-center gap-2"><EnvBadge env={peer.environment} paired /></div>
+              <Link to={`/app/apps/${peer.id}`} className="text-sm mt-1 font-medium hover:text-brand block" data-testid="env-peer-link">{peer.name}</Link>
+              <div className="text-[11px] font-mono text-zinc-500 mt-0.5">{peer.branch} · {peer.framework}</div>
+              <button onClick={unpair} disabled={busy === "unpair"} className="mt-3 text-[11px] font-mono text-signal-failed hover:underline" data-testid="env-unpair">unlink</button>
+            </div>
+          ) : (
+            <div className="mt-2">
+              {!picking ? (
+                <button onClick={startPick} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-brand/40 text-brand hover:bg-brand/10" data-testid="env-pair-open">
+                  <Plus className="h-3 w-3" /> Link a {peerEnvLabel} app
+                </button>
+              ) : candidates.length === 0 ? (
+                <div className="text-xs font-mono text-zinc-500">
+                  No {peerEnvLabel} apps in this workspace. Create one first (set environment={peerEnvLabel} on app creation).
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {candidates.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => pair(c.id)}
+                      disabled={busy === "pair"}
+                      className="w-full text-left px-3 py-2 border border-white/[0.06] hover:border-brand/50 text-xs font-mono"
+                      data-testid={`env-pair-candidate-${c.id}`}
+                    >
+                      <div className="text-zinc-200">{c.name}</div>
+                      <div className="text-zinc-500 text-[10px]">{c.branch} · {c.status || "queued"}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

@@ -22,6 +22,7 @@ export default function NewApp() {
   const [framework, setFramework] = useState("nextjs");
   const [name, setName] = useState("");
   const [branch, setBranch] = useState("main");
+  const [environment, setEnvironment] = useState("production");
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState("");
   const [envText, setEnvText] = useState("");
@@ -60,6 +61,7 @@ export default function NewApp() {
         repo_url: repoUrl,
         branch,
         env_vars,
+        environment,
       });
       navigate(`/app/apps/${data.id}`);
     } catch (e) {
@@ -189,6 +191,30 @@ export default function NewApp() {
                   <div className="font-display text-base">{f.label}</div>
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-2 block">Environment</label>
+            <div className="grid grid-cols-2 gap-2 max-w-md">
+              {[
+                { id: "production", label: "Production", hint: "main / release branch · live traffic" },
+                { id: "staging",    label: "Staging",    hint: "QA preview · safe to break" },
+              ].map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => setEnvironment(e.id)}
+                  className={`p-3 border text-left ${environment === e.id ? "border-brand bg-brand/5 text-brand" : "border-white/10 text-zinc-400 hover:border-white/30"}`}
+                  data-testid={`new-app-env-${e.id}`}
+                >
+                  <div className="font-display text-base">{e.label}</div>
+                  <div className="text-[10px] font-mono text-zinc-500">{e.hint}</div>
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] font-mono text-zinc-600 mt-2">
+              After creation you can link this app to its staging/production counterpart in <span className="text-brand">Settings → Staging & production</span>.
             </div>
           </div>
 

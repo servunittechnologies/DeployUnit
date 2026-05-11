@@ -177,17 +177,6 @@ async def test_vat(payload: VatTestIn, request: Request):
     return await validate_vies(payload.vat_id)
 
 
-@router.get("/admin/users")
-async def list_users(request: Request):
-    await _require_admin(request)
-    db = get_db()
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0, "github_access_token": 0}).to_list(500)
-    # Annotate with # of owned workspaces + github linked flag
-    for u in users:
-        u["workspaces_owned"] = await db.workspaces.count_documents({"owner_id": u["id"]})
-    return users
-
-
 @router.get("/admin/plans")
 async def admin_list_plans(request: Request):
     """Returns every plan, including inactive ones, so admins can re-enable
@@ -249,7 +238,9 @@ class PromoteIn(BaseModel):
     role: str  # "admin" | "user"
 
 
-@router.post("/admin/users/role")
+# Old POST /admin/users/role kept for backwards-compat with the original tab,
+# but the new richer endpoint is POST /admin/users/{user_id}/role (admin_users.py).
+@router.post("/admin/users/role-legacy")
 async def set_user_role(payload: PromoteIn, request: Request):
     await _require_admin(request)
     if payload.role not in ("admin", "user"):

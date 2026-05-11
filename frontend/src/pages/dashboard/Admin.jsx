@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../../lib/api";
 import {
   ShieldCheck, Database, Globe, CheckCircle2, XCircle, AlertCircle,
@@ -722,61 +722,332 @@ function VatTab() {
 
 /* ─────────────────────────── Users ─────────────────────────── */
 function UsersTab() {
-  const [users, setUsers] = useState([]);
+  const [data, setData] = useState({ users: [], total: 0 });
+  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [detailUser, setDetailUser] = useState(null); // {id, email}
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get("/admin/users");
-      setUsers(r.data);
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => { load(); }, []);
+      const r = await api.get("/admin/users", { params: { q: q || undefined, limit: 50, offset } });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [q, offset]);
+  useEffect(() => { load(); }, [load]);
 
-  const toggle = async (user) => {
-    const newRole = user.role === "admin" ? "user" : "admin";
-    try {
-      await api.post("/admin/users/role", { user_id: user.id, role: newRole });
-      toast.success(`${user.email} → ${newRole}`);
-      load();
-    } catch (e) {
-      toast.error("Failed: " + (e?.response?.data?.detail || e.message));
-    }
-  };
-
-  if (loading) return <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading users…</div>;
+  if (detailUser) {
+    return <UserDetailPanel userId={detailUser.id} onBack={() => { setDetailUser(null); load(); }} />;
+  }
 
   return (
-    <Section title={`Users (${users.length})`} description="All DeployHub accounts. Promote or demote admins with one click.">
-      <div className="border border-white/[0.06] divide-y divide-white/[0.06]" data-testid="admin-users-table">
-        {users.map((u) => (
-          <div key={u.id} className="grid grid-cols-12 gap-4 px-4 py-3 text-sm font-mono items-center">
-            <div className="col-span-4 truncate text-zinc-200">{u.email}</div>
-            <div className="col-span-3 truncate text-zinc-500">{u.name}</div>
-            <div className="col-span-2">
-              <span className={`px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] ${u.role === "admin" ? "border border-brand/40 text-brand" : "border border-white/10 text-zinc-400"}`}>
+    <Section title={`Users (${data.total})`} description="Search, promote, suspend, adjust credits, change plans — everything per user.">
+      <div className="flex items-center gap-2 mb-4">
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOffset(0); }}
+          placeholder="search email / name / github…"
+          className="flex-1 bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+          data-testid="admin-users-search"
+        />
+        <button onClick={load} className="px-3 py-2 border border-white/10 hover:border-brand/50 text-xs font-mono">
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      <div className="border border-white/[0.06]">
+        <div className="grid grid-cols-[1fr_120px_90px_90px_90px] gap-4 px-4 py-2 border-b border-white/[0.06] text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">
+          <div>Email / name</div><div>Role</div><div>Workspaces</div><div>Credits</div><div className="text-right">Open</div>
+        </div>
+        {data.users.length === 0 && !loading && (
+          <div className="p-6 text-sm font-mono text-zinc-500">No users found.</div>
+        )}
+        {data.users.map((u) => (
+          <div key={u.id} className="grid grid-cols-[1fr_120px_90px_90px_90px] gap-4 px-4 py-3 text-sm border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02]" data-testid={`admin-user-row-${u.id}`}>
+            <div className="truncate">
+              <div className="text-zinc-200 truncate">{u.email}</div>
+              <div className="text-[11px] font-mono text-zinc-500 truncate">
+                {u.name}{u.github_login ? ` · @${u.github_login}` : ""}
+                {u.is_active === false ? " · suspended" : ""}
+              </div>
+            </div>
+            <div>
+              <span className={`px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] font-mono ${u.role === "admin" ? "border border-brand/40 text-brand" : "border border-white/10 text-zinc-400"}`}>
                 {u.role}
               </span>
             </div>
-            <div className="col-span-2 text-xs text-zinc-500">
-              {u.workspaces_owned} ws · {u.github_login ? <><Github className="inline h-3 w-3" /> {u.github_login}</> : "no github"}
-            </div>
-            <div className="col-span-1 text-right">
-              <button
-                onClick={() => toggle(u)}
-                className="text-xs text-zinc-400 hover:text-brand underline"
-                data-testid={`admin-toggle-role-${u.id}`}
-              >
-                {u.role === "admin" ? "demote" : "promote"}
-              </button>
+            <div className="text-xs font-mono text-zinc-300">{u.workspaces_count}</div>
+            <div className="text-xs font-mono text-zinc-300">{u.credits_total}</div>
+            <div className="text-right">
+              <button onClick={() => setDetailUser({ id: u.id, email: u.email })} className="text-xs text-brand hover:underline" data-testid={`admin-user-open-${u.id}`}>open →</button>
             </div>
           </div>
         ))}
       </div>
+
+      {data.total > 50 && (
+        <div className="flex items-center justify-between mt-4 text-xs font-mono text-zinc-500">
+          <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))} className="px-3 py-1.5 border border-white/10 hover:border-brand/50 disabled:opacity-40">← previous</button>
+          <div>{offset + 1}–{Math.min(offset + 50, data.total)} of {data.total}</div>
+          <button disabled={offset + 50 >= data.total} onClick={() => setOffset(offset + 50)} className="px-3 py-1.5 border border-white/10 hover:border-brand/50 disabled:opacity-40">next →</button>
+        </div>
+      )}
     </Section>
+  );
+}
+
+/* ─────────────────────── User detail panel ─────────────────────── */
+function UserDetailPanel({ userId, onBack }) {
+  const [data, setData] = useState(null);
+  const [payments, setPayments] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+
+  const load = useCallback(async () => {
+    const r = await api.get(`/admin/users/${userId}`);
+    setData(r.data);
+    const rp = await api.get(`/admin/users/${userId}/payments`);
+    setPayments(rp.data);
+  }, [userId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!data) return <div className="text-sm font-mono text-zinc-500">Loading user…</div>;
+  const u = data.user;
+
+  const setPassword = async () => {
+    if (pwdNew.length < 8) { toast.error("Min 8 characters"); return; }
+    setBusy("pwd");
+    try {
+      await api.post(`/admin/users/${userId}/password`, { new_password: pwdNew });
+      toast.success(`Password updated for ${u.email}. They must sign in again.`);
+      setPwdNew("");
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+    finally { setBusy(""); }
+  };
+
+  const toggleRole = async () => {
+    const newRole = u.role === "admin" ? "user" : "admin";
+    if (!window.confirm(`Change ${u.email} to ${newRole}?`)) return;
+    setBusy("role");
+    try {
+      await api.post(`/admin/users/${userId}/role`, { role: newRole });
+      toast.success(`Now ${newRole}`);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+    finally { setBusy(""); }
+  };
+
+  const toggleSuspend = async () => {
+    const becoming = u.is_active === false ? "active" : "suspended";
+    if (!window.confirm(`Mark ${u.email} as ${becoming}?`)) return;
+    setBusy("suspend");
+    try {
+      await api.post(`/admin/users/${userId}/suspend`);
+      toast.success(`Now ${becoming}`);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+    finally { setBusy(""); }
+  };
+
+  const hardDelete = async () => {
+    if (!window.confirm(`PERMANENTLY DELETE ${u.email}? This cannot be undone. Type their email in the next prompt to confirm.`)) return;
+    const confirm = window.prompt("Type the email to confirm:");
+    if (confirm !== u.email) { toast.error("Email did not match"); return; }
+    setBusy("delete");
+    try {
+      await api.delete(`/admin/users/${userId}`);
+      toast.success("User deleted");
+      onBack();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+    finally { setBusy(""); }
+  };
+
+  const adjustCredits = async (workspaceId, delta) => {
+    const reason = window.prompt(`Reason for ${delta > 0 ? "granting" : "revoking"} ${Math.abs(delta)} credits:`, "Manual support adjustment");
+    if (reason === null) return;
+    try {
+      const r = await api.post(`/admin/users/${userId}/credits`, { workspace_id: workspaceId, delta, reason });
+      toast.success(`New balance: ${r.data.balance} cr`);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  };
+
+  const setPlan = async (workspaceId, plan) => {
+    if (!window.confirm(`Switch this workspace to ${plan}?`)) return;
+    try {
+      await api.post(`/admin/users/${userId}/plan`, { workspace_id: workspaceId, plan });
+      toast.success(`Plan: ${plan}`);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  };
+
+  return (
+    <div className="space-y-6" data-testid="admin-user-detail">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-brand" data-testid="admin-user-back">
+          ← back to users
+        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={toggleRole} disabled={busy === "role"} className="px-3 py-1.5 text-xs font-mono border border-white/10 hover:border-brand/50">
+            {u.role === "admin" ? "Demote to user" : "Promote to admin"}
+          </button>
+          <button onClick={toggleSuspend} disabled={busy === "suspend"} className="px-3 py-1.5 text-xs font-mono border border-signal-queued/40 text-signal-queued hover:bg-signal-queued/10">
+            {u.is_active === false ? "Unsuspend" : "Suspend"}
+          </button>
+          <button onClick={hardDelete} disabled={busy === "delete"} className="px-3 py-1.5 text-xs font-mono border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10">
+            Delete user
+          </button>
+        </div>
+      </div>
+
+      {/* Profile */}
+      <div className="border border-white/[0.06] p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Email</div>
+            <div className="text-base mt-1">{u.email}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Name</div>
+            <div className="text-base mt-1">{u.name || "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Role / Status</div>
+            <div className="text-base mt-1">
+              {u.role} · <span className={u.is_active === false ? "text-signal-failed" : "text-signal-live"}>{u.is_active === false ? "suspended" : "active"}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">GitHub</div>
+            <div className="text-base mt-1">{u.github_login ? `@${u.github_login}` : "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Created</div>
+            <div className="text-base mt-1 font-mono">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Last password reset</div>
+            <div className="text-base mt-1 font-mono">{u.password_updated_at ? new Date(u.password_updated_at).toLocaleDateString() : "—"}</div>
+          </div>
+        </div>
+
+        {/* Password reset */}
+        <div className="mt-6 pt-6 border-t border-white/[0.04]">
+          <div className="text-xs font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">Set new password</div>
+          <div className="flex items-center gap-2 max-w-md">
+            <input
+              type="password"
+              value={pwdNew}
+              onChange={(e) => setPwdNew(e.target.value)}
+              placeholder="min 8 characters"
+              className="flex-1 bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+              data-testid="admin-user-new-password"
+            />
+            <button onClick={setPassword} disabled={busy === "pwd" || pwdNew.length < 8} className="px-4 py-2 bg-brand text-brand-fg font-medium disabled:opacity-40 text-sm" data-testid="admin-user-password-save">
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Workspaces */}
+      <div className="border border-white/[0.06] p-5 space-y-4">
+        <h3 className="font-display text-lg">Workspaces ({data.workspaces.length})</h3>
+        {data.workspaces.length === 0 && <div className="text-xs font-mono text-zinc-500">User owns no workspaces.</div>}
+        {data.workspaces.map((w) => (
+          <div key={w.id} className="border border-white/[0.06] p-4" data-testid={`admin-ws-${w.id}`}>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div className="text-sm font-medium">{w.name}</div>
+                <div className="text-[11px] font-mono text-zinc-500 mt-0.5">{w.type} · {w.apps_count} apps · {w.payments_count} payments</div>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="text-xs font-mono text-zinc-400">
+                  Plan: <span className="text-zinc-200">{w.plan_details?.name || w.plan}</span> · €{w.plan_details?.price || 0}/mo
+                </div>
+                <select
+                  value={w.plan || "free"}
+                  onChange={(e) => setPlan(w.id, e.target.value)}
+                  className="bg-black border border-white/10 px-2 py-1 text-xs font-mono focus:border-brand outline-none"
+                  data-testid={`admin-ws-plan-${w.id}`}
+                >
+                  {data.available_plans.map((p) => <option key={p.id} value={p.id} className="bg-black">{p.name} (€{p.price})</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between gap-4 flex-wrap">
+              <div className="text-sm">
+                Credits balance: <span className="text-brand font-mono">{w.credits_balance || 0} cr</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {[100, 500, 1000].map((n) => (
+                  <button key={n} onClick={() => adjustCredits(w.id, n)} className="px-2.5 py-1 text-xs font-mono border border-signal-live/30 text-signal-live hover:bg-signal-live/10" data-testid={`admin-ws-grant-${w.id}-${n}`}>
+                    +{n}
+                  </button>
+                ))}
+                <button onClick={() => {
+                  const v = window.prompt("Custom credit delta (negative to revoke):", "100");
+                  const n = parseInt(v || "0", 10);
+                  if (n) adjustCredits(w.id, n);
+                }} className="px-2.5 py-1 text-xs font-mono border border-white/10 hover:border-brand/50">±custom</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Payments + invoices */}
+      <div className="border border-white/[0.06] p-5 space-y-4">
+        <h3 className="font-display text-lg">Payments & invoices</h3>
+        {!payments ? <div className="text-xs font-mono text-zinc-500">Loading…</div> : (
+          <>
+            <div className="text-xs font-mono text-zinc-500">
+              Total paid: <span className="text-brand">€{payments.totals.paid_eur}</span> · {payments.totals.payments} payments · {payments.totals.invoices} invoices
+            </div>
+            {payments.workspaces.map((w) => (
+              <div key={w.workspace.id} className="border border-white/[0.04] p-4">
+                <div className="text-sm font-medium">{w.workspace.name}</div>
+                <div className="text-[11px] font-mono text-zinc-500 mt-0.5 mb-3">€{w.paid_eur} paid total</div>
+                {w.payments.length === 0 && <div className="text-[11px] font-mono text-zinc-600">No payments yet.</div>}
+                {w.payments.length > 0 && (
+                  <div className="border border-white/[0.04]">
+                    <div className="grid grid-cols-[110px_1fr_90px_90px_140px] gap-2 px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500 border-b border-white/[0.04]">
+                      <div>Date</div><div>Transaction ID</div><div>Plan</div><div>Status</div><div className="text-right">Amount</div>
+                    </div>
+                    {w.payments.slice(0, 20).map((p) => (
+                      <div key={p.id || p.mollie_payment_id} className="grid grid-cols-[110px_1fr_90px_90px_140px] gap-2 px-3 py-2 text-[11px] font-mono border-b border-white/[0.02] last:border-b-0">
+                        <div className="text-zinc-500">{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</div>
+                        <div className="text-brand truncate" title={p.mollie_payment_id || p.id}>{(p.mollie_payment_id || p.id || "—").slice(0, 28)}</div>
+                        <div className="text-zinc-400">{p.plan || "—"}</div>
+                        <div className={p.status === "paid" ? "text-signal-live" : p.status === "expired" || p.status === "failed" ? "text-signal-failed" : "text-zinc-500"}>{p.status}</div>
+                        <div className="text-right text-zinc-200">€{(p.total ?? p.subtotal ?? 0).toFixed?.(2) ?? p.total ?? 0}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Recent audit on this user */}
+      <div className="border border-white/[0.06] p-5">
+        <h3 className="font-display text-lg mb-3">Recent activity ({data.audit.length})</h3>
+        {data.audit.length === 0 && <div className="text-xs font-mono text-zinc-500">No activity logged.</div>}
+        {data.audit.length > 0 && (
+          <div className="border border-white/[0.04] divide-y divide-white/[0.02]">
+            {data.audit.slice(0, 15).map((a) => (
+              <div key={a.id} className="grid grid-cols-[180px_1fr] gap-3 px-3 py-2 text-[11px] font-mono">
+                <div className="text-zinc-500">{new Date(a.created_at).toLocaleString()}</div>
+                <div><span className="text-zinc-300">{a.action}</span>{a.resource_type ? <span className="text-zinc-500"> · {a.resource_type}</span> : null}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

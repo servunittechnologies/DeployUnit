@@ -86,6 +86,8 @@ class AppIn(BaseModel):
     build_command: Optional[str] = None
     start_command: Optional[str] = None
     env_vars: Dict[str, str] = Field(default_factory=dict)
+    environment: Literal["production", "staging"] = "production"
+    paired_app_id: Optional[str] = None  # link to counterpart on create
 
 
 class AppOut(BaseModel):

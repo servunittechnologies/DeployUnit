@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from pydantic import BaseModel
 from slugify import slugify
 
 from db import get_db
@@ -412,6 +413,7 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
 
     app_id = str(uuid.uuid4())
     base_slug = slugify(f"{payload.name}-{app_id[:6]}")
+    environment = payload.environment or "production"
     doc = {
         "id": app_id,
         "workspace_id": payload.workspace_id,
@@ -427,7 +429,9 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "coolify_app_uuid": None,
         "status": "queued",
         "primary_url": None,
-        "tier": "development",
+        "environment": environment,
+        "paired_app_id": None,
+        "tier": "production" if environment == "production" else "development",
         "protected_branches": ["main"],
         "auto_deploy": True,
         "last_deploy_at": _now_iso(),
@@ -451,6 +455,14 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
 
     await db.apps.insert_one(doc)
     doc.pop("_id", None)
+
+    # If paired_app_id was provided on create, set both sides immediately.
+    if payload.paired_app_id:
+        peer = await db.apps.find_one({"id": payload.paired_app_id, "workspace_id": payload.workspace_id})
+        if peer and peer.get("environment") != environment:
+            await db.apps.update_one({"id": app_id}, {"$set": {"paired_app_id": payload.paired_app_id}})
+            await db.apps.update_one({"id": payload.paired_app_id}, {"$set": {"paired_app_id": app_id}})
+            doc["paired_app_id"] = payload.paired_app_id
 
     initial_logs = ["[QUEUE] deployment queued"]
     if branch_to_use != requested_branch:
@@ -878,3 +890,137 @@ async def manual_register_webhook(app_id: str, request: Request):
         )
         return {"registered": True, "hook_id": res["id"]}
     return {"registered": False, "reason": "no GitHub token, or repo not accessible"}
+
+
+# ─────────────────────── Staging/Production pairing ───────────────────────
+class PairIn(BaseModel):
+    peer_app_id: str
+
+
+@router.post("/apps/{app_id}/pair")
+async def pair_app(app_id: str, payload: PairIn, request: Request):
+    """Link this app to a counterpart (one staging ↔ one production). Both
+    apps must be in the same workspace and have different environments."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    peer = await db.apps.find_one({"id": payload.peer_app_id})
+    if not app or not peer:
+        raise HTTPException(status_code=404, detail="App not found")
+    if app["workspace_id"] != peer["workspace_id"]:
+        raise HTTPException(status_code=400, detail="Both apps must be in the same workspace")
+    if app_id == payload.peer_app_id:
+        raise HTTPException(status_code=400, detail="An app can't be paired with itself")
+    if (app.get("environment") or "production") == (peer.get("environment") or "production"):
+        raise HTTPException(status_code=400, detail="Pair must be one staging + one production")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    # Atomically pair both sides, dropping any existing pairings first so
+    # we never end up with dangling references.
+    for other_id in (app.get("paired_app_id"), peer.get("paired_app_id")):
+        if other_id and other_id not in (app_id, payload.peer_app_id):
+            await db.apps.update_one({"id": other_id}, {"$set": {"paired_app_id": None}})
+    await db.apps.update_one({"id": app_id}, {"$set": {"paired_app_id": payload.peer_app_id}})
+    await db.apps.update_one({"id": payload.peer_app_id}, {"$set": {"paired_app_id": app_id}})
+    audit_log(action="app.pair", actor=user, workspace_id=app["workspace_id"],
+              resource_type="app", resource_id=app_id,
+              meta={"peer_app_id": payload.peer_app_id}, request=request)
+    return {"paired": True, "peer_app_id": payload.peer_app_id}
+
+
+@router.post("/apps/{app_id}/unpair")
+async def unpair_app(app_id: str, request: Request):
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    peer_id = app.get("paired_app_id")
+    if not peer_id:
+        return {"paired": False}
+    await db.apps.update_one({"id": app_id}, {"$set": {"paired_app_id": None}})
+    await db.apps.update_one({"id": peer_id}, {"$set": {"paired_app_id": None}})
+    audit_log(action="app.unpair", actor=user, workspace_id=app["workspace_id"],
+              resource_type="app", resource_id=app_id, request=request)
+    return {"paired": False}
+
+
+@router.get("/apps/{app_id}/pair-candidates")
+async def pair_candidates(app_id: str, request: Request):
+    """Apps in the same workspace with the opposite environment that aren't
+    already paired with someone else. Used to populate the 'Pair with…' dropdown."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    target_env = "production" if (app.get("environment") or "production") == "staging" else "staging"
+    rows = await db.apps.find(
+        {
+            "workspace_id": app["workspace_id"],
+            "environment": target_env,
+            "id": {"$ne": app_id},
+            "$or": [{"paired_app_id": None}, {"paired_app_id": app_id}],
+        },
+        {"_id": 0, "id": 1, "name": 1, "environment": 1, "branch": 1, "primary_url": 1, "status": 1},
+    ).limit(50).to_list(50)
+    return {"candidates": rows, "target_environment": target_env}
+
+
+@router.post("/apps/{app_id}/promote")
+async def promote_app(app_id: str, request: Request, background: BackgroundTasks):
+    """Copy env vars from this app → its paired counterpart and trigger a redeploy.
+    Typical use: 'promote staging to production' once QA is happy."""
+    user = await get_current_user(request)
+    db = get_db()
+    src = await db.apps.find_one({"id": app_id})
+    if not src:
+        raise HTTPException(status_code=404, detail="App not found")
+    peer_id = src.get("paired_app_id")
+    if not peer_id:
+        raise HTTPException(status_code=400, detail="No paired app — link a staging/production counterpart first")
+    dest = await db.apps.find_one({"id": peer_id})
+    if not dest:
+        raise HTTPException(status_code=400, detail="Paired app no longer exists")
+    await require_workspace_member(src["workspace_id"], user, ["owner", "admin", "developer"])
+
+    # Copy env vars + branch into peer.
+    new_env = dict(src.get("env_vars") or {})
+    await db.apps.update_one({"id": dest["id"]}, {"$set": {"env_vars": new_env, "branch": src.get("branch") or dest.get("branch")}})
+
+    # Push env vars to the build engine if we already have a Coolify UUID.
+    if dest.get("coolify_app_uuid"):
+        try:
+            await coolify.update_env(dest["coolify_app_uuid"], new_env)
+        except Exception as e:
+            logger.warning("promote: coolify env sync failed: %s", e)
+
+    # Queue a deployment on the destination.
+    deploy_id = str(uuid.uuid4())
+    await db.deployments.insert_one({
+        "id": deploy_id, "app_id": dest["id"], "workspace_id": dest["workspace_id"],
+        "status": "queued", "branch": src.get("branch") or "main",
+        "commit_sha": None,
+        "commit_message": f"Promoted from {src['name']} ({src.get('environment')})",
+        "trigger": "promote",
+        "logs": [f"[QUEUE] promoted from {src['name']} → {dest['name']}"],
+        "started_at": _now_iso(), "finished_at": None,
+    })
+    if dest.get("coolify_app_uuid"):
+        background.add_task(_redeploy_background, dest["id"], deploy_id, dest["coolify_app_uuid"], None)
+    else:
+        background.add_task(_coolify_deploy, dest["id"], deploy_id)
+
+    audit_log(action="app.promote", actor=user, workspace_id=src["workspace_id"],
+              resource_type="app", resource_id=app_id,
+              meta={"from_env": src.get("environment"), "to_env": dest.get("environment"),
+                    "from_app": src["name"], "to_app": dest["name"]},
+              request=request)
+    return {
+        "promoted": True,
+        "deployment_id": deploy_id,
+        "from": {"id": src["id"], "name": src["name"], "environment": src.get("environment")},
+        "to":   {"id": dest["id"], "name": dest["name"], "environment": dest.get("environment")},
+    }
+
