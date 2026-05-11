@@ -1422,7 +1422,7 @@ function Footer() {
           </div>
           {[
             { h: "Product", links: [["Features", "#features"], ["Compare", "#compare"], ["Pricing", "/pricing"], ["Roadmap", "/login"]] },
-            { h: "Resources", links: [["Docs", "#"], ["Status", "#"], ["Blog", "#"], ["Changelog", "#"]] },
+            { h: "Resources", links: [["Docs", "#"], ["Status", "/status"], ["Blog", "#"], ["Changelog", "#"]] },
             { h: "Company", links: [["About", "#"], ["Sustainability", "#green"], ["Privacy", "#"], ["Contact", "mailto:hello@deployhub.app"]] },
           ].map((c) => (
             <div key={c.h}>

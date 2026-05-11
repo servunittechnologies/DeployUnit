@@ -183,7 +183,20 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **2026-05-11 — Landing v2.4: compact 5-card bento with internal tabs + heatmap preview**
+  - **2026-05-11 — Public status page + 60s background ping system**
+  - **New `/status` route** — fully public (no auth), auto-refreshes every 30 seconds in the browser. Live at the same domain (no separate subdomain yet) and linked from the landing-page footer under "Resources".
+  - **Background ping orchestrator**: APScheduler `status_ping_tick` runs every 60s, concurrently pings all 10 components via `asyncio.gather`, persists `status_pings` rows (component_id, ts, day, ok, latency_ms, error). 95-day retention with auto-GC.
+  - **10 components monitored** in 3 groups:
+    - **Core**: DeployHub API (self-test) · Database (Mongo ping) · Web analytics (`tracker.js` GET) · Metrics ingest (`install.sh` GET)
+    - **Infrastructure**: Coolify (reads `platform_settings.coolify_base_url` → `/api/health`; skipped if not configured)
+    - **Integrations**: GitHub (`api.github.com/zen`) · Cloudflare (`api.cloudflare.com/client/v4/`) · Mollie (`api.mollie.com/v2/`) · MailerSend (`api.mailersend.com/v1/`) · Twilio (`status.twilio.com/api/v2/status.json`)
+  - **Auto-incident logic**: after 2 consecutive failed pings on the same component, a `status_incidents` row is auto-opened with severity `major` (for api/db/tracker) or `minor` (other). First successful ping auto-resolves the incident with `resolved_at`. No flapping.
+  - **State derivation**: latest ping → `operational` (<1500 ms latency) / `degraded` (≥1500 ms or 4xx) / `down` (5xx or exception). Overall page state = worst component state.
+  - **Public endpoints** (no auth): `GET /api/status` (summary + components + open + recent incidents), `GET /api/status/components` (flat list), `GET /api/status/history?days=90` (daily uptime buckets per component for the histogram).
+  - **Frontend** (`pages/Status.jsx`): cyberpunk-dark layout consistent with the dashboard — animated pulse-dot state indicators, latency in ms, **90-day uptime histogram** (each day = a colored vertical bar, green ≥99.5%, yellow ≥95%, red below, zinc-900 for no-data), rolling uptime % per component, per-group section headers (Core · Infrastructure · Integrations). Active + recently-resolved incidents grid. Refresh button + auto-poll every 30s.
+  - **Verified E2E**: one ping cycle ran 10/10 components green, `/api/status` returns full operational tree, browser screenshots confirm rendering.
+
+
   - **Density compressed from 11 → 5 cards** by introducing internal tab switches inside each big card. Same surface, ~50% less vertical scroll.
   - **Card 1 · Live observability** (2-col span): tabbed switcher between **Metrics** / **PageSpeed** / **Alerts** — all three reused from the previous individual cards, lazy-mounted on tab change.
   - **Card 2 · Web analytics** (1-col): tabbed **Visitors** / **Heatmap** (with `soon` badge). The new **HeatmapPreview** is a fake-page wireframe (header dots + content blocks) overlaid with 6 pulsing radial-gradient heat blobs (red/orange/yellow/green) using `mix-blend-mode: screen` — looks exactly like a real heatmap export. Bottom-left legend: `3 hot · 1 mid · 1 cool`.

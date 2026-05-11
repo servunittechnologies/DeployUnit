@@ -23,6 +23,7 @@ from services.metrics import downsample_and_gc
 from services.account_migration import migrate_accounts, needs_migration
 from services.pagespeed import daily_pagespeed_tick
 from services.analytics import gc as analytics_gc
+from routers.status import status_ping_tick
 
 from routers import (
     auth as auth_router,
@@ -52,6 +53,7 @@ from routers import (
     metrics as metrics_router,
     analytics as analytics_router,
     roadmap as roadmap_router,
+    status as status_router,
 )
 
 
@@ -94,6 +96,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(daily_pagespeed_tick, "interval", hours=12, id="pagespeed_daily", replace_existing=True)
     # Analytics retention — drop pageview events older than 90 days.
     scheduler.add_job(analytics_gc, "interval", hours=24, id="analytics_gc", replace_existing=True)
+    # Public status page — ping every component every 60 seconds.
+    scheduler.add_job(status_ping_tick, "interval", seconds=60, id="status_ping", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
@@ -143,6 +147,7 @@ api_router.include_router(resources_router.router)
 api_router.include_router(metrics_router.router)
 api_router.include_router(analytics_router.router)
 api_router.include_router(roadmap_router.router)
+api_router.include_router(status_router.router)
 
 app.include_router(api_router)
 
