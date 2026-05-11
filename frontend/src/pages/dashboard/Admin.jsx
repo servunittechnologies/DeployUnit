@@ -388,14 +388,36 @@ function MetricsAgentSection() {
           )}
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">last sample count</div>
-          <div className="text-zinc-300">{info.last_sample_count ?? "—"}</div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">last batch (accepted / skipped)</div>
+          <div className="text-zinc-300" data-testid="admin-agent-batch">
+            <span className="text-signal-success">{info.last_sample_count ?? 0}</span>
+            <span className="text-zinc-600 mx-1">/</span>
+            <span className={info.last_skipped_count > 0 ? "text-signal-queued" : "text-zinc-500"}>{info.last_skipped_count ?? 0}</span>
+            <span className="text-zinc-600 ml-2 text-xs">of {info.last_seen_count ?? 0} seen</span>
+          </div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">key issued</div>
           <div className="text-zinc-300">{info.created_at ? new Date(info.created_at).toLocaleString() : "—"}</div>
         </div>
       </div>
+
+      {info.last_skipped_uuids && info.last_skipped_uuids.length > 0 && (
+        <div className="bg-signal-queued/10 border border-signal-queued/40 p-4 mb-4" data-testid="admin-agent-unmapped">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-2">
+            ⚠ unmapped containers detected
+          </div>
+          <div className="text-xs text-zinc-400 mb-2">
+            The agent reports stats for containers whose UUID isn't linked to any DeployHub app or database.
+            Either these are infra containers you don't need to monitor, or the app needs to be (re)imported so its UUID is registered.
+          </div>
+          <div className="font-mono text-xs text-zinc-300 space-y-1">
+            {info.last_skipped_uuids.map((u) => (
+              <div key={u} className="break-all" data-testid={`admin-agent-unmapped-uuid`}>· {u}</div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {revealedKey && (
         <div className="bg-brand/10 border border-brand/40 p-4 mb-4" data-testid="agent-key-revealed">

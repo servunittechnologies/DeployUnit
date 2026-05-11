@@ -228,14 +228,34 @@ client = docker.from_env()
 
 
 # Coolify container names look like:
-#   <24-char-uuid>           — for databases / services
-#   <24-char-uuid>-<digits>  — for application revisions
+#   <uuid>                       — for plain databases/services (older revs)
+#   <uuid>-<random_suffix>       — for application revisions, suffix can be
+#                                  digits OR alphanumeric depending on the
+#                                  Coolify version
 # The `coolify.applicationId` label is the integer Laravel DB id, NOT the
-# UUID we use in DeployHub, so we recover the uuid from the name instead.
-NAME_RE = re.compile(r"^([a-z0-9]{20,32})(?:-\d+)?$")
+# UUID we use in DeployHub, so we ALSO try several UUID-bearing labels
+# before falling back to a name-prefix regex.
+NAME_RE = re.compile(r"^([a-z0-9]{20,32})(?:-[a-z0-9]+)?$")
+
+UUID_LABELS = [
+    "coolify.applicationUUID",
+    "coolify.application.uuid",
+    "coolify.databaseUUID",
+    "coolify.database.uuid",
+    "coolify.serviceUUID",
+    "coolify.service.uuid",
+    "coolify.resource.uuid",
+    "coolify.resourceUUID",
+    "coolify.uuid",
+]
 
 
 def _resource_uuid_from(c) -> str | None:
+    labels = c.labels or {}
+    for k in UUID_LABELS:
+        v = labels.get(k)
+        if v and isinstance(v, str) and 8 <= len(v) <= 64:
+            return v
     name = (c.name or "").lstrip("/")
     m = NAME_RE.match(name)
     if m:
@@ -243,12 +263,21 @@ def _resource_uuid_from(c) -> str | None:
     return None
 
 
+# Internal Coolify infra containers we always want to ignore.
+INFRA_PREFIXES = (
+    "coolify-proxy", "coolify-realtime", "coolify-db", "coolify-redis",
+    "coolify-helper", "coolify-mailpit", "coolify-",
+)
+
+
 def _is_coolify_app(c) -> bool:
     labels = c.labels or {}
-    # Anything Coolify-managed and matching the app naming convention counts.
-    # We skip platform internals (coolify-proxy, coolify-realtime, coolify-db
-    # etc.) which don't follow the uuid pattern.
-    return labels.get("coolify.managed") == "true" and _resource_uuid_from(c) is not None
+    name = (c.name or "").lstrip("/")
+    if any(name.startswith(p) for p in INFRA_PREFIXES):
+        return False
+    if labels.get("coolify.managed") != "true":
+        return False
+    return _resource_uuid_from(c) is not None
 
 
 def _cpu_pct(stats: dict) -> float:
@@ -301,8 +330,15 @@ def collect_samples() -> list[dict]:
     except Exception as e:
         log.error("list containers: %s", e)
         return out
+    seen_managed = 0
+    skipped_no_uuid: list[str] = []
     for c in containers:
+        labels = c.labels or {}
+        if labels.get("coolify.managed") != "true":
+            continue
+        seen_managed += 1
         if not _is_coolify_app(c):
+            skipped_no_uuid.append(c.name or "?")
             continue
         coolify_uuid = _resource_uuid_from(c)
         try:
@@ -327,13 +363,22 @@ def collect_samples() -> list[dict]:
             "disk_read_bytes": disk_r,
             "disk_write_bytes": disk_w,
         })
+    log.info(
+        "tick: managed=%d sampled=%d skipped_no_uuid=%d %s",
+        seen_managed, len(out), len(skipped_no_uuid),
+        ("(skipped: " + ", ".join(skipped_no_uuid[:5]) + ")") if skipped_no_uuid else "",
+    )
+    for s in out:
+        log.info("  -> %s  uuid=%s  cpu=%.1f%%  mem=%.1f%%",
+                 s["container_name"], s["coolify_app_uuid"], s["cpu_pct"], s["mem_pct"])
     return out
 
 
 def push(samples: list[dict]) -> None:
+    # Always ping so the admin can tell the agent is alive even if no
+    # Coolify-managed apps were detected this tick.
     if not samples:
-        log.info("no Coolify-managed app containers found this tick")
-        return
+        log.info("no Coolify-managed app containers found this tick (heartbeat only)")
     try:
         r = httpx.post(
             f"{API_URL}/api/metrics/ingest",
@@ -346,8 +391,9 @@ def push(samples: list[dict]) -> None:
         else:
             try:
                 resp = r.json()
-                log.info("pushed %d samples (accepted=%d, skipped=%d)",
-                         len(samples), resp.get("accepted", 0), resp.get("skipped", 0))
+                log.info("pushed %d samples (accepted=%d, skipped=%d) unmapped=%s",
+                         len(samples), resp.get("accepted", 0), resp.get("skipped", 0),
+                         resp.get("unmapped_uuids", []))
             except Exception:
                 log.info("pushed %d samples", len(samples))
     except Exception as e:

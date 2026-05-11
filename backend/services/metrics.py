@@ -51,6 +51,10 @@ async def get_or_create_agent_key_info() -> dict:
         "created_at": agent.get("created_at"),
         "last_seen_at": agent.get("last_seen_at"),
         "last_sample_count": agent.get("last_sample_count"),
+        "last_skipped_count": agent.get("last_skipped_count"),
+        "last_seen_count": agent.get("last_seen_count"),
+        "last_skipped_uuids": agent.get("last_skipped_uuids") or [],
+        "last_source_ip": agent.get("last_source_ip"),
     }
 
 
@@ -89,7 +93,27 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
     Returns counts so the agent can log success/skip rates.
     """
     db = get_db()
+    now_iso = _now().isoformat()
+
+    # Touch the agent heartbeat even on empty batches so the admin can see
+    # "agent is alive but reports no containers".
+    async def _touch(accepted: int, *, skipped: int = 0, seen: int = 0, skipped_uuids: list[str] | None = None):
+        await db.platform_settings.update_one(
+            {"id": PLATFORM_SETTINGS_ID},
+            {"$set": {
+                "metrics_agent.last_seen_at": now_iso,
+                "metrics_agent.last_sample_count": accepted,
+                "metrics_agent.last_skipped_count": skipped,
+                "metrics_agent.last_seen_count": seen,
+                "metrics_agent.last_source_ip": source_ip,
+                "metrics_agent.last_skipped_uuids": (skipped_uuids or [])[:10],
+            }},
+            upsert=True,
+        )
+
     if not samples:
+        await _touch(0, seen=0)
+        logger.info("metrics ingest: empty batch from %s", source_ip)
         return {"accepted": 0, "skipped": 0}
 
     # Bulk lookup of apps by their coolify_app_uuid — and also resolve
@@ -102,28 +126,28 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
             apps[a["coolify_app_uuid"]] = a
         cur2 = db.databases.find({"coolify_app_uuid": {"$in": uuids}}, {"_id": 0, "id": 1, "workspace_id": 1, "coolify_app_uuid": 1})
         async for d in cur2:
-            # Store under same dict — DB samples land in container_metrics_samples
-            # with `app_id` pointing at the database's id; the analytics layer
-            # treats them as their own resource type.
             apps.setdefault(d["coolify_app_uuid"], {
                 "id": d["id"], "workspace_id": d["workspace_id"],
                 "coolify_app_uuid": d["coolify_app_uuid"], "_kind": "database",
             })
 
-    now_iso = _now().isoformat()
     accepted = 0
     skipped = 0
+    skipped_uuids: list[str] = []
     docs: list[dict] = []
     for s in samples:
-        app = apps.get(s.get("coolify_app_uuid"))
+        u = s.get("coolify_app_uuid")
+        app = apps.get(u)
         if not app:
             skipped += 1
+            if u and u not in skipped_uuids:
+                skipped_uuids.append(u)
             continue
         docs.append({
             "id": str(uuid.uuid4()),
             "app_id": app["id"],
             "workspace_id": app["workspace_id"],
-            "coolify_app_uuid": s.get("coolify_app_uuid"),
+            "coolify_app_uuid": u,
             "container_id": s.get("container_id"),
             "container_name": s.get("container_name"),
             "sampled_at": s.get("sampled_at") or now_iso,
@@ -140,17 +164,10 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
         accepted += 1
     if docs:
         await db.container_metrics_samples.insert_many(docs)
-    # Update last_seen on the agent record
-    await db.platform_settings.update_one(
-        {"id": PLATFORM_SETTINGS_ID},
-        {"$set": {
-            "metrics_agent.last_seen_at": now_iso,
-            "metrics_agent.last_sample_count": accepted,
-            "metrics_agent.last_source_ip": source_ip,
-        }},
-        upsert=True,
-    )
-    return {"accepted": accepted, "skipped": skipped}
+    logger.info("metrics ingest: accepted=%d skipped=%d (unmapped uuids=%s) from %s",
+                accepted, skipped, skipped_uuids[:5], source_ip)
+    await _touch(accepted, skipped=skipped, seen=len(samples), skipped_uuids=skipped_uuids)
+    return {"accepted": accepted, "skipped": skipped, "unmapped_uuids": skipped_uuids[:10]}
 
 
 # ─────────────────────── Retention / downsampling ───────────────────────

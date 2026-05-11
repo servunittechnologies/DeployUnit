@@ -185,6 +185,16 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
   - **Tests**: 14/14 new Iter8 backend assertions green. Full suite 77/78. Report at `/app/test_reports/iteration_8.json`.
 
+- **2026-05-11 — Metrics Agent UUID-mapping P0 fix + diagnostics**
+  - **Problem**: Live container metrics agent on user's Coolify VPS was pinging `/api/metrics/ingest` (heartbeat OK) but `last_sample_count` stuck at 0. Coolify v4 stores integer DB id in `coolify.applicationId` label, not the UUID, and the prior name-regex `^([a-z0-9]{20,32})(?:-\d+)?$` rejected newer Coolify revision suffixes that are alphanumeric.
+  - **Fix**: Robuster UUID extraction — try `coolify.applicationUUID` / `coolify.application.uuid` / `coolify.databaseUUID` / `coolify.serviceUUID` / `coolify.resource.uuid` labels first, then fall back to relaxed regex `^([a-z0-9]{20,32})(?:-[a-z0-9]+)?$`. Skip known Coolify infra container prefixes explicitly.
+  - **Diagnostics**: Agent now logs per-tick summary (`tick: managed=N sampled=M skipped_no_uuid=K`) and per-sample line so user can see exactly what's found/skipped via `docker logs deployhub-metrics-agent`. Server-side ingest logs unmapped UUIDs and surfaces last 10 of them in `GET /api/admin/metrics/agent` response.
+  - **UI**: Admin → Metrics agent section now shows `accepted / skipped of seen` triplet plus a yellow "unmapped containers detected" panel listing UUIDs that don't match any DeployHub app/database.
+  - **Heartbeat**: Server now updates `last_seen_at` even on empty batches so the admin can tell "agent is alive but found no containers".
+  - **Verified**: Full ingest flow E2E via curl — wrong UUID → skipped + surfaced in `last_skipped_uuids`; correct UUID → accepted, stored in `container_metrics_samples`, app metrics query returns data.
+  - **Action required from user**: Reinstall the agent on the VPS to pick up the new `agent.py` and rotate to a fresh agent key (old key still valid in DB; only needed if user wants forced rotation).
+
+
 ## Changelog (older)
 - **2026-05-06 — Futuristic revamp + P0 deploy-retry hardening (Iter7)**
   - **P0 fix — silent Coolify deploys**: Split `create_public_app(instant_deploy=True)` → `create_public_app(instant_deploy=False)` + explicit `coolify.deploy()` with 3× exponential backoff retries (2s→4s→8s) in `_trigger_coolify_deploy_with_retry`. Each attempt is logged to `deployment.logs` so users can see retries in the TerminalLog UI.
