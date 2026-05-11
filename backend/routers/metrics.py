@@ -139,10 +139,20 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-# Prompt for the agent key (don't echo to logs)
-read -s -p "Paste your DeployHub agent API key: " DH_AGENT_KEY
-echo ""
-if [ -z "$DH_AGENT_KEY" ]; then
+# When run as `curl ... | bash`, stdin is the script itself — we need to
+# explicitly read from the terminal device for an interactive prompt.
+# DH_AGENT_KEY env var also works (skips the prompt).
+if [ -z "${{DH_AGENT_KEY:-}}" ]; then
+  if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+    echo "ERROR: no TTY for prompt. Pass the key as env:" >&2
+    echo "  curl -sSL $API_BASE/api/agent/install.sh | DH_AGENT_KEY=dh-agent-xxxx bash" >&2
+    exit 1
+  fi
+  echo "Paste your DeployHub agent API key (input hidden). Get it in Admin → Integrations → Metrics agent."
+  read -r -s -p "key: " DH_AGENT_KEY < /dev/tty
+  echo ""
+fi
+if [ -z "${{DH_AGENT_KEY}}" ]; then
   echo "ERROR: empty key" >&2
   exit 1
 fi
@@ -157,14 +167,16 @@ if [ ! -s agent.py ]; then
   exit 1
 fi
 
-cat > docker-compose.yml <<EOF
+# Write the docker-compose file (variables resolved to plain strings so
+# this works on any docker compose version, with or without env-file).
+cat > docker-compose.yml <<DCYAML
 services:
   agent:
     image: python:3.11-slim
     container_name: deployhub-metrics-agent
     restart: unless-stopped
-    pid: host
-    network_mode: host
+    pid: "host"
+    network_mode: "host"
     environment:
       DH_API_URL: "$API_BASE"
       DH_AGENT_KEY: "$DH_AGENT_KEY"
@@ -172,15 +184,15 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./agent.py:/agent.py:ro
-    command: bash -c "pip install --quiet 'httpx<1' 'docker<8' && exec python -u /agent.py"
-EOF
+    command: ["bash","-lc","pip install --quiet 'httpx<1' 'docker<8' && exec python -u /agent.py"]
+DCYAML
 
 # Stop any previous version cleanly
 docker rm -f deployhub-metrics-agent >/dev/null 2>&1 || true
 docker compose up -d
 
 echo ""
-echo "✓ DeployHub agent running."
+echo "Done. DeployHub agent running."
 echo "  watch logs:  docker logs -f deployhub-metrics-agent"
 echo "  reinstall:   curl -sSL $API_BASE/api/agent/install.sh | bash"
 echo "  uninstall:   docker rm -f deployhub-metrics-agent && rm -rf $INSTALL_DIR"
