@@ -116,15 +116,15 @@ async def check_self(url: str) -> dict:
 
 COMPONENTS = [
     {"id": "api",        "name": "DeployHub API",      "desc": "Public REST API and dashboard backend",  "group": "Core"},
-    {"id": "db",         "name": "Database",           "desc": "MongoDB primary cluster",                "group": "Core"},
+    {"id": "db",         "name": "Database",           "desc": "Primary cluster",                         "group": "Core"},
     {"id": "tracker",    "name": "Web analytics",      "desc": "Pageview tracker endpoint",              "group": "Core"},
     {"id": "metrics",    "name": "Metrics ingest",     "desc": "VPS agent ingestion pipeline",           "group": "Core"},
     {"id": "coolify",    "name": "Deployment engine",  "desc": "Container build & deploy backend",       "group": "Infrastructure"},
-    {"id": "github",     "name": "GitHub integration", "desc": "OAuth + push-to-deploy",                  "group": "Integrations"},
+    {"id": "github",     "name": "Source control",     "desc": "OAuth + push-to-deploy",                  "group": "Integrations"},
     {"id": "cloudflare", "name": "DNS provider",       "desc": "Custom domains + DNS automation",         "group": "Integrations"},
-    {"id": "mollie",     "name": "Payments",           "desc": "Subscriptions + EU VAT (Mollie)",         "group": "Integrations"},
-    {"id": "mailersend", "name": "Email delivery",     "desc": "Transactional email (MailerSend)",        "group": "Integrations"},
-    {"id": "twilio",     "name": "SMS & WhatsApp",     "desc": "Twilio alert channel",                    "group": "Integrations"},
+    {"id": "mollie",     "name": "Payments",           "desc": "Subscriptions + EU VAT",                  "group": "Integrations"},
+    {"id": "mailersend", "name": "Email delivery",     "desc": "Transactional email",                     "group": "Integrations"},
+    {"id": "twilio",     "name": "SMS & WhatsApp",     "desc": "Alert channel",                           "group": "Integrations"},
 ]
 
 
