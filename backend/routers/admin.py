@@ -20,6 +20,12 @@ from crypto_utils import encrypt_token, decrypt_token
 from clients.coolify import coolify
 from clients.mollie import mollie
 from services.vat import validate_vies, EU_VAT_RATES, home_country
+from services.plans import (
+    list_plans as plans_list,
+    get_plan as plans_get,
+    update_plan as plans_update,
+    workspace_usage,
+)
 
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -153,6 +159,51 @@ async def list_users(request: Request):
     for u in users:
         u["workspaces_owned"] = await db.workspaces.count_documents({"owner_id": u["id"]})
     return users
+
+
+@router.get("/admin/plans")
+async def admin_list_plans(request: Request):
+    """Returns every plan, including inactive ones, so admins can re-enable
+    them. Pricing page uses /billing/plans (active-only)."""
+    await _require_admin(request)
+    return await plans_list(only_active=False)
+
+
+class PlanUpdate(BaseModel):
+    name: str | None = None
+    price: float | None = None
+    interval: str | None = None
+    tagline: str | None = None
+    features: list[str] | None = None
+    limits: dict | None = None
+    credits: int | None = None
+    highlight: bool | None = None
+    order: int | None = None
+    active: bool | None = None
+    fleet_view: bool | None = None
+    support_sla_hours: int | None = None
+
+
+@router.put("/admin/plans/{plan_id}")
+async def admin_update_plan(plan_id: str, payload: PlanUpdate, request: Request):
+    await _require_admin(request)
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="nothing to update")
+    plan = await plans_update(plan_id, updates)
+    if not plan:
+        raise HTTPException(status_code=404, detail="plan not found")
+    return plan
+
+
+@router.get("/admin/plans/{plan_id}/usage")
+async def admin_plan_usage(plan_id: str, request: Request):
+    """Aggregate how many workspaces are on this plan (handy for pricing
+    decisions: 'will this price change affect anyone?')."""
+    await _require_admin(request)
+    db = get_db()
+    workspaces_on_plan = await db.workspaces.count_documents({"plan": plan_id})
+    return {"plan_id": plan_id, "workspaces": workspaces_on_plan}
 
 
 class PromoteIn(BaseModel):

@@ -146,7 +146,7 @@ def _bootstrap_workspace_payload(name: str, owner_id: str) -> dict:
         "slug": slugify(f"{name or 'workspace'}-{owner_id[:6]}"),
         "type": "solo",
         "owner_id": owner_id,
-        "plan": "hobby",
+        "plan": "free",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -7,6 +7,7 @@ from slugify import slugify
 from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from models import WorkspaceIn, WorkspaceOut, WorkspaceMemberIn
+from services.plans import workspace_plan, workspace_usage
 
 router = APIRouter(tags=["workspaces"])
 
@@ -42,7 +43,7 @@ async def create_workspace(payload: WorkspaceIn, request: Request):
         "slug": base_slug,
         "type": payload.type,
         "owner_id": user["id"],
-        "plan": "hobby",
+        "plan": "free",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.workspaces.insert_one(doc)
@@ -94,6 +95,9 @@ async def list_members(workspace_id: str, request: Request):
 async def add_member(workspace_id: str, payload: WorkspaceMemberIn, request: Request):
     user = await get_current_user(request)
     await require_workspace_member(workspace_id, user, ["owner", "admin"])
+    # Enforce plan team-member limit
+    from services.plans import assert_limit
+    await assert_limit(workspace_id, "team")
     db = get_db()
     target = await db.users.find_one({"email": payload.email.lower()})
     if not target:
@@ -125,3 +129,18 @@ async def remove_member(workspace_id: str, user_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Cannot remove the workspace owner")
     res = await db.workspace_members.delete_one({"workspace_id": workspace_id, "user_id": user_id})
     return {"deleted": res.deleted_count}
+
+
+@router.get("/workspaces/{workspace_id}/usage")
+async def get_workspace_usage(workspace_id: str, request: Request):
+    """Return current plan + usage counters so the dashboard can render
+    'X/Y apps used' badges and 'upgrade for more' CTAs."""
+    user = await get_current_user(request)
+    await require_workspace_member(workspace_id, user)
+    plan = await workspace_plan(workspace_id)
+    usage = await workspace_usage(workspace_id)
+    return {
+        "plan": plan,
+        "usage": usage,
+    }
+

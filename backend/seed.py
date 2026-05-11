@@ -43,7 +43,7 @@ async def _ensure_workspace(owner_id: str, name: str, ws_type: str = "solo") -> 
         "slug": slug,
         "type": ws_type,
         "owner_id": owner_id,
-        "plan": "hobby",
+        "plan": "free",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.workspaces.insert_one(doc)

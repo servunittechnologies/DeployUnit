@@ -125,6 +125,9 @@ async def add_domain(payload: DomainIn, request: Request):
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    # Enforce plan limit on domains
+    from services.plans import assert_limit
+    await assert_limit(app["workspace_id"], "domains")
     domain_clean = payload.domain.strip().lower().lstrip("http://").lstrip("https://").rstrip("/")
     if not domain_clean or " " in domain_clean or "." not in domain_clean:
         raise HTTPException(status_code=400, detail="Invalid domain")

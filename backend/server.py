@@ -16,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from db import connect, ensure_indexes, disconnect
 from seed import seed_initial_data
 from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog
+from services.plans import seed_default_plans
 
 from routers import (
     auth as auth_router,
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     connect()
     await ensure_indexes()
     await seed_initial_data()
+    await seed_default_plans()
     scheduler.add_job(run_monitor_tick, "interval", seconds=60, id="monitor", replace_existing=True)
     scheduler.add_job(sync_deployments, "interval", seconds=15, id="deploy_sync", replace_existing=True)
     scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True, max_instances=2)

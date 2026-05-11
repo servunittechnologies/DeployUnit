@@ -49,7 +49,7 @@ class WorkspaceOut(BaseModel):
     slug: str
     type: str
     owner_id: str
-    plan: str = "hobby"
+    plan: str = "free"
     created_at: datetime
 
 
@@ -217,7 +217,7 @@ class BillingProfileOut(BillingProfileIn):
 
 class CheckoutIn(BaseModel):
     workspace_id: str
-    plan: Literal["hobby", "pro", "agency"]
+    plan: Literal["free", "hobby", "pro", "agency"]  # "hobby" kept as alias to "free"
 
 
 class InvoiceOut(BaseModel):

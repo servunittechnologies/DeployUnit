@@ -25,44 +25,19 @@ from services.vat import (
     compute_vat, compute_totals, validate_vies, EU_VAT_RATES, COUNTRY_NAMES, is_eu,
 )
 from services.invoice import render_invoice_pdf, file_path_for
+from services.plans import list_plans as plans_list, get_plan as plans_get
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["billing"])
-
-
-PLANS = [
-    {
-        "id": "hobby", "name": "Hobby", "price": 0.0, "currency": "EUR", "interval": "month",
-        "tagline": "For weekend projects.",
-        "features": ["1 app", "1 custom domain", "Community support", "Basic monitoring"],
-        "limits": {"apps": 1, "domains": 1, "team": 1}, "highlight": False,
-    },
-    {
-        "id": "pro", "name": "Pro", "price": 19.0, "currency": "EUR", "interval": "month",
-        "tagline": "For serious indies.",
-        "features": ["10 apps", "5 custom domains", "Email alerts", "30s monitoring"],
-        "limits": {"apps": 10, "domains": 5, "team": 3}, "highlight": True,
-    },
-    {
-        "id": "agency", "name": "Agency", "price": 99.0, "currency": "EUR", "interval": "month",
-        "tagline": "For studios shipping for clients.",
-        "features": ["50 apps", "Unlimited domains", "Team roles", "Priority support", "Multiple projects"],
-        "limits": {"apps": 50, "domains": 9999, "team": 25}, "highlight": False,
-    },
-]
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _plan(plan_id: str) -> dict | None:
-    return next((p for p in PLANS if p["id"] == plan_id), None)
-
-
 @router.get("/billing/plans")
 async def list_plans():
-    return PLANS
+    return await plans_list(only_active=True)
 
 
 @router.get("/billing/countries")
@@ -136,7 +111,7 @@ async def get_subscription(workspace_id: str, request: Request):
         {"workspace_id": workspace_id}, {"_id": 0}
     ).sort("created_at", -1).limit(12).to_list(12)
     return {
-        "plan": (ws or {}).get("plan", "hobby"),
+        "plan": (ws or {}).get("plan", "free"),
         "subscription": sub,
         "billing_profile": profile,
         "payments": payments,
@@ -170,7 +145,7 @@ async def checkout(payload: CheckoutIn, request: Request):
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "billing"])
     db = get_db()
 
-    plan = _plan(payload.plan)
+    plan = await plans_get(payload.plan)
     if not plan:
         raise HTTPException(status_code=400, detail="Unknown plan")
 
@@ -179,7 +154,7 @@ async def checkout(payload: CheckoutIn, request: Request):
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     # Free plan — activate without Mollie
-    if plan["id"] == "hobby":
+    if plan["id"] in ("free", "hobby"):
         # Cancel any existing active subscription at Mollie
         existing_sub = await db.subscriptions.find_one({"workspace_id": payload.workspace_id})
         if existing_sub and existing_sub.get("mollie_subscription_id") and existing_sub.get("status") not in ("canceled",):
@@ -195,7 +170,7 @@ async def checkout(payload: CheckoutIn, request: Request):
             {"$set": {
                 "id": existing_sub["id"] if existing_sub else str(uuid.uuid4()),
                 "workspace_id": payload.workspace_id,
-                "plan": "hobby",
+                "plan": "free",
                 "status": "active",
                 "mollie_subscription_id": None,
                 "mollie_customer_id": (existing_sub or {}).get("mollie_customer_id"),
@@ -203,8 +178,8 @@ async def checkout(payload: CheckoutIn, request: Request):
             }},
             upsert=True,
         )
-        await db.workspaces.update_one({"id": payload.workspace_id}, {"$set": {"plan": "hobby"}})
-        return {"plan": "hobby", "status": "active", "checkout_url": None}
+        await db.workspaces.update_one({"id": payload.workspace_id}, {"$set": {"plan": "free"}})
+        return {"plan": "free", "status": "active", "checkout_url": None}
 
     if not mollie.configured:
         raise HTTPException(status_code=500, detail="Mollie not configured")
@@ -312,7 +287,7 @@ async def cancel(workspace_id: str, request: Request):
         {"workspace_id": workspace_id},
         {"$set": {"status": "canceled", "canceled_at": _now_iso()}},
     )
-    await db.workspaces.update_one({"id": workspace_id}, {"$set": {"plan": "hobby"}})
+    await db.workspaces.update_one({"id": workspace_id}, {"$set": {"plan": "free"}})
     return {"status": "canceled"}
 
 
@@ -343,7 +318,7 @@ async def _generate_invoice_for_payment(db, payment_row: dict):
     workspace_id = payment_row["workspace_id"]
     profile = await db.billing_profiles.find_one({"workspace_id": workspace_id}, {"_id": 0}) or {}
     plan_id = payment_row.get("plan") or "pro"
-    plan = _plan(plan_id) or {"name": plan_id, "price": payment_row.get("subtotal", 0.0)}
+    plan = (await plans_get(plan_id)) or {"name": plan_id, "price": payment_row.get("subtotal", 0.0)}
 
     invoice_number = await _next_invoice_number(db)
     now = datetime.now(timezone.utc)
@@ -426,7 +401,7 @@ async def _activate_subscription_from_first_payment(db, payment: dict):
     customer_id = payment.get("customerId")
     if not (workspace_id and plan_id and customer_id):
         return
-    plan = _plan(plan_id)
+    plan = await plans_get(plan_id)
     if not plan:
         return
 
@@ -532,7 +507,7 @@ async def mollie_webhook(request: Request):
     if workspace_id and status == "paid":
         sub = await db.subscriptions.find_one({"workspace_id": workspace_id})
         profile = await db.billing_profiles.find_one({"workspace_id": workspace_id}, {"_id": 0}) or {}
-        plan = _plan(plan_id or (sub or {}).get("plan") or "pro")
+        plan = await plans_get(plan_id or (sub or {}).get("plan") or "pro")
         vat = compute_vat(
             country=profile.get("country", ""),
             is_business=bool(profile.get("is_business")),

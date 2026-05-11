@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AppCard from "../../components/AppCard";
 import StatusBadge from "../../components/StatusBadge";
+import UsageStrip from "../../components/UsageStrip";
 import { Plus, GitBranch, Activity, Globe, BoxesIcon, Boxes } from "lucide-react";
 
 function StatTile({ label, value, accent }) {
@@ -58,6 +59,8 @@ export default function Overview() {
           </Link>
         </div>
       </div>
+
+      <UsageStrip workspaceId={active?.id} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 border-b border-white/[0.06]">
         <StatTile label="Total apps" value={apps.length} />

@@ -50,7 +50,7 @@ async def _bootstrap_workspace_for(user: dict):
             "slug": base_slug,
             "type": "solo",
             "owner_id": user["id"],
-            "plan": "hobby",
+            "plan": "free",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
     )

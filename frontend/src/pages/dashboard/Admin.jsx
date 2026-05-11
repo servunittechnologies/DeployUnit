@@ -3,11 +3,13 @@ import { api } from "../../lib/api";
 import {
   ShieldCheck, Database, Globe, CheckCircle2, XCircle, AlertCircle,
   Loader2, Save, Copy, RefreshCw, Key, Users, Banknote, Github,
+  Coins, Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
+  { id: "plans", label: "Plans & Pricing", icon: Coins },
   { id: "platform", label: "Platform Domain", icon: Globe },
   { id: "vat", label: "VAT / VIES", icon: Banknote },
   { id: "users", label: "Users", icon: Users },
@@ -149,6 +151,186 @@ function IntegrationsTab() {
           <span className="text-zinc-200">{data.eu_vat_countries}</span>
         </div>
       </Section>
+    </div>
+  );
+}
+
+/* ─────────────────────── Plans & Pricing ─────────────────────── */
+function PlanRow({ plan, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    price: plan.price,
+    tagline: plan.tagline || "",
+    credits: plan.credits ?? 0,
+    apps: plan.limits?.apps ?? 0,
+    domains: plan.limits?.domains ?? 0,
+    team: plan.limits?.team ?? 0,
+    bandwidth_gb: plan.limits?.bandwidth_gb ?? 0,
+    build_minutes: plan.limits?.build_minutes ?? 0,
+    highlight: plan.highlight,
+    active: plan.active,
+    fleet_view: plan.fleet_view,
+  });
+  const [saving, setSaving] = useState(false);
+  const [usage, setUsage] = useState(null);
+
+  useEffect(() => {
+    api.get(`/admin/plans/${plan.id}/usage`).then((r) => setUsage(r.data)).catch(() => null);
+  }, [plan.id]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        price: parseFloat(form.price),
+        tagline: form.tagline,
+        credits: parseInt(form.credits, 10),
+        highlight: form.highlight,
+        active: form.active,
+        fleet_view: form.fleet_view,
+        limits: {
+          apps: parseInt(form.apps, 10),
+          domains: parseInt(form.domains, 10),
+          team: parseInt(form.team, 10),
+          bandwidth_gb: parseInt(form.bandwidth_gb, 10),
+          build_minutes: parseInt(form.build_minutes, 10),
+        },
+      };
+      await api.put(`/admin/plans/${plan.id}`, payload);
+      toast.success(`${plan.name} updated`);
+      setEditing(false);
+      onSaved?.();
+    } catch (e) {
+      toast.error("Save failed: " + (e?.response?.data?.detail || e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fmtLimit = (v) => (v === -1 || v === null ? "∞" : v);
+
+  return (
+    <div className={`border border-white/[0.08] ${plan.highlight ? "ring-1 ring-brand/40" : ""} bg-[#0a0a0a]`} data-testid={`admin-plan-${plan.id}`}>
+      <div className="p-5 flex items-center justify-between border-b border-white/[0.06]">
+        <div className="flex items-center gap-3">
+          <span className={`px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] ${plan.active ? "border border-signal-live/40 text-signal-live" : "border border-white/10 text-zinc-500"}`}>
+            {plan.active ? "active" : "hidden"}
+          </span>
+          <h4 className="font-display text-lg tracking-tight">{plan.name}</h4>
+          {plan.highlight && <Star className="h-4 w-4 text-brand fill-brand" />}
+          <span className="font-display text-2xl">€{plan.price.toFixed(0)}</span>
+          <span className="text-xs text-zinc-500 font-mono">/{plan.interval}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {usage && (
+            <span className="text-xs font-mono text-zinc-500" data-testid={`admin-plan-usage-${plan.id}`}>
+              {usage.workspaces} workspace{usage.workspaces === 1 ? "" : "s"}
+            </span>
+          )}
+          {!editing ? (
+            <button onClick={() => setEditing(true)} className="text-xs font-mono text-brand hover:underline" data-testid={`admin-plan-edit-${plan.id}`}>edit</button>
+          ) : (
+            <>
+              <button onClick={() => setEditing(false)} disabled={saving} className="text-xs font-mono text-zinc-500 hover:underline">cancel</button>
+              <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-mono bg-brand text-brand-fg hover:bg-brand/90 disabled:opacity-50" data-testid={`admin-plan-save-${plan.id}`}>
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} save
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5">
+        {editing ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              ["Price (€)", "price", "number"],
+              ["Credits/mo", "credits", "number"],
+              ["Apps cap (-1=∞)", "apps", "number"],
+              ["Domains (-1=∞)", "domains", "number"],
+              ["Team (-1=∞)", "team", "number"],
+              ["Bandwidth (GB)", "bandwidth_gb", "number"],
+              ["Build minutes", "build_minutes", "number"],
+            ].map(([label, k, type]) => (
+              <Field key={k} label={label}>
+                <Input
+                  type={type}
+                  value={form[k]}
+                  onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                  data-testid={`admin-plan-${plan.id}-${k}`}
+                />
+              </Field>
+            ))}
+            <Field label="Tagline">
+              <Input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} />
+            </Field>
+            <div className="col-span-2 md:col-span-4 flex items-center gap-6 pt-2 text-sm font-mono">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.highlight} onChange={(e) => setForm({ ...form, highlight: e.target.checked })} /> recommended
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> active (shown on pricing page)
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.fleet_view} onChange={(e) => setForm({ ...form, fleet_view: e.target.checked })} /> Fleet view feature
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-mono">
+            {[
+              ["apps", fmtLimit(plan.limits?.apps)],
+              ["domains", fmtLimit(plan.limits?.domains)],
+              ["team", fmtLimit(plan.limits?.team)],
+              ["bandwidth", `${plan.limits?.bandwidth_gb ?? "—"} GB`],
+              ["build min", plan.limits?.build_minutes ?? "—"],
+              ["credits/mo", plan.credits ?? 0],
+              ["fleet view", plan.fleet_view ? "✓" : "—"],
+              ["sla", plan.support_sla_hours ? `${plan.support_sla_hours}h` : "community"],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500">{k}</div>
+                <div className="text-zinc-200 mt-1">{v}</div>
+              </div>
+            ))}
+            {plan.tagline && (
+              <div className="col-span-2 md:col-span-4 text-zinc-400 text-xs italic">"{plan.tagline}"</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlansTab() {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/admin/plans");
+      setPlans(r.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading plans…</div>;
+
+  return (
+    <div className="space-y-4" data-testid="admin-plans">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500">// edit pricing, limits, credits — affects pricing page immediately</div>
+        <button onClick={load} className="text-xs font-mono text-zinc-400 hover:text-brand inline-flex items-center gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" /> refresh
+        </button>
+      </div>
+      {plans.map((p) => (
+        <PlanRow key={p.id} plan={p} onSaved={load} />
+      ))}
     </div>
   );
 }
@@ -455,6 +637,7 @@ export default function Admin() {
       </div>
 
       {tab === "integrations" && <IntegrationsTab />}
+      {tab === "plans" && <PlansTab />}
       {tab === "platform" && <PlatformTab />}
       {tab === "vat" && <VatTab />}
       {tab === "users" && <UsersTab />}

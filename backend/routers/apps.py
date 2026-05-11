@@ -374,6 +374,9 @@ async def list_apps(workspace_id: str, request: Request, project_id: str | None 
 async def create_app(payload: AppIn, request: Request, background: BackgroundTasks):
     user = await get_current_user(request)
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "developer"])
+    # Enforce the workspace's plan limit before we do any work.
+    from services.plans import assert_limit
+    await assert_limit(payload.workspace_id, "apps")
     db = get_db()
     repo = _validate_repo_url(payload.repo_url)
 
