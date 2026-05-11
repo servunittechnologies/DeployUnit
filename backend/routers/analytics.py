@@ -175,36 +175,49 @@ async def get_app_analytics_config(app_id: str, request: Request):
     site_id = await analytics_svc.ensure_site_id(app_id)
     cfg = await analytics_svc.get_config(app_id)
     fe = _public_base()
+    # Only attach Clarity tag to the snippet if the plan unlocks heatmaps
+    # AND the platform admin configured a Clarity project. White-label: we
+    # never call it "Clarity" in customer-facing strings — only the script
+    # URL leaks the host name (clarity.ms) which is unavoidable.
+    feats = _features(plan)
+    inject_clarity = bool(cfg.get("clarity_project_id") and feats.get("heatmaps"))
     snippet = (f'<script defer data-site="{site_id}" '
                f'data-endpoint="{fe}/api/analytics/collect"'
-               + (f' data-clarity="{cfg["clarity_project_id"]}"' if cfg.get("clarity_project_id") else "")
+               + (f' data-clarity="{cfg["clarity_project_id"]}"' if inject_clarity else "")
                + f' src="{fe}/api/analytics/tracker.js"></script>')
+    # Pre-filtered Clarity deeplink scoped to this app's primary host —
+    # useful for the platform admin (or anyone with Clarity access).
+    clarity_deeplink = None
+    if inject_clarity and app.get("primary_url"):
+        from urllib.parse import urlparse, quote
+        host = urlparse(app["primary_url"]).hostname or ""
+        if host:
+            clarity_deeplink = (
+                f"https://clarity.microsoft.com/projects/view/{cfg['clarity_project_id']}"
+                f"/dashboard?filters=URL+contains+{quote(host)}"
+            )
     return {
         "site_id": site_id,
-        "clarity_project_id": cfg.get("clarity_project_id"),
+        "heatmaps_active": inject_clarity,
+        "platform_clarity_configured": cfg.get("platform_clarity_configured", False),
+        "clarity_deeplink": clarity_deeplink,
         "auto_inject_enabled": cfg.get("auto_inject_enabled", False),
         "snippet": snippet,
         "tracker_url": f"{fe}/api/analytics/tracker.js",
         "collect_url": f"{fe}/api/analytics/collect",
         "primary_url": app.get("primary_url"),
-        "features": _features(plan),
+        "features": feats,
         "plan_id": (plan or {}).get("id"),
     }
 
 
 class AnalyticsConfigIn(BaseModel):
-    clarity_project_id: Optional[str] = None
     auto_inject_enabled: Optional[bool] = None
 
 
 @router.put("/apps/{app_id}/web-analytics/config")
 async def put_app_analytics_config(app_id: str, payload: AnalyticsConfigIn, request: Request):
-    _, _, _, plan = await _load_app(app_id, request)
-    feats = _features(plan)
-    if payload.clarity_project_id is not None:
-        if payload.clarity_project_id and not feats.get("heatmaps"):
-            raise HTTPException(status_code=402, detail="Heatmaps require the Agency plan.")
-        await analytics_svc.set_clarity_project(app_id, payload.clarity_project_id)
+    await _load_app(app_id, request)
     if payload.auto_inject_enabled is not None:
         await analytics_svc.set_auto_inject(app_id, payload.auto_inject_enabled)
     return await get_app_analytics_config(app_id, request)

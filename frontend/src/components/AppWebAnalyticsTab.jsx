@@ -394,65 +394,75 @@ function SpeedPane({ appId, features }) {
 }
 
 // ─────────────────────── Heatmaps ───────────────────────
-function HeatmapsPane({ appId, features, config, refreshConfig }) {
-  const [pid, setPid] = useState(config?.clarity_project_id || "");
-  const [saving, setSaving] = useState(false);
-  useEffect(() => setPid(config?.clarity_project_id || ""), [config?.clarity_project_id]);
+function HeatmapsPane({ features, config }) {
+  if (!features?.heatmaps) return <PlanLockNotice requiredPlan="Pro" label="Heatmaps" />;
 
-  if (!features?.heatmaps) return <PlanLockNotice requiredPlan="Agency" label="Heatmaps" />;
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await api.put(`/apps/${appId}/web-analytics/config`, { clarity_project_id: pid || null });
-      toast.success("Clarity project saved — reinstall tracker snippet to activate.");
-      await refreshConfig();
-    } catch (e) { toast.error(getApiErrorMessage(e)); }
-    finally { setSaving(false); }
-  };
+  const active = !!config?.heatmaps_active;
+  const platformReady = !!config?.platform_clarity_configured;
 
   return (
     <div className="space-y-6" data-testid="analytics-heatmaps">
       <div className="border border-white/[0.06] p-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Activity className="h-4 w-4 text-brand" />
-          <div className="font-display text-lg">Microsoft Clarity heatmaps</div>
-        </div>
-        <div className="text-sm text-zinc-400 max-w-2xl">
-          Free, unlimited heatmaps, session recordings and dead-click reports — powered by Microsoft Clarity.
-          GDPR-friendly: Clarity anonymises IPs and respects Do-Not-Track. We auto-inject the Clarity loader
-          alongside our pageview tracker once you paste the project ID below.
-        </div>
-        <div className="mt-5 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1.5 block">Clarity project ID</label>
-            <input
-              type="text" value={pid} onChange={(e) => setPid(e.target.value)}
-              placeholder="abcdef1234"
-              className="w-full bg-black/40 border border-white/[0.08] focus:border-brand outline-none px-3 py-2 text-sm font-mono text-zinc-200"
-              data-testid="clarity-project-input"
-            />
-            <div className="text-[10px] font-mono text-zinc-500 mt-1.5">
-              Get yours free at clarity.microsoft.com → new project → copy the ID from the install script.
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="h-4 w-4 text-brand" />
+              <div className="font-display text-lg">Heatmaps & session recordings</div>
+              {active && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.25em] bg-signal-success/10 text-signal-success border border-signal-success/30">
+                  <span className="h-1.5 w-1.5 bg-signal-success rounded-full animate-pulse" /> active
+                </span>
+              )}
+            </div>
+            <div className="text-sm text-zinc-400 max-w-2xl">
+              See exactly where visitors click, how far they scroll, and replay real session recordings.
+              Recordings are anonymous, GDPR-friendly, and start the moment your tracker is live — no setup required from your side.
             </div>
           </div>
-          <button onClick={save} disabled={saving}
-            className="px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90 disabled:opacity-50"
-            data-testid="clarity-save">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin inline" /> : "Save"}
-          </button>
         </div>
-        {config?.clarity_project_id && (
-          <div className="mt-4">
-            <a
-              href={`https://clarity.microsoft.com/projects/view/${config.clarity_project_id}/dashboard`}
-              target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 text-brand text-sm hover:underline"
-              data-testid="clarity-open-dashboard"
-            >
-              Open Clarity dashboard ↗
-            </a>
+
+        {!platformReady ? (
+          <div className="mt-6 bg-signal-queued/10 border border-signal-queued/30 p-4 text-sm" data-testid="heatmaps-not-configured">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-1">
+              ⚠ heatmaps not yet enabled on this platform
+            </div>
+            <div className="text-zinc-400">
+              The platform administrator hasn't completed the one-time setup yet. Reach out — once they enable it,
+              heatmaps light up automatically on every Pro+ app, including this one.
+            </div>
           </div>
+        ) : !active ? (
+          <div className="mt-6 bg-elevated/40 border border-white/[0.06] p-4 text-sm" data-testid="heatmaps-not-active">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">// status</div>
+            <div className="text-zinc-400">
+              Heatmaps are enabled platform-wide but this app's tracker hasn't reported yet. Visit the Setup tab,
+              copy the snippet, paste it into your <code className="bg-black/40 px-1.5">&lt;head&gt;</code> and redeploy.
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <KPI label="Status" value="Recording" hint="auto-injected via DeployHub" />
+              <KPI label="Privacy" value="Anonymized" hint="IPs masked · GDPR friendly" />
+              <KPI label="Retention" value="30 days" hint="rolling window" />
+            </div>
+            {config?.clarity_deeplink && (
+              <div className="mt-6">
+                <a
+                  href={config.clarity_deeplink}
+                  target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90"
+                  data-testid="heatmaps-open-dashboard"
+                >
+                  Open recordings dashboard ↗
+                </a>
+                <div className="mt-2 text-[11px] font-mono text-zinc-500">
+                  Pre-filtered to this app's host. Access is managed by your platform administrator —
+                  reach out if you'd like a viewer login.
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -574,7 +584,7 @@ export default function AppWebAnalyticsTab({ appId }) {
 
       {sub === "visitors" && <VisitorsPane appId={appId} />}
       {sub === "speed" && <SpeedPane appId={appId} features={features} />}
-      {sub === "heatmaps" && <HeatmapsPane appId={appId} features={features} config={config} refreshConfig={refreshConfig} />}
+      {sub === "heatmaps" && <HeatmapsPane features={features} config={config} />}
       {sub === "setup" && <SetupPane appId={appId} config={config} refreshConfig={refreshConfig} />}
     </div>
   );

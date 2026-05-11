@@ -120,6 +120,7 @@ function IntegrationsTab() {
 
       <MetricsAgentSection />
 
+      <HeatmapsIntegrationSection />
 
       <Section
         title="Mollie (payments)"
@@ -457,6 +458,101 @@ function MetricsAgentSection() {
         >
           <Key className="h-4 w-4" /> {info.configured ? "Rotate key" : "Generate key"}
         </button>
+      </div>
+    </Section>
+  );
+}
+
+
+/* ─────────────────────── Heatmaps integration ─────────────────────── */
+function HeatmapsIntegrationSection() {
+  const [pid, setPid] = useState("");
+  const [saved, setSaved] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const r = await api.get("/admin/platform-settings");
+      setPid(r.data?.clarity_project_id || "");
+      setSaved(r.data?.clarity_project_id || "");
+    } catch { /* admin-only */ }
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put("/admin/platform-settings", { clarity_project_id: pid.trim() || "" });
+      setSaved(pid.trim());
+      toast.success(pid.trim() ? "Heatmaps enabled platform-wide." : "Heatmaps disabled.");
+    } catch (e) { toast.error(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const ok = !!saved;
+  return (
+    <Section
+      title="Heatmaps & session recordings"
+      description="One platform-wide recording engine — auto-injected on every Pro+ app. Customers get heatmaps without any setup on their side."
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono mb-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
+          {ok ? (
+            <StatusPill ok={true} label="active · auto-injected" />
+          ) : (
+            <StatusPill ok={false} label="not configured" />
+          )}
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">scope</div>
+          <div className="text-zinc-300">All Pro + Agency apps</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">cost</div>
+          <div className="text-zinc-300">Free · unlimited</div>
+        </div>
+      </div>
+
+      <div className="bg-elevated/30 border border-white/[0.06] p-4 space-y-3" data-testid="heatmaps-admin-config">
+        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
+          // microsoft clarity project id
+        </div>
+        <div className="text-xs text-zinc-400">
+          1) Create a free project on{" "}
+          <a href="https://clarity.microsoft.com/" target="_blank" rel="noreferrer" className="text-brand hover:underline">clarity.microsoft.com</a>{" "}
+          → 2) copy the 10-char project ID from "Setup" → 3) paste below.
+          We auto-inject the recording tag in every Pro+ app from that point on. Leave empty to disable heatmaps platform-wide.
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={pid}
+            onChange={(e) => setPid(e.target.value)}
+            placeholder="e.g. p9a3kx2lm0"
+            className="flex-1 bg-black/40 border border-white/[0.08] focus:border-brand outline-none px-3 py-2 text-sm font-mono text-zinc-200"
+            data-testid="heatmaps-clarity-input"
+          />
+          <button
+            onClick={save}
+            disabled={saving || pid.trim() === saved}
+            className="px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90 disabled:opacity-40 inline-flex items-center gap-2"
+            data-testid="heatmaps-clarity-save"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {pid.trim() === saved && saved ? "saved" : "save"}
+          </button>
+        </div>
+        {ok && (
+          <a
+            href={`https://clarity.microsoft.com/projects/view/${saved}/dashboard`}
+            target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-mono text-brand hover:underline"
+            data-testid="heatmaps-admin-open"
+          >
+            Open platform dashboard ↗
+          </a>
+        )}
       </div>
     </Section>
   );

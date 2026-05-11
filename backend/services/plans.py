@@ -97,7 +97,7 @@ DEFAULT_PLANS = [
         "active": True,
         "fleet_view": False,
         "support_sla_hours": 24,
-        "features_block": {"pageviews": True, "pagespeed": True, "heatmaps": False},
+        "features_block": {"pageviews": True, "pagespeed": True, "heatmaps": True},
     },
     {
         "id": "agency",
@@ -155,6 +155,19 @@ async def seed_default_plans() -> None:
                 {"$set": {"features_block": plan["features_block"]}},
             )
             logger.info("backfilled features_block on plan: %s", plan["id"])
+            continue
+        # Keep features_block in sync with shipped defaults so newly-released
+        # features (e.g. heatmaps for Pro) light up automatically — but never
+        # downgrade a plan that's been manually edited to enable MORE features.
+        cur_fb = existing.get("features_block") or {}
+        target_fb = plan.get("features_block") or {}
+        merged = {**target_fb, **{k: v for k, v in cur_fb.items() if v}}
+        if merged != cur_fb:
+            await db.platform_plans.update_one(
+                {"id": plan["id"]},
+                {"$set": {"features_block": merged}},
+            )
+            logger.info("expanded features_block on plan %s: %s", plan["id"], merged)
 
 
 async def list_plans(*, only_active: bool = True) -> list[dict]:

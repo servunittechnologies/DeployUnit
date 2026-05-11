@@ -185,7 +185,17 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
   - **Tests**: 14/14 new Iter8 backend assertions green. Full suite 77/78. Report at `/app/test_reports/iteration_8.json`.
 
-- **2026-05-11 — Web Analytics: PageSpeed + Visitors + Heatmaps**
+- **2026-05-11 — Heatmaps: zero-setup voor klanten (platform-wide Clarity)**
+  - **What**: Platform admin enters **one** Microsoft Clarity project id in Admin → Integrations → "Heatmaps & session recordings". From that moment on, the Clarity recording tag auto-injects on every Pro+ app, completely white-label, without the customer touching a single setting.
+  - **Plan availability widened**: Heatmaps now unlock at **Pro** (previously Agency-only) — no per-customer cost since Clarity is free + unlimited and shares one platform project.
+  - **Backend**: `platform_settings.clarity_project_id` added to `PlatformSettingsUpdate` (no encryption needed — public id). `services/analytics.get_config` now pulls the platform-level id instead of per-app. `app_analytics_config.clarity_project_id` is no longer surfaced or settable from the customer-facing PUT.
+  - **Plan seed sync**: `seed_default_plans` now expands `features_block` on every boot — newly-shipped feature flags (like `heatmaps: True` on Pro) light up on existing platforms transparently without overwriting admin overrides.
+  - **Frontend**: new `HeatmapsIntegrationSection` on Admin (status pill + project id field + save + open dashboard ↗). `HeatmapsPane` in customer app-detail refactored: removed Clarity input field, shows 3 states — (1) "not yet enabled on this platform" warning, (2) "tracker not yet reporting" hint with Setup-tab link, (3) "Recording active" with privacy/retention KPIs + pre-filtered "Open recordings dashboard ↗" deeplink. The word "Clarity" no longer appears anywhere in customer-facing copy.
+  - **Auto deep-link filter**: When admin → opens a customer app's heatmap, the link goes directly to `clarity.microsoft.com/projects/view/{id}/dashboard?filters=URL+contains+{host}` — scoped to that app's primary host.
+  - **E2E verified**: Admin PUT platform settings → customer GET web-analytics/config returns `heatmaps_active=true` + `clarity_deeplink`, snippet includes `data-clarity` attribute automatically.
+
+
+- **2026-05-11 — Web Analytics: PageSpeed + Visitors (initial cut)**
   - **Google PageSpeed Insights** integration (free tier, API key in `.env`): mobile + desktop audits with Performance / Accessibility / Best Practices / SEO scores, Core Web Vitals (LCP/FCP/CLS/TBT/TTFB lab + field p75 from CrUX), 30-day score trend.
   - **Self-hosted, cookieless pageview tracking**: tiny `~1 KB` `/api/analytics/tracker.js` auto-tracks initial pageview + SPA navigation (pushState/replaceState/popstate hooks) + outbound clicks via `sendBeacon`. Cookie-free visitor identity via `sha256(ip+ua+site+utc_day)` that rotates daily; country from `cf-ipcountry` / `x-vercel-ip-country` edge headers; bot filtering via UA regex.
   - **Microsoft Clarity heatmaps**: Clarity project-id field, auto-loads Clarity tag alongside our pageview tracker via the same `<script>`. Agency plan only.

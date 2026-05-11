@@ -90,9 +90,15 @@ async def ensure_site_id(app_id: str) -> str:
 async def get_config(app_id: str) -> dict:
     db = get_db()
     cfg = await db.app_analytics_config.find_one({"app_id": app_id}, {"_id": 0}) or {}
+    # Platform-wide Clarity project id — set once in Admin → Integrations.
+    # Auto-injected on every Pro+ app so customers get heatmaps zero-setup.
+    ps = await db.platform_settings.find_one({"id": "platform-singleton"},
+                                              {"_id": 0, "clarity_project_id": 1}) or {}
+    platform_clarity = (ps.get("clarity_project_id") or "").strip() or None
     return {
         "site_id": cfg.get("site_id"),
-        "clarity_project_id": cfg.get("clarity_project_id"),
+        "clarity_project_id": platform_clarity,
+        "platform_clarity_configured": bool(platform_clarity),
         "auto_inject_enabled": bool(cfg.get("auto_inject_enabled", False)),
         "created_at": cfg.get("created_at"),
     }
