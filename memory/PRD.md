@@ -63,20 +63,23 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Resource usage alerts (CPU / RAM / bandwidth limits hitting plan ceilings).
 
 ## P2 backlog
-- PR Preview Deploys (Vercel-style) — ephemeral apps per PR.
 - `.env.example` auto-import from GitHub repo on first deploy.
-- Cron/scheduled tasks management.
-- Postgres/Redis as-a-service.
-- Slack + Discord alert channels.
 - Multi-region deployment selection.
 - Coupon system on checkout.
-- Audit log.
 
 ## Test credentials
 - Admin: `admin@deployhub.dev` / `admin123`
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Sprint 5: 5 P2 features (Iter10, 31/31 GREEN after one-line fix)**
+  - **🔍 Audit log**: `services/audit.py` fire-and-forget logger + `routers/audit.py` workspace-scoped + platform-wide read APIs. Wired into auth.login, app.{create,delete}, cron.{create,update,delete}, database.{create,start,stop,delete,reveal_connection}. UI: new `/app/audit` page with action filter dropdown, cursor pagination, expandable meta JSON.
+  - **💬 Slack/Discord alert channels**: `clients/chat_webhooks.py` (Slack attachment + Discord embed, color-coded per event type); `services/notifications_sms.py` extended with slack/discord dispatch branches; `routers/notifications.py` adds `slack_webhook_url` / `discord_webhook_url` fields + URL prefix validation. Settings.jsx UI: matrix grows to events × 5 channels, 2 webhook URL inputs, Test Slack / Test Discord buttons. Fix toegepast post-test: `SUPPORTED_CHANNELS` is nu single source of truth in `notifications_sms.py`, available-channels iterator omvat alle 5 (was alleen sms/whatsapp/email — slack/discord skipped-no-url branch was onbereikbaar).
+  - **⏰ Cron tasks**: `routers/cron.py` CRUD op `db.cron_jobs` met 5-field cron regex validatie, best-effort sync naar Coolify scheduled-tasks API. Coolify client uitgebreid met `{list,create,update,delete}_scheduled_task`. UI: AppDetail → Settings krijgt "Scheduled jobs" sectie met inline create/edit form + cron expression hints.
+  - **🗄️ Postgres/Redis as-a-service**: `routers/databases.py` ondersteunt 5 engines (postgresql/redis/mysql/mariadb/mongodb), Coolify client uitgebreid met `{create,get,start,stop,delete}_database`. Connection strings Fernet-encrypted at rest, revealable via `/databases/{id}/reveal` (audit-logged). Nieuwe `/app/databases` pagina met type select, version field, status badges (provisioning/running/stopped), masked-reveal-copy flow.
+  - **🔀 PR Preview Deploys**: `services/pr_previews.py` + `routers/pr_previews.py`. GitHub webhook subscribet nu op `pull_request` events (push + pull_request). `opened|synchronize|reopened` → child ephemeral app op `{parent_slug}-pr-{number}.{zone}` (auto-subdomain geërfd), `is_pr_preview=true`. `closed` → child app + Cloudflare DNS + Coolify resources opgeruimd. AppDetail → Settings krijgt "PR Preview deploys" lijst met status badges + manual teardown.
+  - **Files touched**: nieuw — `services/{audit,pr_previews}.py`, `routers/{audit,cron,databases,pr_previews}.py`, `clients/chat_webhooks.py`, `pages/dashboard/{AuditLog,Databases}.jsx`. Aangepast — `server.py`, `services/notifications_sms.py`, `routers/{auth,apps,notifications,webhooks}.py`, `services/github_webhooks.py`, `clients/coolify.py`, `App.js`, `components/DashboardLayout.jsx`, `pages/dashboard/{Settings,AppDetail}.jsx`.
+
 - **2026-05-11 — White-label rebrand: WHMCS gone, Coolify hidden**
   - **WHMCS volledig verwijderd**: `clients/whmcs.py` deleted; imports + `whmcs.health()` weggehaald uit `routers/settings.py`; `GET /api/domains/whois` endpoint verwijderd uit `routers/domains.py`; tests bijgewerkt; Landing.jsx "No WHMCS screens" copy weggehaald.
   - **Coolify onzichtbaar voor eindgebruiker**:

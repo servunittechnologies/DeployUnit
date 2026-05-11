@@ -37,6 +37,10 @@ SUPPORTED_EVENT_TYPES = {
     "credits_low",
 }
 
+# Single source of truth for the channel list. Mirrored in
+# routers/notifications.py::get_prefs.supported_channels — keep in sync.
+SUPPORTED_CHANNELS = ("sms", "whatsapp", "email", "slack", "discord")
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -85,7 +89,7 @@ async def send_alert(
 
     # Effective channel list — if caller passed channels, intersect with prefs.
     available = []
-    for ch in ("sms", "whatsapp", "email"):
+    for ch in SUPPORTED_CHANNELS:
         if event_type in (pref_channels.get(ch) or []):
             if channels is None or ch in channels:
                 available.append(ch)
