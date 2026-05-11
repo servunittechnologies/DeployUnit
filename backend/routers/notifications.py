@@ -40,3 +40,73 @@ async def mark_all_read(workspace_id: str, request: Request):
         {"workspace_id": workspace_id, "read": False}, {"$set": {"read": True}}
     )
     return {"ok": True}
+
+
+
+# ─────────────────────── User notification preferences ───────────────────────
+from pydantic import BaseModel  # noqa: E402
+from services.notifications_sms import (  # noqa: E402
+    handle_twilio_status, send_alert, SUPPORTED_EVENT_TYPES,
+)
+
+
+class NotificationPrefsIn(BaseModel):
+    phone_e164: str | None = None
+    channels: dict  # {"sms": [...], "whatsapp": [...], "email": [...]}
+
+
+@router.get("/notifications/prefs")
+async def get_prefs(request: Request):
+    user = await get_current_user(request)
+    return {
+        "phone_e164": (user.get("notification_prefs") or {}).get("phone_e164"),
+        "channels": (user.get("notification_prefs") or {}).get("channels") or {},
+        "supported_events": sorted(list(SUPPORTED_EVENT_TYPES)),
+    }
+
+
+@router.put("/notifications/prefs")
+async def set_prefs(payload: NotificationPrefsIn, request: Request):
+    user = await get_current_user(request)
+    db = get_db()
+    phone = (payload.phone_e164 or "").strip()
+    if phone and not phone.startswith("+"):
+        raise HTTPException(status_code=400, detail="phone must be E.164 (start with +)")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"notification_prefs": {
+            "phone_e164": phone or None,
+            "channels": payload.channels or {},
+        }}},
+    )
+    return {"ok": True}
+
+
+class SendTestIn(BaseModel):
+    workspace_id: str
+    channel: str  # "sms" | "whatsapp"
+
+
+@router.post("/notifications/test")
+async def test_send(payload: SendTestIn, request: Request):
+    """Fire a one-shot test alert to the current user. Consumes credits."""
+    user = await get_current_user(request)
+    await require_workspace_member(payload.workspace_id, user)
+    results = await send_alert(
+        workspace_id=payload.workspace_id,
+        user=user,
+        event_type="deploy_succeeded",  # any whitelisted type works
+        title="DeployHub test",
+        body="If you got this, your notification channel works.",
+        channels=[payload.channel],
+    )
+    return {"results": results}
+
+
+@router.post("/notifications/twilio/status")
+async def twilio_status_webhook(request: Request):
+    """Twilio posts URL-encoded form data here on status changes."""
+    form = await request.form()
+    payload = {k: v for k, v in form.items()}
+    await handle_twilio_status(payload)
+    return {"ok": True}

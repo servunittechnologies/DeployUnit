@@ -347,6 +347,11 @@ function PlatformTab() {
     default_subdomain_target_ip: "",
     default_subdomain_target_host: "",
     company_country: "",
+    company_name: "",
+    company_address: "",
+    company_postcode: "",
+    company_city: "",
+    company_vat_id: "",
   });
 
   const load = async () => {
@@ -362,6 +367,11 @@ function PlatformTab() {
         default_subdomain_target_ip: r.data.default_subdomain_target_ip || "",
         default_subdomain_target_host: r.data.default_subdomain_target_host || "",
         company_country: r.data.company_country || "",
+        company_name: r.data.company_name || "",
+        company_address: r.data.company_address || "",
+        company_postcode: r.data.company_postcode || "",
+        company_city: r.data.company_city || "",
+        company_vat_id: r.data.company_vat_id || "",
       }));
     } finally {
       setLoading(false);
@@ -393,6 +403,65 @@ function PlatformTab() {
 
   return (
     <div className="space-y-4" data-testid="admin-platform">
+      <Section
+        title="Company identity (invoices + VAT)"
+        description="These details appear on every invoice and drive VAT logic. Home country determines domestic rate vs EU reverse-charge."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Field label="Company name">
+            <Input
+              value={form.company_name}
+              onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+              placeholder="ServUnit BV"
+              data-testid="admin-company-name"
+            />
+          </Field>
+          <Field label="Home country (ISO-2)" hint="e.g. NL, BE, DE — drives VAT logic">
+            <Input
+              value={form.company_country}
+              onChange={(e) => setForm({ ...form, company_country: e.target.value.toUpperCase() })}
+              placeholder="BE"
+              maxLength={2}
+              data-testid="admin-company-country"
+            />
+          </Field>
+          <Field label="Street address">
+            <Input
+              value={form.company_address}
+              onChange={(e) => setForm({ ...form, company_address: e.target.value })}
+              placeholder="Hemelshoek 235"
+              data-testid="admin-company-address"
+            />
+          </Field>
+          <Field label="Postcode + city">
+            <div className="grid grid-cols-3 gap-2">
+              <Input
+                className="col-span-1"
+                value={form.company_postcode}
+                onChange={(e) => setForm({ ...form, company_postcode: e.target.value })}
+                placeholder="2590"
+                data-testid="admin-company-postcode"
+              />
+              <Input
+                className="col-span-2"
+                value={form.company_city}
+                onChange={(e) => setForm({ ...form, company_city: e.target.value })}
+                placeholder="Berlaar"
+                data-testid="admin-company-city"
+              />
+            </div>
+          </Field>
+          <Field label="VAT ID" hint="Used for reverse-charge B2B">
+            <Input
+              value={form.company_vat_id}
+              onChange={(e) => setForm({ ...form, company_vat_id: e.target.value })}
+              placeholder="BE0779674221"
+              data-testid="admin-company-vat-id"
+            />
+          </Field>
+        </div>
+      </Section>
+
       <Section
         title="Default subdomain (Cloudflare)"
         description="Every new app automatically gets a subdomain like {slug}.yourzone.app. DeployHub creates the DNS A-record via Cloudflare on your behalf."
@@ -437,15 +506,6 @@ function PlatformTab() {
               onChange={(e) => setForm({ ...form, default_subdomain_target_host: e.target.value })}
               placeholder="server-1.deployhub.internal"
               data-testid="admin-target-host"
-            />
-          </Field>
-          <Field label="Company country (for VAT)" hint="ISO 2-letter code, e.g. NL, BE">
-            <Input
-              value={form.company_country}
-              onChange={(e) => setForm({ ...form, company_country: e.target.value.toUpperCase() })}
-              placeholder="NL"
-              maxLength={2}
-              data-testid="admin-company-country"
             />
           </Field>
         </div>

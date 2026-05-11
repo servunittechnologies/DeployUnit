@@ -36,7 +36,27 @@ COUNTRY_NAMES = {
 
 
 def home_country() -> str:
+    """Synchronous fallback — used by code paths that can't await. Reads only
+    from env. For accurate runtime resolution use `effective_home_country()`
+    which also checks `platform_settings` in MongoDB."""
     return (os.environ.get("COMPANY_COUNTRY") or "NL").upper()
+
+
+async def effective_home_country() -> str:
+    """Resolve the configured home country, preferring the admin-editable
+    `platform_settings.company_country` over the static env default."""
+    try:
+        from db import get_db
+        db = get_db()
+        doc = await db.platform_settings.find_one(
+            {"id": "platform-singleton"}, {"_id": 0, "company_country": 1}
+        )
+        cc = (doc or {}).get("company_country")
+        if cc:
+            return cc.upper()
+    except Exception:
+        pass
+    return home_country()
 
 
 def is_eu(country: str) -> bool:
@@ -109,10 +129,15 @@ async def validate_vies(vat_id: str) -> dict:
     }
 
 
-def compute_vat(*, country: str, is_business: bool, has_valid_vat_id: bool) -> dict:
-    """Return {rate: float, note: str, kind: home|domestic|b2b_reverse|b2c_destination|non_eu|unknown}."""
+def compute_vat(*, country: str, is_business: bool, has_valid_vat_id: bool, home_cc: str | None = None) -> dict:
+    """Return {rate: float, note: str, kind: home|domestic|b2b_reverse|b2c_destination|non_eu|unknown}.
+
+    `home_cc` (ISO 2-letter) overrides the env default. Pass the result of
+    `await effective_home_country()` so admin-edited platform settings are
+    respected.
+    """
     cc = (country or "").upper()
-    home = home_country()
+    home = (home_cc or home_country()).upper()
 
     if not cc:
         return {"rate": EU_VAT_RATES.get(home, 21.0), "note": f"{home} VAT (default)", "kind": "home"}

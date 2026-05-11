@@ -23,8 +23,9 @@ from models import BillingProfileIn, CheckoutIn
 from clients.mollie import mollie, MollieError
 from services.vat import (
     compute_vat, compute_totals, validate_vies, EU_VAT_RATES, COUNTRY_NAMES, is_eu,
+    effective_home_country,
 )
-from services.invoice import render_invoice_pdf, file_path_for
+from services.invoice import render_invoice_pdf, file_path_for, effective_company
 from services.plans import list_plans as plans_list, get_plan as plans_get
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ async def upsert_profile(workspace_id: str, payload: BillingProfileIn, request: 
         country=payload.country,
         is_business=payload.is_business,
         has_valid_vat_id=bool(vat_id_valid),
+        home_cc=await effective_home_country(),
     )
 
     doc = {
@@ -193,6 +195,7 @@ async def checkout(payload: CheckoutIn, request: Request):
         country=profile.get("country", ""),
         is_business=bool(profile.get("is_business")),
         has_valid_vat_id=bool(profile.get("vat_id_valid")),
+        home_cc=await effective_home_country(),
     )
     totals = compute_totals(subtotal=float(plan["price"]), vat_rate=vat["rate"])
 
@@ -351,6 +354,7 @@ async def _generate_invoice_for_payment(db, payment_row: dict):
         payment_method=payment_row.get("method"),
         mollie_payment_id=payment_row["mollie_payment_id"],
         status="paid",
+        company=await effective_company(),
     )
     doc = {
         "id": str(uuid.uuid4()),
@@ -543,6 +547,7 @@ async def mollie_webhook(request: Request):
             country=profile.get("country", ""),
             is_business=bool(profile.get("is_business")),
             has_valid_vat_id=bool(profile.get("vat_id_valid")),
+            home_cc=await effective_home_country(),
         )
         subtotal = effective_subtotal
         totals = compute_totals(subtotal=subtotal, vat_rate=vat["rate"])

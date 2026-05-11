@@ -8,7 +8,7 @@ import uuid
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://nextjs-hosting-2.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://agency-fleet.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 DEMO_EMAIL = "demo@deployhub.dev"
@@ -762,7 +762,7 @@ class TestBilling:
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["vat_rate_applied"] == 21.0
-        assert "NL" in d["vat_note"]
+        assert ("NL" in d["vat_note"]) or ("Netherlands" in d["vat_note"])
 
         g = demo_session.get(f"{API}/billing/profile",
                              params={"workspace_id": demo_workspace_id}, timeout=10)

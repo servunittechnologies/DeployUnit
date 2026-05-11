@@ -19,7 +19,7 @@ from auth_utils import get_current_user
 from crypto_utils import encrypt_token, decrypt_token
 from clients.coolify import coolify
 from clients.mollie import mollie
-from services.vat import validate_vies, EU_VAT_RATES, home_country
+from services.vat import validate_vies, EU_VAT_RATES, home_country, effective_home_country
 from services.plans import (
     list_plans as plans_list,
     get_plan as plans_get,
@@ -89,7 +89,7 @@ async def integrations(request: Request):
         "coolify": cool,
         "mollie": moll,
         "github_oauth": gh,
-        "company_country": home_country(),
+        "company_country": await effective_home_country(),
         "eu_vat_countries": len(EU_VAT_RATES),
     }
 
@@ -108,7 +108,20 @@ class PlatformSettingsUpdate(BaseModel):
     default_subdomain_target_ip: str | None = None  # A-record target (Coolify server IP)
     default_subdomain_target_host: str | None = None  # optional CNAME target
     company_country: str | None = None
+    company_name: str | None = None
+    company_address: str | None = None
+    company_postcode: str | None = None
+    company_city: str | None = None
+    company_vat_id: str | None = None
     invoice_series_prefix: str | None = None  # e.g. "2026"
+    # Twilio (SMS + WhatsApp). The auth token is encrypted at rest.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None       # plaintext from form; "" → clear
+    twilio_messaging_service_sid: str | None = None
+    twilio_from_number: str | None = None      # E.164 fallback when no MSG service
+    twilio_whatsapp_from: str | None = None    # e.g. "whatsapp:+14155238886"
+    twilio_status_callback: str | None = None  # webhook URL for delivery status
+    twilio_test_mode: bool | None = None
 
 
 @router.put("/admin/platform-settings")

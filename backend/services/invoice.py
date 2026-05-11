@@ -27,6 +27,33 @@ def _company() -> dict:
     }
 
 
+async def effective_company() -> dict:
+    """Company identity for invoices. Admin-edited platform_settings override
+    the static env defaults so the agency can rebrand without redeploys."""
+    fallback = _company()
+    try:
+        from db import get_db
+        db = get_db()
+        doc = await db.platform_settings.find_one(
+            {"id": "platform-singleton"}, {"_id": 0}
+        ) or {}
+        mapping = {
+            "name": "company_name",
+            "address": "company_address",
+            "postcode": "company_postcode",
+            "city": "company_city",
+            "country": "company_country",
+            "vat_id": "company_vat_id",
+        }
+        for k, db_key in mapping.items():
+            v = doc.get(db_key)
+            if v:
+                fallback[k] = v
+    except Exception:
+        pass
+    return fallback
+
+
 def file_path_for(invoice_number: str) -> str:
     return os.path.join(_storage_path(), f"{invoice_number.replace('/', '-')}.pdf")
 
@@ -47,12 +74,14 @@ def render_invoice_pdf(
     payment_method: Optional[str] = None,
     mollie_payment_id: Optional[str] = None,
     status: str = "paid",
+    company: Optional[dict] = None,
 ) -> str:
-    """Generate the invoice PDF and return its absolute file path."""
+    """Generate the invoice PDF and return its absolute file path. Accepts
+    an optional `company` dict; falls back to env-based `_company()`."""
     invoice_date = invoice_date or datetime.now(timezone.utc)
     due_date = due_date or (invoice_date + timedelta(days=30))
 
-    company = _company()
+    company = (company or _company())
     path = file_path_for(invoice_number)
 
     doc = SimpleDocTemplate(

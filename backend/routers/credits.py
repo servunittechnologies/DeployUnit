@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from clients.mollie import mollie, MollieError
-from services.vat import compute_vat, compute_totals
+from services.vat import compute_vat, compute_totals, effective_home_country
 from services.credits import (
     get_balance, list_transactions, grant_credits, CREDIT_PACKS, get_pack,
 )
@@ -72,10 +72,11 @@ async def credits_checkout(payload: CreditCheckoutIn, request: Request):
         country=profile.get("country", ""),
         is_business=bool(profile.get("is_business")),
         has_valid_vat_id=bool(profile.get("vat_id_valid")),
+        home_cc=await effective_home_country(),
     )
     totals = compute_totals(subtotal=pack["price_eur"], vat_rate=vat["rate"])
 
-    redirect = os.environ.get("FRONTEND_URL", "https://nextjs-hosting-2.preview.emergentagent.com").rstrip("/")
+    redirect = os.environ.get("FRONTEND_URL", "https://agency-fleet.preview.emergentagent.com").rstrip("/")
     webhook = (os.environ.get("MOLLIE_WEBHOOK_URL") or
                f"{os.environ.get('BACKEND_PUBLIC_URL', redirect)}/api/billing/mollie/webhook")
     try:
