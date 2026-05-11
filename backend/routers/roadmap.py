@@ -29,7 +29,7 @@ KNOWN_FEATURES = {
     "visualdiff": "Visual deploy diffs",
     "api":        "Developers API",
     # Business tools
-    "reports":    "White-label client reports",
+    "reports":    "Branded client reports",
     # Infrastructure
     "mailserver": "Mailserver hosting",
     "dns":        "DNS Manager",

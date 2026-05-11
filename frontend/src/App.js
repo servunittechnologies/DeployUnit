@@ -29,6 +29,9 @@ import AuditLog from "./pages/dashboard/AuditLog";
 import Databases from "./pages/dashboard/Databases";
 import Roadmap from "./pages/dashboard/Roadmap";
 import Status from "./pages/Status";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Support from "./pages/Support";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -46,6 +49,9 @@ function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/status" element={<Status />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/support" element={<Support />} />
               <Route
                 path="/checkout"
                 element={

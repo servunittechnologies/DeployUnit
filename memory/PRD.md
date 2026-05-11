@@ -183,7 +183,20 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **2026-05-11 — Public status page + 60s background ping system**
+  - **2026-05-11 — About / Contact / Support pages + drop "white-label" claim**
+  - **3 new marketing pages** live at `/about`, `/contact`, `/support`. All wrap a shared `<MarketingLayout>` with synced `MarketingNav` (Features · Compare · About · Pricing · Support · Contact · Login) and 3-column footer (Product · Resources · Company) — links between pages now navigate consistently.
+  - **About** (`pages/About.jsx`): hero "Built by people who ship for a living", 4-stat strip (EU · 70%+ renewable · 240+ agencies · 99.99% uptime), 4-value grid (EU-first · Sustainability as a metric · Built for agencies · Boringly transparent), founding-timeline rail (`#sustainability` deep-anchor still works from old footer links), Team Trees commitment block, dual-CTA bottom.
+  - **Contact** (`pages/Contact.jsx`): hero "Talk to a human. Quickly.", left column = 4 contact tiles (email · ServUnit Technologies BV office · EU regions · phone) + green response-time pill (`~4h sales · ≤24h support`), right column = full form with 5 message-kind pills (General / Sales / Support / Partnership / Press), name + email + company + subject + 5-row message textarea, submits to `POST /api/contact`. Success state replaces the form with a confirmation tile.
+  - **Support** (`pages/Support.jsx`): hero "How can we help?", live FAQ search box (filters in-page), 6 topic cards (Getting started · Deploys & builds · Domains & DNS · Billing & credits · Security & teams · Troubleshooting), 8-item accordion FAQ, 3 quick-links (Status · Email · About), bottom "Open a ticket" CTA strip linking to /contact.
+  - **Backend `/api/contact`** added in `routers/contact.py`: public POST with name + email + company + kind + subject + message, IP-rate-limited (5/hour), saved to `contact_messages` collection with `status="new"`, source IP, UA, optional `user_id` if logged in. Admin-only `GET /api/admin/contact` returns the inbox. E2E verified — returns `{"ok": true, "id": ...}` on valid submission.
+  - **All customer-facing "white-label" wording removed**:
+    - Hero body copy: `Zero config, full white-label, EU-hosted` → `Zero config, fully managed, EU-hosted`
+    - Hero pill: `100% white-label` → `first-party data`
+    - Comparison-table row: `100% white-label` → `Agency-grade multi-tenant`
+    - Roadmap feature name: `White-label client reports` → `Branded client reports` (both in `Landing.jsx` roadmap teaser, `pages/dashboard/Roadmap.jsx`, and `routers/roadmap.py` `KNOWN_FEATURES`)
+  - **Note on internals**: `services/whitelabel.py` (Coolify log sanitizer) is intentionally **kept** — it's an internal scrubber that strips Coolify/WHMCS/Twilio mentions from API responses + logs before they reach customer UIs. The filename is internal; nothing of it is user-visible.
+
+
   - **New `/status` route** — fully public (no auth), auto-refreshes every 30 seconds in the browser. Live at the same domain (no separate subdomain yet) and linked from the landing-page footer under "Resources".
   - **Background ping orchestrator**: APScheduler `status_ping_tick` runs every 60s, concurrently pings all 10 components via `asyncio.gather`, persists `status_pings` rows (component_id, ts, day, ok, latency_ms, error). 95-day retention with auto-GC.
   - **10 components monitored** in 3 groups:

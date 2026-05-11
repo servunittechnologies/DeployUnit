@@ -59,7 +59,7 @@ const FEATURES = [
   // Business tools
   {
     id: "reports", category: "business",
-    title: "White-label client reports",
+    title: "Branded client reports",
     tagline: "Auto-emailed PDF reports per app: uptime, performance, traffic — branded as you.",
     icon: FileText,
     bullets: ["Monthly auto-PDF", "Your logo & colors", "Per-app + per-customer"],

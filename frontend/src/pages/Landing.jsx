@@ -91,8 +91,10 @@ function Nav() {
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <a href="#features" className="text-zinc-300 hover:text-white" data-testid="nav-features">Features</a>
           <a href="#compare" className="text-zinc-300 hover:text-white" data-testid="nav-compare">Compare</a>
-          <a href="#green" className="text-zinc-300 hover:text-white" data-testid="nav-green">Green</a>
+          <Link to="/about" className="text-zinc-300 hover:text-white" data-testid="nav-about">About</Link>
           <Link to="/pricing" className="text-zinc-300 hover:text-white" data-testid="nav-pricing">Pricing</Link>
+          <Link to="/support" className="text-zinc-300 hover:text-white" data-testid="nav-support">Support</Link>
+          <Link to="/contact" className="text-zinc-300 hover:text-white" data-testid="nav-contact">Contact</Link>
           <Link to="/login" className="text-zinc-300 hover:text-white" data-testid="nav-login">Log in</Link>
         </nav>
         <PrimaryBtn to="/register" testId="nav-cta" className="text-sm px-4 py-2">Deploy now</PrimaryBtn>
@@ -170,7 +172,7 @@ function Hero() {
           <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
             The all-in-one PaaS built for agencies and modern teams.
             Push to Git → live URL, container metrics, analytics and
-            uptime alerts. Zero config, full white-label, EU-hosted.
+            uptime alerts. Zero config, fully managed, EU-hosted.
           </motion.p>
           <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
             <PrimaryBtn to="/register" testId="hero-cta-primary">Start deploying</PrimaryBtn>
@@ -180,7 +182,7 @@ function Hero() {
             <span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> EU-hosted</span>
             <span className="inline-flex items-center gap-1.5"><Leaf className="h-3 w-3 text-emerald-400" /> green energy</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3 w-3" /> GDPR ready</span>
-            <span className="inline-flex items-center gap-1.5"><Eye className="h-3 w-3" /> 100% white-label</span>
+            <span className="inline-flex items-center gap-1.5"><Eye className="h-3 w-3" /> first-party data</span>
           </motion.div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
@@ -1047,7 +1049,7 @@ function Compare() {
     { f: "EU data residency",         dh: true, vc: false, rd: "partial", coolify: "self-host" },
     { f: "Included container metrics", dh: true, vc: false, rd: "partial", coolify: false },
     { f: "Built-in web analytics",     dh: true, vc: false, rd: false,     coolify: false },
-    { f: "100% white-label",           dh: true, vc: false, rd: false,     coolify: "DIY" },
+    { f: "Agency-grade multi-tenant",   dh: true, vc: false, rd: false,     coolify: false },
     { f: "Agency multi-tenant",        dh: true, vc: false, rd: false,     coolify: false },
     { f: "Green energy by default",    dh: true, vc: false, rd: false,     coolify: "self-host" },
     { f: "Credit-based pricing",       dh: true, vc: false, rd: false,     coolify: false },
@@ -1292,7 +1294,7 @@ function Roadmap() {
     { icon: GitBranch, title: "Database branching",               cat: "DX" },
     { icon: Bot,      title: "AI Code Co-pilot",                  cat: "DX" },
     { icon: Sparkles, title: "Visual deploy diffs",               cat: "DX" },
-    { icon: FileText, title: "White-label client reports",        cat: "Business" },
+    { icon: FileText, title: "Branded client reports",        cat: "Business" },
     { icon: Code2,    title: "Developers API",                    cat: "DX" },
     { icon: Mail,     title: "Mailserver hosting",                cat: "Infra" },
     { icon: Globe,    title: "DNS Manager",                       cat: "Infra" },
@@ -1421,9 +1423,9 @@ function Footer() {
             </div>
           </div>
           {[
-            { h: "Product", links: [["Features", "#features"], ["Compare", "#compare"], ["Pricing", "/pricing"], ["Roadmap", "/login"]] },
-            { h: "Resources", links: [["Docs", "#"], ["Status", "/status"], ["Blog", "#"], ["Changelog", "#"]] },
-            { h: "Company", links: [["About", "#"], ["Sustainability", "#green"], ["Privacy", "#"], ["Contact", "mailto:hello@deployhub.app"]] },
+            { h: "Product",   links: [["Features", "#features"], ["Compare", "#compare"], ["Pricing", "/pricing"], ["Roadmap", "/login"]] },
+            { h: "Resources", links: [["Support", "/support"], ["Status", "/status"], ["Changelog", "#"], ["Sustainability", "#green"]] },
+            { h: "Company",   links: [["About", "/about"], ["Contact", "/contact"], ["Privacy", "#"], ["Terms", "#"]] },
           ].map((c) => (
             <div key={c.h}>
               <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-500 mb-3">{c.h}</div>
