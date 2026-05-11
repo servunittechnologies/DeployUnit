@@ -34,7 +34,7 @@ const FAQ = [
   { q: "How long does my first deploy take?",
     a: "On average 41 seconds from a fresh GitHub repo. Auto-detection runs against your package.json / Dockerfile / requirements.txt and picks the right buildpack." },
   { q: "Where is my data stored?",
-    a: "Entirely inside the EU — eu-west, eu-central, or eu-north depending on the region you pick. We never replicate customer data outside the EU." },
+    a: "Entirely inside the EU. We never replicate customer data outside the EU." },
   { q: "Can I bring my own domain?",
     a: "Yes. Add it under Domains, point a CNAME or A record at the assigned address, and we issue a free Let's Encrypt certificate automatically." },
   { q: "What happens if I exceed my plan limits?",

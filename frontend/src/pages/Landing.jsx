@@ -110,7 +110,7 @@ function HeroTerminal() {
     { t: "$ deployhub deploy --repo servunit/web", c: "text-zinc-300" },
     { t: "→ Connected: GitHub (oauth · push verified)", c: "text-zinc-500" },
     { t: "→ Detected: Next.js 14 · App Router", c: "text-zinc-500" },
-    { t: "→ Buildpack: nixpacks · region eu-west", c: "text-zinc-500" },
+    { t: "→ Buildpack: nixpacks · region eu", c: "text-zinc-500" },
     { t: "→ Container up · 384 MB · 0.5 vCPU", c: "text-zinc-500" },
     { t: "→ Domain assigned: servunit.app · TLS issued", c: "text-emerald-400" },
     { t: "→ Live URL: https://servunit.app  ⏱  41 s", c: "text-cyan-400" },
@@ -711,7 +711,7 @@ function BuildPipelineMock() {
     { label: "QUEUED",    pct: 5,  hint: "git push received" },
     { label: "CLONING",   pct: 22, hint: "fetching servunit/web" },
     { label: "BUILDING",  pct: 58, hint: "nixpacks · 24/40 steps" },
-    { label: "DEPLOYING", pct: 88, hint: "rolling out · eu-west" },
+    { label: "DEPLOYING", pct: 88, hint: "rolling out · eu" },
     { label: "LIVE",      pct: 100, hint: "https://servunit.app" },
   ], []);
   const [i, setI] = useState(0);
@@ -1342,7 +1342,7 @@ function StatsTicker() {
     "1.2M deploys / month",
     "99.99% platform uptime",
     "47ms median response",
-    "EU eu-west · eu-central · eu-north",
+    "100% EU-hosted infrastructure",
     "14-day money back",
     "From €9/mo · all-inclusive",
     "Used by 240+ agencies",

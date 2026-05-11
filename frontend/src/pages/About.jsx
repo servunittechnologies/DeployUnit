@@ -44,7 +44,7 @@ const TIMELINE = [
   { year: "2022", title: "ServUnit Technologies BV",
     body: "Founded in Belgium. We start building the infrastructure layer — datacenters, dark-fiber network, and the operational tooling — that will eventually power three brands." },
   { year: "2023", title: "ServUnit launches",
-    body: <>Our enterprise hosting brand goes live at <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">servunit.com</a> — web hosting, domains, VPS, dedicated servers and colocation for developers, entrepreneurs and organisations, served from SmartDC Rotterdam over our own 40 Gbps+ network.</> },
+    body: <>Our enterprise hosting brand goes live at <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">servunit.com</a> — web hosting, domains, VPS, dedicated servers and colocation for developers, entrepreneurs and organisations, served from EU datacenters over our own 40 Gbps+ network.</> },
   { year: "2024", title: "GameUnit launches",
     body: <>We open a second front for gamers at <a href="https://gameunit.pro" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">gameunit.pro</a> — Minecraft, FiveM, ARK, Rust, Satisfactory and more, with 12 TB/s DDoS protection, instant delivery, and a control panel built for low-latency multiplayer.</> },
   { year: "2026", title: "DeployHub — new",

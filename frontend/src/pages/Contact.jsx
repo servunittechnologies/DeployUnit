@@ -57,7 +57,7 @@ const CONTACT = [
     icon: Building2,
     label: "Office",
     value: "ServUnit Technologies BV · Belgium",
-    hint: "Operating EU datacenters (NL · SmartDC Rotterdam)",
+    hint: "Operating EU datacenters",
     href: null,
     tag: null,
   },
