@@ -165,7 +165,7 @@ function Hero() {
             className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95] text-white"
           >
             Deploy anything.<br />
-            <span className="text-cyan-400">Faster.</span>
+            <span className="text-cyan-400">Faster.</span> <span className="text-emerald-400">Greener.</span>
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
             The all-in-one PaaS built for agencies and modern teams.
