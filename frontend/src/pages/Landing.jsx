@@ -165,13 +165,12 @@ function Hero() {
             className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95] text-white"
           >
             Deploy anything.<br />
-            <span className="text-cyan-400">Faster.</span> <span className="text-emerald-400">Greener.</span>
+            <span className="text-cyan-400">Faster.</span>
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
             The all-in-one PaaS built for agencies and modern teams.
             Push to Git → live URL, container metrics, analytics and
-            uptime alerts — on 70%+ renewable EU infrastructure, climbing daily.
-            Zero config, full white-label.
+            uptime alerts. Zero config, full white-label, EU-hosted.
           </motion.p>
           <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
             <PrimaryBtn to="/register" testId="hero-cta-primary">Start deploying</PrimaryBtn>
@@ -834,32 +833,17 @@ function GreenEnergy() {
       <Container>
         <div ref={ref} className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
           <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger}>
-            <motion.div variants={fadeUp}><Overline color="text-emerald-400">Sustainability · USP</Overline></motion.div>
+            <motion.div variants={fadeUp}><Overline color="text-emerald-400">Sustainability</Overline></motion.div>
             <motion.h2
               variants={fadeUp}
-              className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-none"
+              className="mt-4 font-display text-4xl md:text-5xl font-bold tracking-tighter text-white leading-none"
             >
-              <span className="text-emerald-400">70%+</span> green energy.<br />
-              Climbing every day.
+              Greener <span className="text-emerald-400">by design.</span>
             </motion.h2>
-            <motion.p variants={fadeUp} className="mt-5 text-base sm:text-lg text-zinc-300 max-w-xl">
-              Our EU datacenters already run on over 70% renewable wind & solar today —
-              and we invest every quarter to push that further. No carbon-offset accounting tricks,
-              just real renewable contracts and full transparency on the journey to 100%.
+            <motion.p variants={fadeUp} className="mt-5 text-base text-zinc-300 max-w-xl">
+              Our EU datacenters run mostly on renewable wind & solar — and we invest every quarter to push that further.
+              No carbon-offset accounting tricks, just real renewable contracts and full transparency on the journey.
             </motion.p>
-            <motion.div variants={fadeUp} className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { k: "70%+", v: "renewable today" },
-                { k: "↑", v: "climbing daily" },
-                { k: "EU", v: "datacenters only" },
-                { k: "ISO", v: "14001 partners" },
-              ].map((s) => (
-                <div key={s.v} className="border border-emerald-500/30 bg-black/40 p-4 text-center">
-                  <div className="font-display text-2xl text-emerald-400 font-bold">{s.k}</div>
-                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 mt-1">{s.v}</div>
-                </div>
-              ))}
-            </motion.div>
           </motion.div>
 
           <motion.div
@@ -999,7 +983,6 @@ function StatsTicker() {
     "1.2M deploys / month",
     "99.99% platform uptime",
     "47ms median response",
-    "0g CO₂ per build",
     "EU eu-west · eu-central · eu-north",
     "14-day money back",
     "From €9/mo · all-inclusive",
@@ -1073,7 +1056,7 @@ function Footer() {
             </p>
             <div className="mt-5 flex gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-emerald-500/30 text-emerald-400">
-                <Leaf className="h-3 w-3" /> 70%+ green
+                <Leaf className="h-3 w-3" /> green-powered
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-cyan-500/30 text-cyan-400">
                 <ShieldCheck className="h-3 w-3" /> GDPR
@@ -1103,7 +1086,7 @@ function Footer() {
         </div>
         <div className="mt-10 pt-6 border-t border-zinc-900 flex items-center justify-between flex-wrap gap-3 text-[11px] font-mono text-zinc-600">
           <span>© {new Date().getFullYear()} DeployHub. Crafted in the EU.</span>
-          <span>Built on wind & solar · Operated under GDPR · Hosted in eu-west, eu-central, eu-north.</span>
+          <span>Operated under GDPR · Hosted in the EU.</span>
         </div>
       </Container>
     </footer>
