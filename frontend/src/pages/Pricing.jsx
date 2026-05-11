@@ -155,7 +155,7 @@ export default function Pricing() {
       <footer className="border-t border-white/[0.06] py-8">
         <div className="max-w-[1400px] mx-auto px-6 flex items-center justify-between text-xs font-mono text-zinc-500">
           <Logo small />
-          <div>© {new Date().getFullYear()} DeployHub · Built on Coolify · Powered by Mollie</div>
+          <div>© {new Date().getFullYear()} DeployHub · Hosting for Next.js & Node</div>
         </div>
       </footer>
     </div>

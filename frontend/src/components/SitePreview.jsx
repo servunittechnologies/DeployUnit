@@ -109,7 +109,7 @@ export default function SitePreview({ appId, monitoring }) {
             </div>
             <div className="text-xs text-zinc-500 mt-1 font-mono max-w-md">
               {isInsecureOrigin
-                ? "Your site is served over http:// but this dashboard is https://. Browsers block mixed-content iframes. Enable SSL on Coolify to embed it here."
+                ? "Your site is served over http:// but this dashboard is https://. Browsers block mixed-content iframes. Enable SSL for this app to embed it here."
                 : health?.framing_blocked
                   ? "X-Frame-Options / CSP frame-ancestors prevents embedding."
                   : "Site is unreachable or blocked iframing."}

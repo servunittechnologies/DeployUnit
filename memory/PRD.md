@@ -79,12 +79,30 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
-- **2026-05-11 — Sprint 3 complete: Twilio SMS + WhatsApp notifications (Iter8)**
+- **2026-05-11 — White-label rebrand: WHMCS gone, Coolify hidden**
+  - **WHMCS volledig verwijderd**: `clients/whmcs.py` deleted; imports + `whmcs.health()` weggehaald uit `routers/settings.py`; `GET /api/domains/whois` endpoint verwijderd uit `routers/domains.py`; tests bijgewerkt; Landing.jsx "No WHMCS screens" copy weggehaald.
+  - **Coolify onzichtbaar voor eindgebruiker**:
+    - Footers in Landing/Pricing/Register: "Built on Coolify · Powered by Mollie" → "Hosting for Next.js & Node"
+    - Landing hero tagline: "Built on Coolify" verwijderd
+    - `BuildErrorPanel.jsx`: docs-link `coolify.io/docs/troubleshoot` → `docs.nixpacks.com/troubleshooting`
+    - `SitePreview.jsx`: "Enable SSL on Coolify" → "Enable SSL for this app"
+    - Backend `_append_log` strings in `routers/apps.py` + `workers/monitor.py`: alle "coolify" → "build engine" / "application created" (zichtbaar in deployment TerminalLog)
+    - `_fail_deploy` foutmeldingen: "no coolify server" → "no build server"
+  - **Admin Console**: Coolify blijft zichtbaar onder Admin → Integrations (interne ops tooling, alleen voor de eigenaar).
+  - **Files touched**: `routers/settings.py`, `routers/domains.py`, `routers/apps.py`, `workers/monitor.py`, `tests/backend_test.py`; `pages/Landing.jsx`, `pages/Pricing.jsx`, `pages/Register.jsx`, `components/BuildErrorPanel.jsx`, `components/SitePreview.jsx`. Deleted: `clients/whmcs.py`.
+
+- **2026-05-11 — UX hygiene + Sprint 3 polish (Iter8)**
+  - Settings.jsx: Coolify/WHMCS/Twilio platform-integrations grid verwijderd uit user-facing pagina; alleen "Connected accounts" (GitHub) blijft.
+  - Admin → Platform Domain: Twilio config-sectie toegevoegd (Account SID, Auth Token Fernet-encrypted, From phone, Messaging Service SID, WhatsApp sender, Status callback URL, Test mode). `twilio_auth_token_set` boolean redacted naar frontend.
+  - Coolify integratie-status in Admin: nu drie duidelijke states (connected / configured-but-unreachable / not-configured) met foutreden inline. Geen misleidende "offline" meer.
+  - Billing: 4 stale €0 free-plan Mollie-payment records uit DB verwijderd; `/api/billing/subscription` filtert nu €0/free/hobby records weg uit de `payments` lijst; Billing.jsx erkent zowel "free" als legacy "hobby" voor subscription-status. Free plan kan nu nooit meer "expired" lijken.
+
+- **2026-05-11 — Sprint 3: Twilio SMS + WhatsApp notifications**
   - **Backend**: `clients/twilio.py` (async httpx, creds from `platform_settings`, Fernet-decrypted), `services/notifications_sms.py` (per-event dispatch, atomic credit consume/refund, Twilio status webhook handler), `routers/notifications.py` (GET/PUT `/api/notifications/prefs`, POST `/api/notifications/test`, POST `/api/notifications/twilio/status` webhook). Test-send bypasses prefs matrix so the user can validate each channel explicitly.
-  - **Frontend**: `pages/dashboard/Settings.jsx` — new Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons. Integrations health grid now also shows Twilio status alongside Coolify and WHMCS.
+  - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **Tests**: 14/14 new Iter8 backend assertions green (TestIter8NotificationPrefs, TestIter8NotificationTestEndpoint, TestIter8IntegrationsHealthTwilio, TestIter8SupportedEventsImport, TestIter8NotificationsRegression). Full suite 77/78 — the only failure is the pre-existing TestIntegrations::test_integrations_health Coolify external-host timeout flake from iter6. Report at `/app/test_reports/iteration_8.json`.
+  - **Tests**: 14/14 new Iter8 backend assertions green. Full suite 77/78. Report at `/app/test_reports/iteration_8.json`.
 
 ## Changelog (older)
 - **2026-05-06 — Futuristic revamp + P0 deploy-retry hardening (Iter7)**

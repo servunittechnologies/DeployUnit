@@ -958,8 +958,8 @@ class TestIntegrations:
         r = demo_session.get(f"{API}/integrations/health", timeout=15)
         assert r.status_code == 200
         data = r.json()
-        assert "coolify" in data and "whmcs" in data
-        assert "configured" in data["coolify"] and "configured" in data["whmcs"]
+        assert "coolify" in data and "twilio" in data
+        assert "configured" in data["coolify"] and "configured" in data["twilio"]
 
 
 # ----- Iteration 7: P0 — fast endpoints (BackgroundTask) + retry logs + watchdog -----
@@ -1298,7 +1298,6 @@ class TestIter8IntegrationsHealthTwilio:
         assert r.status_code == 200, r.text
         data = r.json()
         assert "coolify" in data
-        assert "whmcs" in data
         assert "twilio" in data, f"twilio key missing from /integrations/health: {list(data.keys())}"
         tw = data["twilio"]
         assert isinstance(tw, dict)

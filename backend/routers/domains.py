@@ -25,7 +25,6 @@ from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from models import DomainIn
 from clients.coolify import coolify
-from clients.whmcs import whmcs
 from routers.admin import get_platform_settings
 
 router = APIRouter(tags=["domains"])
@@ -267,10 +266,3 @@ async def delete_domain(domain_id: str, request: Request):
 
     await db.domains.delete_one({"id": domain_id})
     return {"deleted": True}
-
-
-@router.get("/domains/whois")
-async def whois(domain: str, request: Request):
-    await get_current_user(request)
-    res = await whmcs.domain_whois(domain)
-    return res

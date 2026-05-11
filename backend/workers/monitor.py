@@ -158,9 +158,9 @@ async def deployment_watchdog():
             cool_uuid = res.get("deployment_uuid") or res.get("uuid")
             update["coolify_deployment_uuid"] = cool_uuid
             update["status"] = "building"
-            new_logs.append(f"[WATCHDOG] coolify deploy reconciled (uuid={cool_uuid})")
+            new_logs.append(f"[WATCHDOG] deploy reconciled (uuid={cool_uuid})")
         else:
-            new_logs.append("[WATCHDOG] coolify /deploy still not returning a uuid — will retry in 60s")
+            new_logs.append("[WATCHDOG] build engine still not returning a deploy id — will retry in 60s")
         if update or new_logs:
             patch = {"$set": update} if update else {}
             if new_logs:

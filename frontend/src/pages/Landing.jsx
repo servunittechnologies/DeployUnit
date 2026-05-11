@@ -397,7 +397,7 @@ export default function Landing() {
   const bgShift = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
 
   const { output: heroLead } = useTypewriter(
-    "Production-grade hosting. Built on Coolify. Without the Vercel bill.",
+    "Production-grade hosting for Next.js & Node. Without the Vercel bill.",
     { cps: 40, startDelayMs: 250 }
   );
 
@@ -621,7 +621,7 @@ export default function Landing() {
               {[
                 ["Severity-tagged logs", "Filter by error · warning · build · deploy · info"],
                 ["Branch-aware deploys", "Commit picker. Branch switcher. Rollback any deployment."],
-                ["Mollie billing", "EU VAT + reverse-charge. PDF invoices. No WHMCS screens."],
+                ["EU-native billing", "EU VAT + reverse-charge. PDF invoices. Audit-ready."],
               ].map(([t, b], i) => (
                 <motion.li
                   key={t}
@@ -789,7 +789,7 @@ export default function Landing() {
       <footer className="border-t border-white/[0.06] py-10">
         <div className="max-w-[1400px] mx-auto px-6 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-zinc-500">
           <Logo small />
-          <div>© {new Date().getFullYear()} DeployHub · Built on Coolify · Powered by Mollie</div>
+          <div>© {new Date().getFullYear()} DeployHub · Hosting for Next.js & Node</div>
         </div>
       </footer>
     </div>

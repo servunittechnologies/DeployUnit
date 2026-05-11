@@ -81,14 +81,14 @@ async def _trigger_coolify_deploy_with_retry(
         last_error = (res or {}).get("message") if isinstance(res, dict) else last_error
         await _append_log(
             deployment_id,
-            f"[WARN] coolify deploy returned no uuid ({last_error or 'empty'}), retrying in {delay:.0f}s",
+            f"[WARN] build engine returned no deploy id ({last_error or 'empty'}), retrying in {delay:.0f}s",
         )
         if attempt < max_attempts:
             await asyncio.sleep(delay)
             delay *= 2
     await _append_log(
         deployment_id,
-        f"[ERROR] coolify failed to trigger deploy after {max_attempts} attempts — watchdog will reconcile",
+        f"[ERROR] build engine failed to trigger deploy after {max_attempts} attempts — watchdog will reconcile",
     )
     return None
 
@@ -123,11 +123,11 @@ async def _redeploy_background(
                     "deploy-key flow (recommended for private repos).",
                 )
     if patch:
-        await _append_log(deployment_id, f"[BUILD] applying coolify patch: {', '.join(patch.keys())}")
+        await _append_log(deployment_id, f"[BUILD] applying build config patch: {', '.join(patch.keys())}")
         try:
             await coolify.update_application(coolify_uuid, patch)
         except Exception as e:
-            await _append_log(deployment_id, f"[WARN] coolify PATCH failed: {str(e)[:160]}")
+            await _append_log(deployment_id, f"[WARN] build config PATCH failed: {str(e)[:160]}")
     await _trigger_coolify_deploy_with_retry(app_id, deployment_id, coolify_uuid)
 
 
@@ -192,12 +192,12 @@ async def _create_private_github_app(
     coolify_key_uuid = (coolify_key or {}).get("uuid")
     if not coolify_key_uuid:
         if deployment_id:
-            await _append_log(deployment_id, "[ERROR] Coolify rejected the private key — retry or check server logs")
+            await _append_log(deployment_id, "[ERROR] build engine rejected the private key — retry or check server logs")
         # Clean up the GitHub-side key so we don't leave dangling deploy keys
         await remove_github_deploy_key(owner, repo_name, gh_key_id, gh_token)
         return None
     if deployment_id:
-        await _append_log(deployment_id, f"[BUILD] private key registered in coolify (uuid={coolify_key_uuid})")
+        await _append_log(deployment_id, f"[BUILD] private key registered with build engine (uuid={coolify_key_uuid})")
 
     ssh_url = github_ssh_url(app["repo_url"]) or app["repo_url"]
     res = await coolify.create_private_deploy_key_app(
@@ -224,7 +224,7 @@ async def _create_private_github_app(
 
     # Coolify refused the app → clean up both sides so a retry starts fresh.
     if deployment_id:
-        await _append_log(deployment_id, "[WARN] Coolify did not create the app — cleaning up deploy key")
+        await _append_log(deployment_id, "[WARN] build engine did not create the app — cleaning up deploy key")
     await remove_github_deploy_key(owner, repo_name, gh_key_id, gh_token)
     await coolify.delete_private_key(coolify_key_uuid)
     return None
@@ -270,13 +270,13 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         await db.deployments.update_one(
             {"app_id": app_id, "status": "queued"},
             {"$set": {"status": "live", "finished_at": _now_iso(),
-                      "logs": ["[BUILD] coolify_not_configured — using stub deployment", "[STATUS] live"]}},
+                      "logs": ["[BUILD] build engine not configured — using stub deployment", "[STATUS] live"]}},
         )
         return
 
     server_uuid = await coolify.get_default_server_uuid()
     if not server_uuid:
-        await _fail_deploy("no coolify server available")
+        await _fail_deploy("no build server available")
         return
 
     # Create or reuse a coolify project per workspace
@@ -291,7 +291,7 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
             await db.workspaces.update_one({"id": app["workspace_id"]}, {"$set": {"coolify_project_uuid": project_uuid}})
 
     if not project_uuid:
-        await _fail_deploy("could not create coolify project")
+        await _fail_deploy("could not create build project")
         return
 
     await db.apps.update_one({"id": app_id}, {"$set": {"status": "building"}})
@@ -300,8 +300,8 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
             {"id": deployment_id},
             {"$set": {"status": "building"}},
         )
-        await _append_log(deployment_id, "[BUILD] coolify project ready")
-        await _append_log(deployment_id, "[BUILD] creating application on coolify...")
+        await _append_log(deployment_id, "[BUILD] project ready")
+        await _append_log(deployment_id, "[BUILD] creating application...")
 
     # -------------------------------------------------------------------
     # Decide: public repo → /applications/public
@@ -326,17 +326,17 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
             instant_deploy=False,
         )
     if not res or not res.get("uuid"):
-        await _fail_deploy("coolify create app failed — check token, server, and repo URL")
+        await _fail_deploy("build engine create app failed — check repo URL and try again")
         return
 
     coolify_uuid = res["uuid"]
     await db.apps.update_one({"id": app_id}, {"$set": {"coolify_app_uuid": coolify_uuid}})
     if deployment_id:
-        await _append_log(deployment_id, f"[BUILD] coolify created app (uuid={coolify_uuid})")
+        await _append_log(deployment_id, f"[BUILD] application created (uuid={coolify_uuid})")
     if app.get("env_vars"):
         await coolify.update_env(coolify_uuid, app["env_vars"])
         if deployment_id:
-            await _append_log(deployment_id, f"[BUILD] pushed {len(app['env_vars'])} env vars to coolify")
+            await _append_log(deployment_id, f"[BUILD] pushed {len(app['env_vars'])} env vars to build engine")
 
     # Step 2 — explicitly trigger the deploy with retries.
     if deployment_id:

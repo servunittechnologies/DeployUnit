@@ -135,7 +135,7 @@ export default function Register() {
               ))}
             </ul>
           </div>
-          <div className="text-xs font-mono text-zinc-500">© DeployHub · Built on Coolify</div>
+          <div className="text-xs font-mono text-zinc-500">© DeployHub · Hosting for Next.js & Node</div>
         </div>
       </div>
     </div>

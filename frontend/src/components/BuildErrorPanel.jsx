@@ -30,12 +30,12 @@ export default function BuildErrorPanel({ deployment, onRetry }) {
               </span>
             )}
             <a
-              href="https://coolify.io/docs/troubleshoot"
+              href="https://docs.nixpacks.com/troubleshooting"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-xs font-mono text-zinc-500 hover:text-brand"
             >
-              troubleshooting docs <ExternalLink className="h-3 w-3" />
+              build troubleshooting <ExternalLink className="h-3 w-3" />
             </a>
           </div>
         </div>
