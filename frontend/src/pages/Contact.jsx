@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Mail, MapPin, Phone, MessageSquare, Building2, Send, Loader2, Check,
+  Mail, MapPin, MessageCircle, Ticket, Building2, Send, Loader2, Check, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -29,10 +29,38 @@ const KINDS = [
 ];
 
 const CONTACT = [
-  { icon: Mail,     label: "Email",   value: "hello@deployhub.app", href: "mailto:hello@deployhub.app" },
-  { icon: Building2,label: "Office",  value: "ServUnit Technologies BV · Belgium", href: null },
-  { icon: MapPin,   label: "Region",  value: "EU datacenters (eu-west · eu-central · eu-north)", href: null },
-  { icon: Phone,    label: "Phone",   value: "+32 (0)9 396 39 79 · Mon-Fri 9-17 CET", href: "tel:+3293963979" },
+  {
+    icon: Mail,
+    label: "Email",
+    value: "hello@deployhub.app",
+    hint: "Replied within one business day",
+    href: "mailto:hello@deployhub.app",
+    tag: null,
+  },
+  {
+    icon: Ticket,
+    label: "Support tickets",
+    value: "Open one from your dashboard",
+    hint: "Logged customers only · 24h SLA on Pro, 4h on Agency",
+    href: "/login",
+    tag: null,
+  },
+  {
+    icon: MessageCircle,
+    label: "Live chat",
+    value: "Agency-plan exclusive",
+    hint: "Reach an engineer instantly during business hours",
+    href: null,
+    tag: "Agency only",
+  },
+  {
+    icon: Building2,
+    label: "Office",
+    value: "ServUnit Technologies BV · Belgium",
+    hint: "Operating EU datacenters (NL · SmartDC Rotterdam)",
+    href: null,
+    tag: null,
+  },
 ];
 
 export default function Contact() {
@@ -79,29 +107,38 @@ export default function Contact() {
         <div className="grid lg:grid-cols-[1fr_1.3fr] gap-6">
           {/* Contact details */}
           <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="space-y-3">
-            {CONTACT.map((c) => (
-              <div
-                key={c.label}
-                className="border border-zinc-800 bg-zinc-950/40 p-5 flex items-start gap-4 hover:border-cyan-500/40 transition-colors"
-                data-testid={`contact-info-${c.label.toLowerCase()}`}
-              >
-                <div className="p-2 border border-zinc-800 bg-black">
-                  <c.icon className="h-4 w-4 text-cyan-400" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-500 mb-1">{c.label}</div>
-                  {c.href ? (
-                    <a href={c.href} className="text-zinc-200 hover:text-cyan-400 transition-colors break-words">{c.value}</a>
-                  ) : (
+            {CONTACT.map((c) => {
+              const Comp = c.href ? (c.href.startsWith("http") || c.href.startsWith("mailto") || c.href.startsWith("tel") ? "a" : "a") : "div";
+              const linkProps = c.href ? { href: c.href } : {};
+              return (
+                <Comp
+                  key={c.label}
+                  {...linkProps}
+                  className={`border border-zinc-800 bg-zinc-950/40 p-5 flex items-start gap-4 transition-colors ${c.href ? "hover:border-cyan-500/40 cursor-pointer block" : ""}`}
+                  data-testid={`contact-info-${c.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <div className="p-2 border border-zinc-800 bg-black shrink-0">
+                    <c.icon className="h-4 w-4 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-500">{c.label}</div>
+                      {c.tag && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.25em] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                          <Sparkles className="h-2.5 w-2.5" /> {c.tag}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-zinc-200 break-words">{c.value}</div>
-                  )}
-                </div>
-              </div>
-            ))}
+                    {c.hint && <div className="mt-1 text-[11px] font-mono text-zinc-500">{c.hint}</div>}
+                  </div>
+                </Comp>
+              );
+            })}
             <div className="border border-emerald-500/30 bg-emerald-950/10 p-5">
               <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-emerald-400 mb-2">Response time</div>
               <p className="text-sm text-zinc-300">
-                Sales & general: <span className="text-emerald-400 font-mono">~4h</span> · Support tickets: <span className="text-emerald-400 font-mono">≤24h</span> on business days.
+                Email & sales: <span className="text-emerald-400 font-mono">~4h</span> · Support tickets: <span className="text-emerald-400 font-mono">≤24h Pro · ≤4h Agency</span>
               </p>
             </div>
           </motion.div>
