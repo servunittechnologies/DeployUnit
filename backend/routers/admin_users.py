@@ -15,6 +15,7 @@ Everything a support agent needs to operate a user:
 All actions write an audit_log entry so a paper trail exists.
 """
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Literal
 
@@ -234,7 +235,7 @@ async def adjust_credits(user_id: str, payload: CreditsIn, request: Request):
     )
     # Write a transaction row so the user can see the adjustment in their wallet history.
     await db.credit_transactions.insert_one({
-        "id": __import__("uuid").uuid4().hex,
+        "id": uuid.uuid4().hex,
         "workspace_id": payload.workspace_id,
         "delta": payload.delta,
         "balance_after": new_balance,
