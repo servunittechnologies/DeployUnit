@@ -183,7 +183,17 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **2026-05-11 — Landing v2.3: interactive + continuously-animated feature cards**
+  - **2026-05-11 — Landing v2.4: compact 5-card bento with internal tabs + heatmap preview**
+  - **Density compressed from 11 → 5 cards** by introducing internal tab switches inside each big card. Same surface, ~50% less vertical scroll.
+  - **Card 1 · Live observability** (2-col span): tabbed switcher between **Metrics** / **PageSpeed** / **Alerts** — all three reused from the previous individual cards, lazy-mounted on tab change.
+  - **Card 2 · Web analytics** (1-col): tabbed **Visitors** / **Heatmap** (with `soon` badge). The new **HeatmapPreview** is a fake-page wireframe (header dots + content blocks) overlaid with 6 pulsing radial-gradient heat blobs (red/orange/yellow/green) using `mix-blend-mode: screen` — looks exactly like a real heatmap export. Bottom-left legend: `3 hot · 1 mid · 1 cool`.
+  - **Card 3 · Build pipeline**: cycles through 5 phases (`QUEUED → CLONING → BUILDING → DEPLOYING → LIVE`) every 1.8s with progress bar, step indicators with cyan glow on active, framework-chip strip that lights up when "BUILDING".
+  - **Card 4 · Agency workspaces**: unchanged interactive workspace switcher.
+  - **Card 5 · Audit & schedule**: combined cron toggles + live audit log feed in one card.
+  - **Below the bento**: dense "Also in the box" strip (6 capabilities in a single horizontal row, no boxes, just icon + label) — replaces the 6 small bordered cards. Saves another 200px of vertical space.
+  - **Reusable `TabbedCard` primitive** added — mono-uppercase tab buttons, cyan underline on active, animated content swap with `motion.div` keyed on active tab id.
+
+
   - Every bento feature card now feels "alive" — continuous animations + on-click interactivity.
   - **MetricsGraphMock**: `setInterval` ticks every 1.6s, shifts the time-series and appends a new randomised CPU/MEM point. Header shows `● live · 1.6s tick · CPU 22% MEM 64%` (real-time). Hover pauses the loop with a `paused` badge.
   - **PageSpeedGauge**: added "↺ Re-run audit" button that resets to 0 and re-animates to a fresh random target (89-99). `isAnimationActive={false}` on Line for snappy real-time feel.

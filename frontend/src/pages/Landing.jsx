@@ -608,6 +608,173 @@ function BentoCard({ span = "lg:col-span-1 lg:row-span-1", overline, title, body
   );
 }
 
+function TabbedCard({ tabs, testId }) {
+  const [active, setActive] = useState(tabs[0].id);
+  const cur = tabs.find((t) => t.id === active) || tabs[0];
+  return (
+    <div className="flex flex-col h-full" data-testid={testId}>
+      <div className="flex gap-1 mb-3 border-b border-zinc-800/80">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActive(t.id)}
+            className={`px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.25em] border-b -mb-px inline-flex items-center gap-1.5 transition-colors
+              ${active === t.id ? "border-cyan-400 text-cyan-400" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}
+            data-testid={`${testId}-tab-${t.id}`}
+          >
+            {t.icon && <t.icon className="h-3 w-3" />}
+            {t.label}
+            {t.soon && <span className="ml-1 px-1 py-px text-[8px] tracking-[0.2em] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded-none">soon</span>}
+          </button>
+        ))}
+      </div>
+      <motion.div
+        key={active}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="flex-1"
+      >
+        {cur.content}
+      </motion.div>
+    </div>
+  );
+}
+
+function HeatmapPreview() {
+  // Fake page-screenshot with overlaid heat blobs that pulse.
+  const blobs = useMemo(() => [
+    { x: 25, y: 30, r: 38, op: 0.55, c: "rgba(239,68,68,0.55)" }, // red — heavy
+    { x: 50, y: 28, r: 28, op: 0.45, c: "rgba(245,158,11,0.55)" }, // orange
+    { x: 75, y: 35, r: 24, op: 0.40, c: "rgba(245,158,11,0.45)" },
+    { x: 33, y: 70, r: 30, op: 0.50, c: "rgba(234,179,8,0.40)" },
+    { x: 65, y: 78, r: 22, op: 0.35, c: "rgba(16,185,129,0.45)" }, // green — light
+    { x: 50, y: 55, r: 34, op: 0.45, c: "rgba(239,68,68,0.40)" },
+  ], []);
+  return (
+    <div className="relative h-[160px] border border-zinc-800 overflow-hidden" data-testid="heatmap-preview">
+      {/* Wireframe of a fake page */}
+      <div className="absolute inset-0 bg-zinc-950">
+        <div className="h-5 bg-zinc-900 border-b border-zinc-800 flex items-center px-2 gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
+          <span className="ml-2 h-1 w-20 bg-zinc-800 rounded" />
+        </div>
+        <div className="p-3 space-y-1.5">
+          <div className="h-1.5 w-2/3 bg-zinc-800 rounded" />
+          <div className="h-1.5 w-1/2 bg-zinc-800 rounded" />
+          <div className="grid grid-cols-3 gap-1.5 mt-3">
+            <div className="h-9 bg-zinc-800/80 border border-zinc-800" />
+            <div className="h-9 bg-zinc-800/80 border border-zinc-800" />
+            <div className="h-9 bg-zinc-800/80 border border-zinc-800" />
+          </div>
+          <div className="h-1.5 w-3/4 bg-zinc-800 rounded mt-2" />
+          <div className="h-1.5 w-1/3 bg-zinc-800 rounded" />
+        </div>
+      </div>
+      {/* Pulsing heat blobs */}
+      {blobs.map((b, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            left: `${b.x}%`,
+            top: `${b.y}%`,
+            width: b.r * 2,
+            height: b.r * 2,
+            translateX: "-50%",
+            translateY: "-50%",
+            background: `radial-gradient(circle, ${b.c} 0%, transparent 70%)`,
+            mixBlendMode: "screen",
+          }}
+          animate={{ opacity: [b.op * 0.6, b.op, b.op * 0.6], scale: [1, 1.08, 1] }}
+          transition={{ duration: 3 + (i % 3), repeat: Infinity, ease: "easeInOut", delay: i * 0.3 }}
+        />
+      ))}
+      <div className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.25em] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+        <Sparkles className="h-2.5 w-2.5" /> soon
+      </div>
+      <div className="absolute bottom-2 left-2 text-[10px] font-mono text-zinc-400">
+        <span className="text-red-400">3 hot</span> · <span className="text-yellow-400">1 mid</span> · <span className="text-emerald-400">1 cool</span>
+      </div>
+    </div>
+  );
+}
+
+function BuildPipelineMock() {
+  // Cycles through: queued → cloning → building → deploying → live
+  const phases = useMemo(() => [
+    { label: "QUEUED",    pct: 5,  hint: "git push received" },
+    { label: "CLONING",   pct: 22, hint: "fetching servunit/web" },
+    { label: "BUILDING",  pct: 58, hint: "nixpacks · 24/40 steps" },
+    { label: "DEPLOYING", pct: 88, hint: "rolling out · eu-west" },
+    { label: "LIVE",      pct: 100, hint: "https://servunit.app" },
+  ], []);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((x) => (x + 1) % phases.length), 1800);
+    return () => clearInterval(id);
+  }, [phases.length]);
+  const cur = phases[i];
+  return (
+    <div className="space-y-3" data-testid="build-pipeline">
+      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em]">
+        <Github className="h-3.5 w-3.5 text-zinc-300" />
+        <span className="text-zinc-300">servunit/web</span>
+        <span className="text-zinc-600">·</span>
+        <span className="text-cyan-400">{cur.label}</span>
+        <span className="ml-auto text-zinc-500 normal-case tracking-normal text-[10px]">{cur.hint}</span>
+      </div>
+      <div className="relative h-1 bg-zinc-900 overflow-hidden">
+        <motion.div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 to-emerald-400"
+          animate={{ width: `${cur.pct}%` }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+        />
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {phases.map((p, idx) => (
+          <div key={p.label} className="flex flex-col items-center">
+            <span
+              className={`h-2 w-2 rounded-full transition-colors ${
+                idx <= i ? "bg-cyan-400 shadow-[0_0_6px_2px_rgba(6,182,212,0.5)]" : "bg-zinc-800"
+              }`}
+            />
+            <span className={`mt-1 text-[8px] font-mono ${idx === i ? "text-cyan-400" : "text-zinc-600"}`}>{p.label}</span>
+          </div>
+        ))}
+      </div>
+      {/* Tech stack chips that show up under "BUILDING" */}
+      <div className="flex flex-wrap gap-1 pt-2 border-t border-zinc-800/60">
+        {["nextjs", "node-20", "postgres:15", "redis:7", "tailwind"].map((t, idx) => (
+          <motion.span
+            key={t}
+            animate={{ opacity: i >= 2 ? 1 : 0.3 }}
+            transition={{ delay: idx * 0.05 }}
+            className={`text-[9px] font-mono px-1.5 py-0.5 border ${
+              i >= 2 ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30" : "bg-zinc-950 text-zinc-600 border-zinc-800"
+            }`}
+          >
+            {t}
+          </motion.span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScheduleAuditMock() {
+  // Mini-cron + live audit feed, side-by-side.
+  return (
+    <div className="grid grid-cols-1 gap-2" data-testid="schedule-audit">
+      <IlluCron />
+      <IlluAudit />
+    </div>
+  );
+}
+
 function Features() {
   return (
     <Section id="features" className="py-24 lg:py-32 bg-zinc-950/30">
@@ -622,72 +789,88 @@ function Features() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 auto-rows-[minmax(280px,auto)]">
+        {/* Compact 5-card bento: 3 wide on top, 2 wide on bottom */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <BentoCard
             span="lg:col-span-2"
-            overline="Live container metrics"
-            title="Watch CPU, RAM, network and disk in real time."
-            body="A first-party agent on your VPS pushes Docker stats every tick. Drawn as silky 60fps charts in your dashboard — auto-mapped to apps."
-            testId="feature-metrics"
+            overline="Live observability"
+            title="Metrics, audits and alerts — in one pane."
+            body="Container stats every 1.6s · daily Lighthouse · Slack/Discord/SMS alerts. Switch tabs without leaving the dashboard."
+            testId="feature-observability"
           >
-            <MetricsGraphMock />
+            <TabbedCard
+              testId="observability-tabs"
+              tabs={[
+                { id: "metrics",   label: "Metrics",   icon: Activity, content: <MetricsGraphMock /> },
+                { id: "pagespeed", label: "PageSpeed", icon: Gauge,    content: <PageSpeedGauge /> },
+                { id: "alerts",    label: "Alerts",    icon: Bell,     content: <AlertsMock /> },
+              ]}
+            />
           </BentoCard>
 
           <BentoCard
-            overline="Google PageSpeed"
-            title="Lighthouse audits on autopilot."
-            body="Daily mobile + desktop scores. Core Web Vitals trend. Manual re-runs in one click."
-            testId="feature-pagespeed"
-          >
-            <PageSpeedGauge />
-          </BentoCard>
-
-          <BentoCard
-            overline="Cookieless analytics"
-            title="Privacy-first pageview tracker."
-            body="1 KB script, sendBeacon, anonymized visitor hash that rotates daily. No banners. No cookies. GDPR by default."
+            overline="Web analytics"
+            title="Cookieless visitors + heatmaps."
+            body="Privacy-first tracker (1 KB · sendBeacon · GDPR by default). Heatmaps and session replays land next."
             testId="feature-analytics"
           >
-            <VisitorMapMock />
+            <TabbedCard
+              testId="analytics-tabs"
+              tabs={[
+                { id: "visitors", label: "Visitors", icon: Globe, content: <VisitorMapMock /> },
+                { id: "heatmap",  label: "Heatmap",  icon: Sparkles, soon: true, content: <HeatmapPreview /> },
+              ]}
+            />
           </BentoCard>
 
           <BentoCard
-            overline="Alerts everywhere"
-            title="Uptime + deploys → Slack · Discord · SMS · WhatsApp."
-            body="Wire every signal to the channel you actually watch. Credit-billed only when SMS or WhatsApp fire."
-            testId="feature-alerts"
+            overline="Build pipeline"
+            title="Push → live URL in 41 seconds."
+            body="Nixpacks-auto-detected stack, rolling deploy, custom domains + TLS — every step visible end-to-end."
+            testId="feature-pipeline"
           >
-            <AlertsMock />
+            <BuildPipelineMock />
           </BentoCard>
 
           <BentoCard
             overline="Agency multi-tenant"
-            title="Workspaces per customer, in seconds."
-            body="Switch between your customers' fleets without losing context. Per-workspace billing, members, and audit logs."
+            title="Workspaces per customer."
+            body="Click to switch fleets. Per-workspace billing, members, audit logs and credit budget — out of the box."
             testId="feature-workspaces"
           >
             <WorkspaceSwitcherMock />
           </BentoCard>
 
-          {/* Six capability cards, each with its own micro-illustration */}
-          {SMALL_FEATURES.map((c) => (
-            <motion.div
-              key={c.id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4 }}
-              className="border border-zinc-800 bg-zinc-950/30 p-5 hover:border-cyan-500/40 transition-colors flex flex-col"
-              data-testid={`feature-small-${c.id}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <c.icon className="h-4 w-4 text-cyan-400" />
-                <div className="font-display text-base font-semibold text-white">{c.title}</div>
+          <BentoCard
+            overline="Audit & schedule"
+            title="Cron + event log, live."
+            body="Toggle background jobs from the dashboard. Every action — by anyone — is logged with timestamps and actor."
+            testId="feature-audit"
+          >
+            <ScheduleAuditMock />
+          </BentoCard>
+        </div>
+
+        {/* Quick capability strip — pure copy, no boxes, dense */}
+        <div className="mt-10 border-t border-zinc-900 pt-8">
+          <div className="text-[10px] uppercase tracking-[0.4em] font-mono text-zinc-500 mb-4">
+            Also in the box
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-3">
+            {[
+              { icon: GitBranch, label: "PR previews" },
+              { icon: Database,  label: "Managed DBs" },
+              { icon: Globe,     label: "Custom domains + DNS" },
+              { icon: Lock,      label: "RBAC + audit" },
+              { icon: Cpu,       label: "Resource limits" },
+              { icon: ShieldCheck, label: "TLS + Let's Encrypt" },
+            ].map((c) => (
+              <div key={c.label} className="flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-zinc-200 transition-colors">
+                <c.icon className="h-3.5 w-3.5 text-cyan-400/80 shrink-0" />
+                <span className="truncate">{c.label}</span>
               </div>
-              <div className="text-xs text-zinc-400 leading-relaxed mb-3">{c.body}</div>
-              <div className="mt-auto">{c.illu}</div>
-            </motion.div>
-          ))}
+            ))}
+          </div>
         </div>
       </Container>
     </Section>
