@@ -70,46 +70,26 @@ export default function Fleet() {
   };
 
   if (loading && !data) {
-    return <div className="p-6 text-sm font-mono text-zinc-500">Loading fleet…</div>;
+    return <div className="p-6 text-sm font-mono text-zinc-500">Loading workspaces…</div>;
   }
   if (!data) return null;
 
-  if (!data.fleet_view_enabled) {
-    return (
-      <div className="px-6 py-10 max-w-2xl" data-testid="fleet-paywall">
-        <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// fleet view</div>
-        <h1 className="font-display text-4xl font-semibold tracking-tighter">Manage every client in one place.</h1>
-        <p className="mt-4 text-zinc-400">
-          Fleet view shows every workspace you own — with problem-first sorting so the apps that need you bubble to the top.
-          Add bulk redeploy, KPI rollups, and per-client status in one glance.
-        </p>
-        <div className="mt-6 border border-brand/30 bg-brand/5 p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Lock className="h-5 w-5 text-brand" />
-            <div>
-              <div className="text-sm">Available on the <strong>Agency</strong> plan.</div>
-              <div className="text-xs text-zinc-500 font-mono mt-0.5">{data.reason}</div>
-            </div>
-          </div>
-          <Link to="/app/billing" className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90" data-testid="fleet-upgrade-cta">
-            <Zap className="h-4 w-4" /> Upgrade
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   const r = data.rollup;
+  const wsCount = data.workspaces.length;
   const healthPct = r.apps_total ? Math.round((r.apps_live / r.apps_total) * 100) : 100;
 
   return (
     <div className="px-6 py-6 space-y-8" data-testid="fleet-page">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// fleet</div>
-          <h1 className="font-display text-4xl font-semibold tracking-tighter">Every client. One screen.</h1>
+          <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// workspaces</div>
+          <h1 className="font-display text-4xl font-semibold tracking-tighter">
+            {wsCount === 0 ? "Create a workspace to get started." : wsCount === 1 ? "Your workspace at a glance." : "All your workspaces."}
+          </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Sorted by where you're bleeding — broken apps first. Refreshed at {new Date(data.generated_at).toLocaleTimeString()}.
+            {wsCount <= 1
+              ? "Apps sorted with broken ones at the top so the worst stuff catches your eye in <1 second."
+              : "Sorted by where you're bleeding — broken apps first."} Refreshed at {new Date(data.generated_at || Date.now()).toLocaleTimeString()}.
           </p>
         </div>
         <div className="flex items-center gap-2">

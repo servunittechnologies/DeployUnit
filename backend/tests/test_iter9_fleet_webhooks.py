@@ -43,17 +43,18 @@ def fresh_session():
 
 # ─── Fleet eligibility (agency) ────────────────────────────────────────
 class TestFleetOverviewAgency:
-    def test_overview_returns_fleet_enabled(self, demo_session):
+    def test_overview_works_for_everyone(self, demo_session):
+        """Fleet view is no longer gated by plan — every user with at least
+        one workspace gets the multi-workspace overview."""
         r = demo_session.get(f"{BASE_URL}/api/fleet/overview", timeout=20)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["fleet_view_enabled"] is True
+        # fleet_view_enabled field was removed in Sprint 9; no plan gating now.
         assert "workspaces" in data
         assert "rollup" in data
         assert "generated_at" in data
         assert isinstance(data["workspaces"], list)
         assert len(data["workspaces"]) >= 1
-        # rollup shape
         for k in ("workspaces", "apps_total", "apps_broken", "apps_live", "monthly_eur"):
             assert k in data["rollup"], f"missing rollup.{k}"
 
@@ -80,24 +81,17 @@ class TestFleetOverviewAgency:
         assert broken_counts == sorted(broken_counts, reverse=True)
 
 
-# ─── Fleet eligibility (free plan downgrade & revert) ─────────────────
+# ─── Fleet view is now universal — no plan paywall ─────────────────
 class TestFleetOverviewFree:
-    def test_free_plan_returns_disabled(self, demo_session):
+    def test_free_plan_still_returns_data(self, demo_session):
+        """After Sprint 9 simplification, Fleet view is available on every plan."""
         from pymongo import MongoClient
         client = MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
         db = client[os.environ.get("DB_NAME", "test_database")]
-        # Snapshot ALL accessible workspaces and downgrade them all so the
-        # 'any-workspace-eligible' check fails.
-        owned = list(db.workspaces.find({"owner_id": {"$exists": True}}))
-        # Demo user owns DEMO_WS_ID; downgrade just that one workspace AND
-        # any other workspaces this user might own/be member of.
-        # Simpler: query all workspaces the demo user can see via API first
         r = demo_session.get(f"{BASE_URL}/api/fleet/overview", timeout=20)
         ws_ids = [w["id"] for w in r.json().get("workspaces", [])]
         if not ws_ids:
-            # already disabled
-            pytest.skip("no eligible workspaces — cannot exercise downgrade path")
-        # Snapshot original plans
+            pytest.skip("no workspaces — cannot exercise downgrade path")
         originals = {}
         for wid in ws_ids:
             doc = db.workspaces.find_one({"id": wid}, {"plan": 1})
@@ -107,15 +101,17 @@ class TestFleetOverviewFree:
             r2 = demo_session.get(f"{BASE_URL}/api/fleet/overview", timeout=20)
             assert r2.status_code == 200
             data = r2.json()
-            assert data["fleet_view_enabled"] is False
-            assert data.get("upgrade_plan") == "agency"
-            assert "reason" in data
+            # Free plan still shows the multi-workspace overview now — no paywall.
+            assert "workspaces" in data
+            assert "rollup" in data
+            # fleet_view_enabled / upgrade_plan / reason fields were intentionally removed
+            assert "fleet_view_enabled" not in data
         finally:
-            # Revert
             for wid, plan in originals.items():
                 db.workspaces.update_one({"id": wid}, {"$set": {"plan": plan}})
 
-    def test_bulk_redeploy_402_for_non_eligible(self, demo_session):
+    def test_bulk_redeploy_available_on_free(self, demo_session):
+        """Bulk redeploy is also un-paywalled now."""
         from pymongo import MongoClient
         client = MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
         db = client[os.environ.get("DB_NAME", "test_database")]
@@ -128,8 +124,9 @@ class TestFleetOverviewFree:
             db.workspaces.update_one({"id": wid}, {"$set": {"plan": "free"}})
         try:
             r2 = demo_session.post(f"{BASE_URL}/api/fleet/bulk-redeploy", timeout=20)
-            assert r2.status_code == 402, r2.text
-            assert "agency" in (r2.json().get("detail") or "").lower()
+            # 200 OK or 404 (no workspaces) but never 402 paywall anymore.
+            assert r2.status_code in (200, 404), r2.text
+            assert r2.status_code != 402
         finally:
             for wid, plan in originals.items():
                 db.workspaces.update_one({"id": wid}, {"$set": {"plan": plan}})

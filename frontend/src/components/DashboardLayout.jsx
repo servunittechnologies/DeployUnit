@@ -18,7 +18,7 @@ import { Button } from "./ui/button";
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/app/projects", label: "Projects", icon: FolderKanban },
-  { to: "/app/fleet", label: "Fleet", icon: Layers, agencyOnly: true },
+  { to: "/app/fleet", label: "Workspaces", icon: Layers },
   { to: "/app/databases", label: "Databases", icon: Database },
   { to: "/app/domains", label: "Domains", icon: Globe },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
@@ -203,7 +203,7 @@ export default function DashboardLayout() {
           <WorkspaceSwitcher />
         </div>
         <nav className="flex-1 py-4">
-          {NAV.filter((n) => !n.agencyOnly || active?.type === "agency").map((n) => (
+          {NAV.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

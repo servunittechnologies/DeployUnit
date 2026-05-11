@@ -71,7 +71,9 @@ async def _user_accessible_workspaces(user: dict) -> list[dict]:
 
 @router.get("/fleet/overview")
 async def fleet_overview(request: Request):
-    """Aggregated multi-workspace dashboard for agencies. Each entry includes:
+    """Aggregated multi-workspace dashboard. Available to everyone — plans
+    differ in *limits* (workspace count, apps per workspace, credits), not in
+    which UI surfaces unlock. Returns:
         - workspace meta (id, name, type)
         - plan + effective price + credits balance
         - apps (problem-first sorted) with status + primary_url + last_deploy
@@ -83,31 +85,13 @@ async def fleet_overview(request: Request):
     workspaces = await _user_accessible_workspaces(user)
     if not workspaces:
         return {
-            "fleet_view_enabled": False,
             "workspaces": [],
             "rollup": {"workspaces": 0, "apps_total": 0, "apps_broken": 0, "apps_live": 0, "monthly_eur": 0.0},
-            "reason": "no workspaces accessible",
         }
 
-    # Determine fleet_view eligibility — granted if ANY accessible workspace
-    # is on a plan with fleet_view=true. Keeps single-workspace Pro users out
-    # while letting agency-tier users see all their clients in one place.
     plans_cache: dict[str, dict] = {}
-    eligible = False
     for ws in workspaces:
-        plan = await workspace_plan(ws["id"])
-        plans_cache[ws["id"]] = plan
-        if plan.get("fleet_view"):
-            eligible = True
-
-    if not eligible:
-        return {
-            "fleet_view_enabled": False,
-            "workspaces": [],
-            "rollup": {"workspaces": 0, "apps_total": 0, "apps_broken": 0, "apps_live": 0, "monthly_eur": 0.0},
-            "reason": "upgrade to Agency plan to unlock Fleet view",
-            "upgrade_plan": "agency",
-        }
+        plans_cache[ws["id"]] = await workspace_plan(ws["id"])
 
     rollup_apps_total = 0
     rollup_apps_broken = 0
@@ -169,7 +153,6 @@ async def fleet_overview(request: Request):
     out_workspaces.sort(key=lambda w: (-w["kpi"]["apps_broken"], -w["kpi"]["apps_total"]))
 
     return {
-        "fleet_view_enabled": True,
         "workspaces": out_workspaces,
         "rollup": {
             "workspaces": len(out_workspaces),
@@ -185,8 +168,7 @@ async def fleet_overview(request: Request):
 @router.post("/fleet/bulk-redeploy")
 async def bulk_redeploy(request: Request):
     """Trigger a redeploy for every accessible app whose status is failed/down.
-    Returns # of deploys queued. Rate-limited at 50/call to protect the build
-    engine; if you have more failures than that, fix infra first."""
+    Available to everyone — rate-limited at 50/call to protect the build engine."""
     import asyncio
     import uuid
     from routers.apps import _redeploy_background
@@ -197,16 +179,6 @@ async def bulk_redeploy(request: Request):
     workspaces = await _user_accessible_workspaces(user)
     if not workspaces:
         raise HTTPException(status_code=404, detail="no workspaces accessible")
-
-    # Honor the same fleet_view gate as overview.
-    eligible = False
-    for ws in workspaces:
-        plan = await workspace_plan(ws["id"])
-        if plan.get("fleet_view"):
-            eligible = True
-            break
-    if not eligible:
-        raise HTTPException(status_code=402, detail="upgrade to Agency plan to use bulk-redeploy")
 
     ws_ids = [w["id"] for w in workspaces]
     # All "broken" apps including those that never reached the build engine.

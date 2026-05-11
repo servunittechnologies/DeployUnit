@@ -110,7 +110,7 @@ DEFAULT_PLANS = [
             "2 TB bandwidth",
             "5.000 build minutes / mo",
             "250 credits / mo (≈250 SMS alerts)",
-            "Fleet view — every client app, problem-first",
+            "Unlimited workspaces (host every client separately)",
             "1-year audit log",
             "Priority support 4h + Slack",
             "99.9% uptime SLA",
