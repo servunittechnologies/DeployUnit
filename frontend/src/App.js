@@ -22,6 +22,7 @@ import Monitoring from "./pages/dashboard/Monitoring";
 import Alerts from "./pages/dashboard/Alerts";
 import Billing from "./pages/dashboard/Billing";
 import Settings from "./pages/dashboard/Settings";
+import Account from "./pages/dashboard/Account";
 import Admin from "./pages/dashboard/Admin";
 import Fleet from "./pages/dashboard/Fleet";
 import AuditLog from "./pages/dashboard/AuditLog";
@@ -68,6 +69,7 @@ function App() {
                 <Route path="alerts" element={<Alerts />} />
                 <Route path="billing" element={<Billing />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="account" element={<Account />} />
                 <Route path="admin" element={<Admin />} />
                 <Route path="fleet" element={<Fleet />} />
                 <Route path="audit" element={<AuditLog />} />

@@ -495,6 +495,7 @@ async def mollie_webhook(request: Request):
 
     meta = payment.get("metadata") or {}
     workspace_id = meta.get("workspace_id")
+    target_user_id = meta.get("user_id")  # NEW — account-level checkouts
     plan_id = meta.get("plan")
     status = payment.get("status")
     kind = meta.get("kind") or ("first" if payment.get("sequenceType") == "first" else "recurring")
@@ -508,14 +509,110 @@ async def mollie_webhook(request: Request):
         "status": status,
         "kind": kind,
         "workspace_id": workspace_id,
+        "user_id": target_user_id,
         "created_at": _now_iso(),
     })
 
-    # If subscription (recurring) payment, workspace_id may not be in the payment meta.
-    # Fallback: look up by customerId.
-    if not workspace_id and payment.get("customerId"):
+    # If recurring & no workspace_id/user_id in metadata, look up by customerId.
+    if not target_user_id and not workspace_id and payment.get("customerId"):
+        # Try user-keyed first (new flow)
         mc = await db.mollie_customers.find_one({"mollie_customer_id": payment["customerId"]})
-        workspace_id = (mc or {}).get("workspace_id")
+        if mc:
+            target_user_id = mc.get("user_id")
+            workspace_id = mc.get("workspace_id")  # legacy fallback
+
+    # ─── NEW: account-level payments (user_id keyed) ───
+    if target_user_id and status == "paid":
+        # Credit packs are simple — grant credits + mark order paid
+        if kind == "credit_pack":
+            try:
+                from services.credits import grant_credits, get_pack
+                pack_id = meta.get("pack")
+                credits_amount = int(meta.get("credits") or 0)
+                if not credits_amount and pack_id:
+                    pack = get_pack(pack_id)
+                    credits_amount = (pack or {}).get("credits", 0)
+                if credits_amount > 0:
+                    await grant_credits(
+                        target_user_id, credits_amount,
+                        reason=f"credit pack '{pack_id}' purchase",
+                        type_="topup",
+                        ref_id=payment_id,
+                        ref_type="mollie_payment",
+                    )
+                await db.credit_pack_orders.update_one(
+                    {"mollie_payment_id": payment_id},
+                    {"$set": {"status": "paid", "paid_at": payment.get("paidAt") or _now_iso()}},
+                )
+            except Exception as e:
+                logger.warning("credit pack grant failed (user): %s", e)
+            return PlainTextResponse("ok", status_code=200)
+
+        # Plan first-payment → activate subscription, set user.plan
+        sub = await db.subscriptions.find_one({"user_id": target_user_id})
+        u = await db.users.find_one({"id": target_user_id}, {"_id": 0, "billing_profile": 1, "email": 1, "name": 1})
+        profile = (u or {}).get("billing_profile") or {}
+        plan = await plans_get(plan_id or (sub or {}).get("plan") or "pro")
+        vat = compute_vat(
+            country=profile.get("country", ""),
+            is_business=bool(profile.get("is_business")),
+            has_valid_vat_id=bool(profile.get("vat_id_valid")),
+            home_cc=await effective_home_country(),
+        )
+        totals = compute_totals(subtotal=float((plan or {}).get("price") or amount), vat_rate=vat["rate"])
+        await db.payments.update_one(
+            {"mollie_payment_id": payment_id},
+            {"$set": {
+                "id": str(uuid.uuid4()),
+                "user_id": target_user_id,
+                "mollie_payment_id": payment_id,
+                "mollie_customer_id": payment.get("customerId"),
+                "mollie_subscription_id": payment.get("subscriptionId"),
+                "kind": kind,
+                "plan": (plan or {}).get("id") or plan_id,
+                "status": "paid",
+                "currency": "EUR",
+                "method": method,
+                "subtotal": totals["subtotal"],
+                "vat_rate": vat["rate"],
+                "vat_amount": totals["vat_amount"],
+                "vat_note": vat["note"],
+                "total": totals["total"],
+                "paid_at": payment.get("paidAt") or _now_iso(),
+                "updated_at": _now_iso(),
+            }, "$setOnInsert": {"created_at": _now_iso()}},
+            upsert=True,
+        )
+        # First payment → create recurring subscription via Mollie + set user.plan
+        if kind == "first" and plan and plan["id"] not in ("free", "hobby"):
+            try:
+                sub_resp = await mollie.create_subscription(
+                    payment["customerId"],
+                    payload={
+                        "amount": {"currency": "EUR", "value": f"{plan['price']:.2f}"},
+                        "interval": "1 month",
+                        "description": f"{plan['name']} plan subscription",
+                        "webhookUrl": os.environ.get("MOLLIE_WEBHOOK_URL"),
+                        "metadata": {"user_id": target_user_id, "plan": plan["id"]},
+                    },
+                )
+                await db.subscriptions.update_one(
+                    {"user_id": target_user_id},
+                    {"$set": {
+                        "user_id": target_user_id,
+                        "plan": plan["id"],
+                        "status": "active",
+                        "mollie_subscription_id": sub_resp["id"],
+                        "mollie_customer_id": payment["customerId"],
+                        "started_at": _now_iso(),
+                        "next_billing_at": sub_resp.get("nextPaymentDate"),
+                    }},
+                    upsert=True,
+                )
+            except MollieError as e:
+                logger.warning("subscription create failed (user-level): %s", e)
+            await db.users.update_one({"id": target_user_id}, {"$set": {"plan": plan["id"]}})
+        return PlainTextResponse("ok", status_code=200)
 
     # Recurring subs payments also don't carry plan/vat metadata — reconstruct from latest known profile/subscription.
     if workspace_id and status == "paid":

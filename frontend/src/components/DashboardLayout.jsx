@@ -24,9 +24,9 @@ const NAV = [
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
   { to: "/app/alerts", label: "Alerts", icon: BellRing },
   { to: "/app/audit", label: "Audit log", icon: FileClock },
-  { to: "/app/billing", label: "Billing", icon: CreditCard },
-  { to: "/app/settings", label: "Settings", icon: Settings },
+  { to: "/app/settings", label: "Workspace", icon: Settings },
 ];
+const ACCOUNT_NAV = { to: "/app/account", label: "Account", icon: UserIcon };
 const ADMIN_NAV = { to: "/app/admin", label: "Admin Console", icon: ShieldCheck };
 
 function WorkspaceSwitcher() {
@@ -179,8 +179,12 @@ function UserMenu() {
           <div className="text-xs text-zinc-500 font-mono">{user?.email}</div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/app/settings")}>Settings</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/app/billing")}>Billing</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/app/account")} data-testid="user-menu-account">
+          <UserIcon className="h-4 w-4 mr-2" /> Account
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/app/settings")} data-testid="user-menu-workspace">
+          <Settings className="h-4 w-4 mr-2" /> Workspace settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={async () => { await logout(); navigate("/"); }} data-testid="logout-button" className="text-signal-failed">
           <LogOut className="h-4 w-4 mr-2" /> Sign out
@@ -240,6 +244,25 @@ export default function DashboardLayout() {
               </NavLink>
             </>
           )}
+          {/* Account section (per-user, not workspace) */}
+          <div className="mx-5 my-4 h-px bg-white/[0.06]" />
+          <div className="px-5 pb-1 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-600">
+            Personal
+          </div>
+          <NavLink
+            to={ACCOUNT_NAV.to}
+            data-testid="nav-account"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
+                isActive
+                  ? "border-brand text-white bg-white/[0.03]"
+                  : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
+              }`
+            }
+          >
+            <ACCOUNT_NAV.icon className="h-4 w-4" />
+            {ACCOUNT_NAV.label}
+          </NavLink>
         </nav>
         <Link
           to="/app/apps/new"

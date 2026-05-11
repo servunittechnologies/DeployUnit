@@ -18,6 +18,7 @@ from seed import seed_initial_data
 from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog
 from services.plans import seed_default_plans
 from services.credits import monthly_grant_tick
+from services.account_migration import migrate_accounts, needs_migration
 
 from routers import (
     auth as auth_router,
@@ -42,6 +43,7 @@ from routers import (
     databases as databases_router,
     pr_previews as pr_previews_router,
     admin_users as admin_users_router,
+    account as account_router,
 )
 
 
@@ -58,6 +60,14 @@ async def lifespan(app: FastAPI):
     await ensure_indexes()
     await seed_initial_data()
     await seed_default_plans()
+    # One-shot data migration: lift plan + credits + billing profile from
+    # workspaces onto their owner user. Skips users already migrated.
+    if await needs_migration():
+        try:
+            result = await migrate_accounts()
+            logger.info("account migration: %s", result)
+        except Exception as e:
+            logger.exception("account migration failed: %s", e)
     scheduler.add_job(run_monitor_tick, "interval", seconds=60, id="monitor", replace_existing=True)
     scheduler.add_job(sync_deployments, "interval", seconds=15, id="deploy_sync", replace_existing=True)
     scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True, max_instances=2)
@@ -108,6 +118,7 @@ api_router.include_router(cron_router.router)
 api_router.include_router(databases_router.router)
 api_router.include_router(pr_previews_router.router)
 api_router.include_router(admin_users_router.router)
+api_router.include_router(account_router.router)
 
 app.include_router(api_router)
 

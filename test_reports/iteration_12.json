@@ -1,0 +1,36 @@
+{
+  "summary": "Iter12 — Account vs Workspace settings separation. Backend: 18/18 GREEN (100%). Verified all /api/account/* endpoints (snapshot, plan, credits, credits/history, credits/packs, billing, PUT billing/profile w/ VAT, PATCH profile, POST password, plan/checkout free downgrade, plan/cancel, account-wide usage aggregation, backward-compat /api/credits/balance?workspace_id=, backward-compat /api/workspaces/{id}/usage with owner plan resolution, auth-required gating). Mollie paid checkout NOT exercised end-to-end per request. Frontend: /app/account renders all 6 sections (profile/plan/credits/billing/notifications/security) + account-section-nav + plan-cards (free/pro/agency) + packs (small/medium/large). /app/settings renders workspace-only sections (ws-snapshot/ws-name-input/ws-type-select/ws-save/ws-audit-link/ws-delete/ws-manage-plan/ws-members-section) with NO plan/credits/notifications sections (correctly moved to Account page). Sidebar shows 'Workspace' (label) + 'Personal → Account' separator. User menu has user-menu-account + user-menu-workspace. Profile rename integration works. ws-manage-plan link correctly navigates to /app/account#plan. Demo user RESTORED to plan=agency, credits_balance=10, TEST_ billing profile removed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Account/Settings (console)", "issues": ["React warning: 'A props object containing a key prop is being spread into JSX' — non-blocking. Likely in a list render somewhere; should add explicit key={x} instead of spreading via ...props."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_account.py",
+    "/app/test_reports/pytest/pytest_iter12.xml"
+  ],
+  "action_items": [
+    "(MINOR, carried from iter10) services/notifications_sms.py L88 — add 'slack','discord' to iteration tuple so missing webhook URL returns status='skipped' rather than empty.",
+    "(MINOR) Fix the React 'key spread' warning surfaced in console on /app/account or /app/settings — search for `{...props}` spreading that includes a key, replace with explicit key= prop."
+  ],
+  "critical_code_review_comments": [
+    "routers/account.py L66-74 — legacy subscription fallback queries `subscriptions` by ANY workspace owned by user, sorted by started_at desc. If the user historically had multiple workspaces on different plans (pre-migration), this returns the most-recently-started sub which may not match the highest-plan-wins migrated user.plan. Recommend stamping a synthetic user-keyed subscription row during migrate_accounts so this fallback is never exercised.",
+    "routers/account.py L161-186 — downgrade to 'hobby' is grouped with 'free' as 'immediate switch' but sets `'plan': 'free'` on the user doc unconditionally (L182). If hobby is a paid plan in your taxonomy this is a silent bug. Either branch on plan.id explicitly or set plan to `plan['id']`.",
+    "routers/account.py L420-431 — billing payments query uses `{'plan': {'$nin': ['free','hobby']}}` to filter out non-billable payments. If a legacy payment row was inserted without a `plan` field at all (and Mongo $nin matches missing fields = true → included), the filter may pass through noise. Consider `{'plan': {'$exists': True, '$nin': [...]}}`.",
+    "routers/account.py L191-193 + L342-345 — both checkout flows require `billing_profile.country` before allowing Mollie checkout, but the 400 returns a friendly message. Frontend should reflect this with a `bp-save` CTA when checkout is attempted with no profile (UX nit; tested data-testid present).",
+    "services/credits.py L45-61 — `_resolve_user_id` auto-detects workspace vs user by trying workspace lookup first. If a user_id ever collides with a workspace_id (both are uuid hex), the call would mis-resolve to a workspace owner. Vanishingly unlikely with uuid4 but consider requiring `kind_hint` from new call sites for defensive correctness.",
+    "frontend/src/pages/dashboard/Settings.jsx L117-141 — ws-snapshot is conditional on `wsUsage && plan`. Initial load races against the /api/workspaces/{id}/usage fetch — testid is not in DOM immediately, requires ~1s wait. Consider rendering a skeleton with `data-testid='ws-snapshot'` so consumers / E2E tests can rely on it being present.",
+    "frontend/src/components/DashboardLayout.jsx L210-227 — NAV testid template `nav-${label.toLowerCase()}` produces `nav-workspaces` AND `nav-workspace` (Workspaces fleet item + Workspace settings item). Easy to confuse in scripts. Consider explicit testids per-item.",
+    "routers/account.py L432-433 — invoices PDF url is constructed as `/api/billing/invoices/{invoice_number}/pdf` (relative). Frontend should join with REACT_APP_BACKEND_URL; verify on Account page billing section that download works. Not exercised in this iter."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter12_account.py"],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% testid + flow coverage"},
+  "test_credentials": "admin@deployhub.dev / admin123 (plan=free), demo@deployhub.dev / demo1234 (plan=agency, credits=10, owns Acme Studio).",
+  "seed_data_creation": "None persisted. PATCH profile name changes were restored. PUT billing profile (TEST_AcmeStudio, DE, B2C) was inserted then unset by post-run cleanup script. Password change tests re-set demo password back to demo1234 via the test flow. Admin's subscription may have been updated to status='canceled' if it had a pending Mollie sub (most likely no-op, but if main agent later upgrades admin@ they should re-check subscriptions doc).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter12 100% GREEN. Test file: /app/backend/tests/test_iter12_account.py (18 tests, 8 classes). Demo restored to plan=agency, credits_balance=10 — verified via direct Mongo read post-run. Frontend testids confirmed: account-page, section-{profile,plan,credits,billing,notifications,security}, account-section-nav, plan-card-{free,pro,agency}, pack-{small,medium,large}, settings-page, ws-{snapshot,name-input,type-select,save,audit-link,delete,manage-plan,members-section}, user-menu-{account,workspace}, nav-{account,workspace}. ws-snapshot is conditional (requires wsUsage load) — wait for selector in E2E. Mollie paid-plan checkout still requires real sandbox to fully exercise."
+}

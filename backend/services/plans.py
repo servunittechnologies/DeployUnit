@@ -179,11 +179,30 @@ async def update_plan(plan_id: str, updates: dict) -> Optional[dict]:
 
 
 async def workspace_plan(workspace_id: str) -> dict:
-    """Resolve the plan a workspace is on. Defaults to Free if no match
-    (helpful during migrations / data drift)."""
+    """Resolve the plan a workspace is on. Plans live on the OWNER USER now —
+    one plan per account, applies across every workspace the user owns. We
+    keep this signature for backward compat with old callers."""
     db = get_db()
-    ws = await db.workspaces.find_one({"id": workspace_id}, {"_id": 0, "plan": 1})
-    plan_id = (ws or {}).get("plan") or "free"
+    ws = await db.workspaces.find_one({"id": workspace_id}, {"_id": 0, "owner_id": 1, "plan": 1})
+    plan_id = "free"
+    if ws and ws.get("owner_id"):
+        owner = await db.users.find_one({"id": ws["owner_id"]}, {"_id": 0, "plan": 1})
+        plan_id = (owner or {}).get("plan") or ws.get("plan") or "free"
+    elif ws:
+        # Orphan workspace — fall back to legacy field.
+        plan_id = ws.get("plan") or "free"
+    plan = await get_plan(plan_id)
+    if not plan:
+        plan = await get_plan("free")
+    return plan or {"id": "free", "limits": {"apps": 1, "domains": 1, "team": 1, "bandwidth_gb": 100, "build_minutes": 100}, "credits": 0}
+
+
+async def user_plan(user_id: str) -> dict:
+    """Resolve a user's account-level plan. Replaces `workspace_plan` as the
+    primary lookup — every workspace the user owns inherits this plan."""
+    db = get_db()
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "plan": 1})
+    plan_id = (u or {}).get("plan") or "free"
     plan = await get_plan(plan_id)
     if not plan:
         plan = await get_plan("free")
@@ -207,19 +226,46 @@ async def workspace_usage(workspace_id: str) -> dict:
     }
 
 
+async def account_usage(user_id: str) -> dict:
+    """Aggregate usage across every workspace the user owns. Plan limits
+    apply against this total (Agency = 50 apps total across all workspaces)."""
+    db = get_db()
+    ws_ids = await db.workspaces.distinct("id", {"owner_id": user_id})
+    if not ws_ids:
+        return {"apps": 0, "domains": 0, "databases": 0, "team": 0, "workspaces": 0}
+    apps_used = await db.apps.count_documents({"workspace_id": {"$in": ws_ids}})
+    domains_used = await db.domains.count_documents({"workspace_id": {"$in": ws_ids}})
+    databases_used = await db.databases.count_documents({"workspace_id": {"$in": ws_ids}})
+    member_rows = await db.workspace_members.count_documents({"workspace_id": {"$in": ws_ids}})
+    return {
+        "apps": apps_used,
+        "domains": domains_used,
+        "databases": databases_used,
+        "team": max(member_rows, len(ws_ids)),  # at least one (owner) per workspace
+        "workspaces": len(ws_ids),
+    }
+
+
 async def assert_limit(workspace_id: str, resource: str) -> None:
-    """Raise HTTPException 402 with a helpful message if the workspace has
-    hit its plan's limit on this resource."""
+    """Raise HTTPException 402 if the OWNER's account-wide usage has hit the
+    plan's limit on this resource. Plan + usage are account-scope now."""
     from fastapi import HTTPException
-    plan = await workspace_plan(workspace_id)
+    db = get_db()
+    ws = await db.workspaces.find_one({"id": workspace_id}, {"_id": 0, "owner_id": 1})
+    owner_id = (ws or {}).get("owner_id")
+    if not owner_id:
+        # Orphan workspace — fall back to workspace-scope (safer).
+        plan = await workspace_plan(workspace_id)
+        usage = await workspace_usage(workspace_id)
+    else:
+        plan = await user_plan(owner_id)
+        usage = await account_usage(owner_id)
     cap = (plan.get("limits") or {}).get(resource)
     if cap is None or cap < 0:
         return  # unlimited
-    usage = await workspace_usage(workspace_id)
     current = usage.get(resource, 0)
     if current >= cap:
         plan_name = plan.get("name") or plan["id"]
-        # Suggest the next active plan in price order
         all_plans = await list_plans(only_active=True)
         higher = [p for p in all_plans if p.get("price", 0) > plan.get("price", 0)]
         suggestion = higher[0]["name"] if higher else None
