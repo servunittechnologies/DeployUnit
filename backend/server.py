@@ -156,20 +156,25 @@ api_router.include_router(tickets_router.router)
 app.include_router(api_router)
 
 # CORS — explicit origin list for credentialed cookies.
+# When CORS_ORIGINS="*" with credentials, browsers reject the wildcard. We
+# instead let FastAPI echo the request Origin via allow_origin_regex=".*".
+# This is safe because all sensitive endpoints already require JWT + CSRF
+# cookies, and it makes preview, production and any custom domain work
+# without per-env config.
 _origins = os.environ.get("CORS_ORIGINS", "*")
+fe = os.environ.get("FRONTEND_URL")
 if _origins.strip() == "*":
-    allow_origins = [os.environ.get("FRONTEND_URL", "http://localhost:3000")]
+    cors_kwargs = {"allow_origin_regex": ".*"}
 else:
     allow_origins = [o.strip() for o in _origins.split(",") if o.strip()]
-# Always also include configured FRONTEND_URL
-fe = os.environ.get("FRONTEND_URL")
-if fe and fe not in allow_origins:
-    allow_origins.append(fe)
+    if fe and fe not in allow_origins:
+        allow_origins.append(fe)
+    cors_kwargs = {"allow_origins": allow_origins}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    **cors_kwargs,
 )

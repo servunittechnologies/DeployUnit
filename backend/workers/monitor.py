@@ -378,6 +378,12 @@ async def sync_deployments():
             # Look up via app
             app = await db.apps.find_one({"id": entry["app_id"]})
             if not app or not app.get("coolify_app_uuid"):
+                # No way to ever recover logs for this row — stamp it so the
+                # watchdog stops re-querying the build engine forever.
+                await db.deployments.update_one(
+                    {"id": entry["id"]},
+                    {"$set": {"failure_summary": "build engine no longer has logs for this deployment"}},
+                )
                 continue
             try:
                 cool_deps = await coolify.list_deployments(app["coolify_app_uuid"])
@@ -395,6 +401,12 @@ async def sync_deployments():
         except Exception:
             continue
         if not full:
+            # 404 from build engine — deployment is gone. Stamp a placeholder
+            # so this row drops out of the backfill query and we stop spamming.
+            await db.deployments.update_one(
+                {"id": entry["id"]},
+                {"$set": {"failure_summary": "build engine no longer has logs for this deployment"}},
+            )
             continue
         log_lines = _flatten_logs(full.get("logs"))
         if not log_lines:
