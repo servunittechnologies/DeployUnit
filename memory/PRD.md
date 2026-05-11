@@ -56,24 +56,37 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Hooks: `useTypewriter`, `useScrambleText`, `useSpotlight`, `useDeploymentStream`.
 
 ## P1 backlog (next)
+- **Agency Fleet View** — multi-tenant dashboard for agencies: list all client workspaces, "problem-first" sort (apps with failures/down sites bubble to the top), per-client KPI mini-cards, bulk redeploy.
+- **Cloudflare auto-subdomain** — wire the existing Admin Platform setting (zone id + API token + target IP) into `routers/apps.py::create_app` so every new app gets a free `{slug}.deployhub.app` A-record + primary_url out of the box.
+- **One-click templates** — pre-built Coolify launch presets for Next.js SaaS starter, blog, e-commerce, marketing landing. No GitHub OAuth required for first deploy.
 - GitHub Webhooks for auto-deploy on `git push` (P1).
-- Email notifications (need Resend / SendGrid key).
+- Email notifications (need Resend / SendGrid key) — replaces the current in-app stub in send_alert.
 - White-label / branding for agency workspaces.
 - Resource usage alerts.
 
 ## P2 backlog
+- PR Preview Deploys (Vercel-style) — ephemeral apps per PR.
+- `.env.example` auto-import from GitHub repo on first deploy.
+- Cron/scheduled tasks management.
+- Postgres/Redis as-a-service.
 - Slack + Discord alert channels.
-- Usage-based billing add-on via Mollie (extra endpoints over plan limit).
-- Let's Encrypt / HTTPS enforcement guidance for Coolify URLs.
 - Multi-region deployment selection.
-- Audit log.
 - Coupon system on checkout.
+- Audit log.
 
 ## Test credentials
 - Admin: `admin@deployhub.dev` / `admin123`
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Sprint 3 complete: Twilio SMS + WhatsApp notifications (Iter8)**
+  - **Backend**: `clients/twilio.py` (async httpx, creds from `platform_settings`, Fernet-decrypted), `services/notifications_sms.py` (per-event dispatch, atomic credit consume/refund, Twilio status webhook handler), `routers/notifications.py` (GET/PUT `/api/notifications/prefs`, POST `/api/notifications/test`, POST `/api/notifications/twilio/status` webhook). Test-send bypasses prefs matrix so the user can validate each channel explicitly.
+  - **Frontend**: `pages/dashboard/Settings.jsx` — new Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons. Integrations health grid now also shows Twilio status alongside Coolify and WHMCS.
+  - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
+  - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
+  - **Tests**: 14/14 new Iter8 backend assertions green (TestIter8NotificationPrefs, TestIter8NotificationTestEndpoint, TestIter8IntegrationsHealthTwilio, TestIter8SupportedEventsImport, TestIter8NotificationsRegression). Full suite 77/78 — the only failure is the pre-existing TestIntegrations::test_integrations_health Coolify external-host timeout flake from iter6. Report at `/app/test_reports/iteration_8.json`.
+
+## Changelog (older)
 - **2026-05-06 — Futuristic revamp + P0 deploy-retry hardening (Iter7)**
   - **P0 fix — silent Coolify deploys**: Split `create_public_app(instant_deploy=True)` → `create_public_app(instant_deploy=False)` + explicit `coolify.deploy()` with 3× exponential backoff retries (2s→4s→8s) in `_trigger_coolify_deploy_with_retry`. Each attempt is logged to `deployment.logs` so users can see retries in the TerminalLog UI.
   - **Watchdog** — new APScheduler job `deployment_watchdog` every 30s picks up deployments stuck in `queued`/`building` >90s without a `coolify_deployment_uuid` and retries once. `max_instances=2` to prevent scheduler starvation.

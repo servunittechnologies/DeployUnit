@@ -84,7 +84,7 @@ async def set_prefs(payload: NotificationPrefsIn, request: Request):
 
 class SendTestIn(BaseModel):
     workspace_id: str
-    channel: str  # "sms" | "whatsapp"
+    channel: str  # "sms" | "whatsapp" | "email"
 
 
 @router.post("/notifications/test")

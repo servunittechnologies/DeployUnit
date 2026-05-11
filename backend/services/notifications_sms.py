@@ -147,6 +147,12 @@ async def send_alert(
 
         elif ch == "whatsapp":
             if not phone or not twilio_ok:
+                await _log_send(
+                    workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
+                    event_type=event_type, to=phone or "—", body=sms_message,
+                    status="skipped", cost=0,
+                    error="no phone" if not phone else "twilio not configured",
+                )
                 results.append({"channel": "whatsapp", "status": "skipped"})
                 continue
             cost = WHATSAPP_COST
