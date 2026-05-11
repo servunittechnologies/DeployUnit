@@ -1,11 +1,40 @@
-"""Monitoring routes — uptime + response time stats."""
+"""Monitoring routes — uptime + response time stats + usage analytics."""
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 
 from db import get_db
 from auth_utils import get_current_user, require_workspace_member
+from services.usage_analytics import app_analytics, account_analytics
 
 router = APIRouter(tags=["monitoring"])
+
+
+@router.get("/apps/{app_id}/analytics")
+async def get_app_analytics(app_id: str, request: Request, window: str = "24h"):
+    """Aggregate everything we can measure for one app:
+      - uptime % + samples count
+      - average + p95 response time
+      - bucketed time-series (response_ms + uptime_pct)
+      - status timeline (live/down/building windows)
+      - deployments in window + build minutes
+      - currently allocated resources (cpu/mem/storage + addon cost)
+    `window` is one of 1h / 24h / 7d / 30d.
+    """
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0, "workspace_id": 1})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    return await app_analytics(app_id, window=window)
+
+
+@router.get("/account/analytics")
+async def get_account_analytics(request: Request, window: str = "30d"):
+    """Roll-up across every workspace the user owns — total resources
+    allocated, build minutes used, credit burn per category, headroom etc."""
+    user = await get_current_user(request)
+    return await account_analytics(user["id"], window=window)
 
 
 @router.get("/apps/{app_id}/monitoring")

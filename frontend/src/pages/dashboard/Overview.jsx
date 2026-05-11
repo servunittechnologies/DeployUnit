@@ -5,6 +5,7 @@ import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AppCard from "../../components/AppCard";
 import StatusBadge from "../../components/StatusBadge";
 import UsageStrip from "../../components/UsageStrip";
+import { AccountAnalyticsPanel } from "../../components/AppAnalyticsPanel";
 import { Plus, GitBranch, Activity, Globe, BoxesIcon, Boxes } from "lucide-react";
 
 function StatTile({ label, value, accent }) {
@@ -67,6 +68,12 @@ export default function Overview() {
         <StatTile label="Live" value={liveCount} accent="text-signal-live" />
         <StatTile label="Building / queued" value={buildingCount} accent="text-signal-building" />
         <StatTile label="Avg uptime 24h" value={avgUptime != null ? `${avgUptime}%` : "—"} accent="text-brand" />
+      </div>
+
+      {/* Account-wide rollup — resources, build minutes, credit burn — fed
+          from /api/account/analytics so it spans every workspace. */}
+      <div className="m-6">
+        <AccountAnalyticsPanel />
       </div>
 
       {loading ? (

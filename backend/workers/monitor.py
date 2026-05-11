@@ -405,3 +405,31 @@ async def sync_deployments():
         if summary:
             update["failure_summary"] = sanitize(summary)
         await db.deployments.update_one({"id": entry["id"]}, {"$set": update})
+
+
+
+async def status_sampler():
+    """Record a status snapshot for every app so we can render a healthy/down
+    timeline in the analytics tab. Runs every 5 minutes.
+
+    The snapshot rows live in `app_status_samples` and are tiny:
+        {id, app_id, workspace_id, status, sampled_at}
+    """
+    db = get_db()
+    now_iso = _now_iso()
+    cur = db.apps.find({}, {"_id": 0, "id": 1, "workspace_id": 1, "status": 1})
+    docs = []
+    async for a in cur:
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "app_id": a["id"],
+            "workspace_id": a.get("workspace_id"),
+            "status": a.get("status") or "unknown",
+            "sampled_at": now_iso,
+        })
+    if docs:
+        await db.app_status_samples.insert_many(docs)
+    # Garbage-collect anything older than 31 days so the collection doesn't
+    # grow unbounded.
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    await db.app_status_samples.delete_many({"sampled_at": {"$lt": cutoff}})

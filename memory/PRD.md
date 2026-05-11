@@ -72,6 +72,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Usage Analytics (Live + Historical) in Overview & Monitoring**
+  - **App-level analytics** (`GET /api/apps/{id}/analytics?window=1h|24h|7d|30d`):
+    - Uptime %, avg + p95 response time, # samples
+    - Bucketed time-series (response_ms, uptime_pct) → SVG line chart
+    - Status timeline (live/down/building windows) als horizontal coloured stripes
+    - Deployments in window + status breakdown + total build minutes
+    - Currently allocated resources (cpu/mem/storage + addon cost)
+  - **Account-wide analytics** (`GET /api/account/analytics?window=30d`):
+    - Totaal: apps_live / apps_total, CPU/memory/storage allocated, monthly resource cost, build minutes, deployments
+    - Credit burn breakdown by `ref_type` (resource_addon, admin_adjustment, etc) + time-series
+    - Per-app breakdown sorted by monthly cost
+  - **Status sampler worker**: nieuwe `workers/monitor.status_sampler` scheduler (5 min interval) — snapshot van iedere app's status naar `app_status_samples`. Auto-GC voor entries ouder dan 31 dagen.
+  - **Frontend `AppAnalyticsPanel`**: vervangt de oude Monitoring tab, KPI-tiles + custom SVG line chart + status timeline bar + allocated resources card. Auto-refresh elke 30s.
+  - **Frontend `AccountAnalyticsPanel`**: gepland in Overview pagina, toont accountwide totalen + credit burn met visuele category bars.
+  - **Transparant labelen**: omdat Coolify geen container-level CPU/memory stats exposeert, tonen we "allocated resources" (de gegarandeerde limit) i.p.v. een fake usage %. Wel exact gemeten: uptime probes, response times, build minutes, credit consumption.
+
 - **2026-05-11 — Resources + Credit-billed Addons + DB↔App Connections (Iter13, 14/14 backend GREEN, 24/24 iter11 regression)**
   - **DB → App attach**: meerdere databases per app met user-editable env-var naam (`DATABASE_URL` default, A-Z0-9_ ge-clamped). Bij attach pusht DeployHub de `connection_string` direct als env-var naar de build engine via `coolify.update_env`. Detach zet env-var leeg op de volgende deploy.
   - **Per-app resource limieten (HARD enforced)**: CPU/memory worden bij elke deploy via `coolify.update_application({limits_cpus, limits_memory, limits_memory_swap})` op de container gezet. Plan defaults (Free=0.25 vCPU/256MB/1GB, Pro=0.5/512MB/5GB, Agency=1/1GB/20GB) zijn alle admin-editable.

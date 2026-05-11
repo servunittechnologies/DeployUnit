@@ -9,6 +9,7 @@ import DeploymentStatus from "../../components/DeploymentStatus";
 import SitePreview from "../../components/SitePreview";
 import BuildErrorPanel from "../../components/BuildErrorPanel";
 import AppResourcesTab from "../../components/AppResourcesTab";
+import AppAnalyticsPanel from "../../components/AppAnalyticsPanel";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
@@ -689,39 +690,7 @@ export default function AppDetail() {
       )}
 
       {tab === "monitoring" && (
-        <div className="p-6 max-w-4xl">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
-            <div className="bg-background p-5">
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Uptime 24h</div>
-              <div className="mt-2 font-display text-3xl text-signal-live">{monitoring?.uptime_pct != null ? `${monitoring.uptime_pct}%` : "—"}</div>
-            </div>
-            <div className="bg-background p-5">
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Avg response</div>
-              <div className="mt-2 font-display text-3xl">{monitoring?.avg_response_ms != null ? `${monitoring.avg_response_ms}ms` : "—"}</div>
-            </div>
-            <div className="bg-background p-5">
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Samples</div>
-              <div className="mt-2 font-display text-3xl">{monitoring?.samples || 0}</div>
-            </div>
-            <div className="bg-background p-5">
-              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Status</div>
-              <div className="mt-2"><StatusBadge status={app.status} /></div>
-            </div>
-          </div>
-          <div className="mt-6 border border-white/[0.06] p-4">
-            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">Recent checks</div>
-            <div className="flex gap-1 flex-wrap" data-testid="checks-strip">
-              {(monitoring?.results || []).slice(0, 60).map((r) => (
-                <span
-                  key={r.id}
-                  title={`${r.timestamp} · ${r.status_code || "ERR"} · ${r.response_time_ms || "?"}ms`}
-                  className={`h-6 w-1.5 ${r.ok ? "bg-signal-live/70" : "bg-signal-failed/70"}`}
-                />
-              ))}
-              {(!monitoring?.results || monitoring.results.length === 0) && <span className="text-xs text-zinc-500">No checks yet — they run every minute.</span>}
-            </div>
-          </div>
-        </div>
+        <AppAnalyticsPanel appId={id} />
       )}
 
       {tab === "settings" && (

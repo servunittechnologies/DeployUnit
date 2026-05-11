@@ -15,7 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from db import connect, ensure_indexes, disconnect
 from seed import seed_initial_data
-from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog
+from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog, status_sampler
 from services.plans import seed_default_plans
 from services.credits import monthly_grant_tick
 from services.resources import charge_due_addons
@@ -79,6 +79,8 @@ async def lifespan(app: FastAPI):
     # Per-app resource addon charges — billed on the user's wallet at the
     # 30-day anniversary of when the addon was first activated.
     scheduler.add_job(charge_due_addons, "interval", hours=1, id="resource_billing", replace_existing=True)
+    # Periodic status snapshot for the analytics tab (healthy/down timeline).
+    scheduler.add_job(status_sampler, "interval", minutes=5, id="status_sampler", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
