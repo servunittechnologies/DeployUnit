@@ -235,21 +235,34 @@ async def sync_deployments():
         return
 
     # 2) Real Coolify reconcile for apps that DO have a uuid.
+    #    Include "failed" here too: a build may have finished successfully on
+    #    Coolify after our watchdog gave up early, and we shouldn't leave the
+    #    app stranded as "failed" when it's actually running.
     apps = await db.apps.find(
-        {"coolify_app_uuid": {"$ne": None}, "status": {"$in": ["queued", "building"]}}, {"_id": 0}
+        {"coolify_app_uuid": {"$ne": None},
+         "status": {"$in": ["queued", "building", "failed"]}}, {"_id": 0}
     ).to_list(200)
     for a in apps:
         info = await coolify.get_application(a["coolify_app_uuid"])
         if not info:
             continue
         cool_status = (info.get("status") or "").lower()
-        new_status = "building"
+        # If the app is already marked failed and Coolify still reports
+        # exited/failed, leave it alone — no point thrashing.
+        is_currently_failed = a.get("status") == "failed"
+        new_status = a.get("status") or "building"
         if cool_status.startswith("running"):
             new_status = "live"
         elif "exited:0" in cool_status:
             new_status = "live"
         elif "exited" in cool_status or "fail" in cool_status or "error" in cool_status:
             new_status = "failed"
+        elif is_currently_failed and not cool_status:
+            # Coolify reports no status at all → keep the failed marker
+            continue
+        # No state change → skip the write.
+        if new_status == a.get("status"):
+            continue
         fqdn = info.get("fqdn") or info.get("preview_fqdn")
         primary_url = None
         if fqdn:
@@ -260,6 +273,20 @@ async def sync_deployments():
         if new_status in ("live", "failed"):
             update["last_deploy_at"] = _now_iso()
         await db.apps.update_one({"id": a["id"]}, {"$set": update})
+        # If we just rescued an app from failed → live, also flip the latest
+        # deployment row to "live" so the UI history reflects reality.
+        if new_status == "live" and is_currently_failed:
+            recent_failed = await db.deployments.find_one(
+                {"app_id": a["id"], "status": "failed"},
+                {"_id": 0, "id": 1},
+                sort=[("started_at", -1)],
+            )
+            if recent_failed:
+                await db.deployments.update_one(
+                    {"id": recent_failed["id"]},
+                    {"$set": {"status": "live", "finished_at": _now_iso()},
+                     "$push": {"logs": "[SYNC] build engine finished after watchdog gave up — promoted to live"}},
+                )
 
         # Pull the latest Coolify deployment logs onto our deployment row
         # so the user sees the real failure reason without opening the stream.

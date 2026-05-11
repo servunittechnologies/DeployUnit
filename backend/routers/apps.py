@@ -326,13 +326,11 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
     res = None
     used_private_flow = False
     if is_github_https(app["repo_url"]):
-        # Use the workspace OWNER's GitHub token (if any) so we don't get
-        # rate-limited on unauthenticated probes. Falls back to anon probe.
-        owner_token = None
-        ws_doc = ws or await db.workspaces.find_one({"id": app["workspace_id"]}, {"_id": 0, "owner_id": 1})
-        if ws_doc and ws_doc.get("owner_id"):
-            owner = await db.users.find_one({"id": ws_doc["owner_id"]}, {"_id": 0, "github_token": 1})
-            owner_token = (owner or {}).get("github_token")
+        # Use the workspace OWNER's GitHub OAuth token (decrypted) so we don't
+        # get rate-limited on unauthenticated probes AND can detect access to
+        # private repos. The helper digs through workspace_members → user →
+        # github_access_token and decrypts on the fly.
+        owner_token = await workspace_github_token(app["workspace_id"])
         visibility = await probe_repo_visibility(app["repo_url"], token=owner_token)
 
         if visibility == "private":
