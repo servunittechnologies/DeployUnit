@@ -35,7 +35,7 @@ from services.github_webhooks import (
     register_webhook as wh_register,
     unregister_webhook as wh_unregister,
 )
-from services.plans import assert_limit
+from services.plans import assert_limit, workspace_plan
 from services.audit import log as audit_log
 
 router = APIRouter(tags=["apps"])
@@ -1024,3 +1024,137 @@ async def promote_app(app_id: str, request: Request, background: BackgroundTasks
         "to":   {"id": dest["id"], "name": dest["name"], "environment": dest.get("environment")},
     }
 
+
+
+
+# ─────────────────────── Move app between workspaces ───────────────────────
+class MoveAppIn(BaseModel):
+    target_workspace_id: str
+
+
+@router.get("/apps/{app_id}/move-candidates")
+async def move_candidates(app_id: str, request: Request):
+    """Workspaces the current user can move this app *to*. Excludes the
+    current workspace and any workspace the user isn't a developer of."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    user_id = user["id"]
+    # Workspaces owned by user
+    owned_ids = await db.workspaces.distinct("id", {"owner_id": user_id})
+    # Plus workspaces the user is an explicit member of with sufficient role
+    member_rows = await db.workspace_members.find(
+        {"user_id": user_id, "role": {"$in": ["owner", "admin", "developer"]}},
+        {"_id": 0, "workspace_id": 1},
+    ).to_list(500)
+    accessible = list(set(owned_ids) | {m["workspace_id"] for m in member_rows})
+    if app["workspace_id"] in accessible:
+        accessible.remove(app["workspace_id"])
+
+    rows = []
+    for wid in accessible:
+        ws = await db.workspaces.find_one({"id": wid}, {"_id": 0})
+        if not ws:
+            continue
+        plan = await workspace_plan(wid)
+        apps_used = await db.apps.count_documents({"workspace_id": wid})
+        max_apps = plan.get("limits", {}).get("apps")
+        rows.append({
+            "id": ws["id"], "name": ws["name"], "type": ws.get("type"),
+            "plan": plan.get("name"),
+            "apps_used": apps_used,
+            "apps_limit": max_apps,
+            "has_room": (max_apps is None or apps_used < max_apps),
+        })
+    rows.sort(key=lambda w: w["name"].lower())
+    return {"current_workspace_id": app["workspace_id"], "candidates": rows}
+
+
+@router.post("/apps/{app_id}/move")
+async def move_app(app_id: str, payload: MoveAppIn, request: Request):
+    """Re-parent this app to a different workspace and cascade workspace_id
+    on related rows (deployments, domains, cron_jobs, pr_previews). Historical
+    audit rows + notification_sends + payments stay with the OLD workspace
+    as a paper trail. The Coolify project_uuid stays put — the underlying
+    build engine resource doesn't move."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    src_ws_id = app["workspace_id"]
+    dst_ws_id = payload.target_workspace_id
+
+    if src_ws_id == dst_ws_id:
+        raise HTTPException(status_code=400, detail="App is already in this workspace")
+
+    # User must have move privilege on BOTH sides.
+    await require_workspace_member(src_ws_id, user, ["owner", "admin", "developer"])
+    await require_workspace_member(dst_ws_id, user, ["owner", "admin", "developer"])
+
+    dst_ws = await db.workspaces.find_one({"id": dst_ws_id})
+    if not dst_ws:
+        raise HTTPException(status_code=404, detail="Target workspace not found")
+
+    # Plan-limit check on destination.
+    dst_plan = await workspace_plan(dst_ws_id)
+    max_apps = (dst_plan.get("limits") or {}).get("apps")
+    if max_apps is not None:
+        used = await db.apps.count_documents({"workspace_id": dst_ws_id})
+        if used >= max_apps:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Destination workspace is at its plan limit ({used}/{max_apps} apps). Upgrade the plan first.",
+            )
+
+    # If the app is paired with a peer that lives in the source workspace,
+    # unpair both sides — they can't span workspaces. (If the peer is somehow
+    # already in the destination workspace, the pairing survives.)
+    peer_id = app.get("paired_app_id")
+    if peer_id:
+        peer = await db.apps.find_one({"id": peer_id})
+        if peer and peer.get("workspace_id") != dst_ws_id:
+            await db.apps.update_one({"id": app_id}, {"$set": {"paired_app_id": None}})
+            await db.apps.update_one({"id": peer_id}, {"$set": {"paired_app_id": None}})
+
+    # Cascade workspace_id on related collections. project_id is a per-workspace
+    # grouping → drop it on move so the app surfaces in the dest dashboard root.
+    now = _now_iso()
+    await db.apps.update_one(
+        {"id": app_id},
+        {"$set": {"workspace_id": dst_ws_id, "project_id": None, "moved_at": now}},
+    )
+    await db.deployments.update_many({"app_id": app_id}, {"$set": {"workspace_id": dst_ws_id}})
+    await db.domains.update_many({"app_id": app_id}, {"$set": {"workspace_id": dst_ws_id}})
+    await db.cron_jobs.update_many({"app_id": app_id}, {"$set": {"workspace_id": dst_ws_id}})
+    await db.pr_previews.update_many({"parent_app_id": app_id}, {"$set": {"workspace_id": dst_ws_id}})
+    # PR preview child apps too
+    await db.apps.update_many(
+        {"parent_app_id": app_id, "is_pr_preview": True},
+        {"$set": {"workspace_id": dst_ws_id, "moved_at": now}},
+    )
+
+    # Bump apps_used counters on both workspaces so the usage strip reflects reality.
+    await db.workspaces.update_one({"id": src_ws_id}, {"$inc": {"apps_used": -1}})
+    await db.workspaces.update_one({"id": dst_ws_id}, {"$inc": {"apps_used": 1}})
+
+    audit_log(action="app.move", actor=user, workspace_id=src_ws_id,
+              resource_type="app", resource_id=app_id,
+              meta={"from_workspace_id": src_ws_id, "to_workspace_id": dst_ws_id,
+                    "app_name": app["name"]}, request=request)
+    audit_log(action="app.receive", actor=user, workspace_id=dst_ws_id,
+              resource_type="app", resource_id=app_id,
+              meta={"from_workspace_id": src_ws_id, "to_workspace_id": dst_ws_id,
+                    "app_name": app["name"]}, request=request)
+
+    return {
+        "moved": True,
+        "app_id": app_id,
+        "from_workspace_id": src_ws_id,
+        "to_workspace_id": dst_ws_id,
+        "unpaired": bool(peer_id),
+    }

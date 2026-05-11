@@ -8,12 +8,14 @@ import DeployModal from "../../components/DeployModal";
 import DeploymentStatus from "../../components/DeploymentStatus";
 import SitePreview from "../../components/SitePreview";
 import BuildErrorPanel from "../../components/BuildErrorPanel";
+import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
   ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
   Webhook, Copy, Eye, EyeOff, RefreshCw, Clock, GitPullRequest,
+  Boxes, ArrowRightLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -501,6 +503,7 @@ export default function AppDetail() {
           <WebhookSection appId={app.id} />
           <CronJobsSection appId={app.id} />
           <PRPreviewsSection appId={app.id} />
+          <MoveAppSection app={app} />
           <div className="mt-10 max-w-2xl border border-signal-failed/30 p-5">
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-signal-failed">Danger zone</div>
             <div className="mt-2 flex items-center justify-between gap-4">
@@ -998,6 +1001,117 @@ function EnvironmentPairSection({ app, onChange }) {
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+
+/* ─────────────────────── Move app between workspaces ─────────────────────── */
+function MoveAppSection({ app }) {
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const { refresh: refreshWorkspaces, setActive } = useWorkspace();
+  const nav = useNavigate();
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/apps/${app.id}/move-candidates`);
+      setCandidates(r.data.candidates || []);
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setLoading(false); }
+  };
+
+  const startMove = async () => { setOpen(true); await load(); };
+
+  const move = async () => {
+    if (!target) { toast.error("Pick a destination workspace"); return; }
+    const tgt = candidates.find((c) => c.id === target);
+    if (!tgt) return;
+    if (!tgt.has_room) { toast.error("Destination workspace is at its plan limit"); return; }
+    if (!window.confirm(`Move "${app.name}" to "${tgt.name}"?\n\nDeployments, domains, cron jobs and PR previews will follow.\nIf this app is paired with a staging/production peer in the source workspace, the link will be broken.\n\nThe Coolify build resource itself stays in place — only ownership in DeployHub moves.`)) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/apps/${app.id}/move`, { target_workspace_id: target });
+      toast.success(`Moved to ${tgt.name}${r.data.unpaired ? " · staging/prod link removed" : ""}`);
+      // Switch active workspace to destination so the user lands in the right context after refresh.
+      await refreshWorkspaces();
+      if (setActive) setActive(tgt.id);
+      // Reload so all queries refetch under the new workspace.
+      setTimeout(() => nav(`/app/apps/${app.id}`, { replace: true }), 400);
+      setTimeout(() => window.location.reload(), 800);
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <section className="max-w-3xl border border-white/[0.06] p-6 space-y-4" data-testid="move-app-section">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Boxes className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Move to another workspace</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mt-1">
+            Re-parent this app to a different workspace or agency-client fleet. Deployments, domains, cron jobs and PR previews follow along.
+          </p>
+        </div>
+        {!open && (
+          <button onClick={startMove} className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 hover:border-brand/50 text-xs font-mono" data-testid="move-app-open">
+            <ArrowRightLeft className="h-3 w-3" /> Move…
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="space-y-3">
+          {loading && <div className="text-xs font-mono text-zinc-500">Loading workspaces…</div>}
+          {!loading && candidates.length === 0 && (
+            <div className="text-xs font-mono text-zinc-500">
+              No other workspaces available. Create a second workspace first.
+            </div>
+          )}
+          {candidates.length > 0 && (
+            <div className="space-y-1.5">
+              {candidates.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setTarget(c.id)}
+                  disabled={!c.has_room}
+                  className={`w-full text-left px-3 py-2.5 border transition-colors ${
+                    target === c.id ? "border-brand bg-brand/5" :
+                    c.has_room ? "border-white/[0.08] hover:border-white/30" : "border-white/[0.06] opacity-50 cursor-not-allowed"
+                  }`}
+                  data-testid={`move-app-candidate-${c.id}`}
+                >
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <div className="text-sm">{c.name}</div>
+                      <div className="text-[11px] font-mono text-zinc-500 mt-0.5">{c.type} · {c.plan}</div>
+                    </div>
+                    <div className="text-[11px] font-mono">
+                      {c.has_room ? (
+                        <span className="text-zinc-400">{c.apps_used}{c.apps_limit ? `/${c.apps_limit}` : ""} apps</span>
+                      ) : (
+                        <span className="text-signal-failed">at limit ({c.apps_used}/{c.apps_limit})</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 pt-2">
+            <button onClick={move} disabled={busy || !target} className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-40 text-sm" data-testid="move-app-confirm">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-3.5 w-3.5" />} Move app
+            </button>
+            <button onClick={() => { setOpen(false); setTarget(""); }} className="px-3 py-2 border border-white/10 text-xs font-mono">cancel</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
