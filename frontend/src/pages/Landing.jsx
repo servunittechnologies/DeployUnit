@@ -1189,25 +1189,40 @@ function GreenEnergy() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
-            whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
             className="relative flex items-center justify-center"
           >
-            <div className="relative h-72 w-72 border border-emerald-500/30 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 flex items-center justify-center"
-              >
-                <Wind className="h-32 w-32 text-emerald-400/40" strokeWidth={1} />
-              </motion.div>
-              <div className="relative text-center">
-                <Leaf className="h-10 w-10 text-emerald-400 mx-auto" />
-                <div className="mt-4 font-display text-3xl font-bold text-emerald-400">Carbon</div>
-                <div className="mt-1 font-display text-3xl font-bold text-white">Conscious</div>
-                <div className="mt-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400">by default</div>
+            <div className="relative h-72 w-72 flex items-center justify-center">
+              {/* Concentric radar-style pulse rings */}
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="absolute rounded-full border border-emerald-400/30"
+                  animate={{
+                    width: ["40%", "100%"],
+                    height: ["40%", "100%"],
+                    opacity: [0.45, 0],
+                  }}
+                  transition={{
+                    duration: 3.6,
+                    delay: i * 1.2,
+                    repeat: Infinity,
+                    ease: "easeOut",
+                  }}
+                />
+              ))}
+              {/* Static outer ring */}
+              <span className="absolute inset-0 rounded-full border border-emerald-500/20" />
+              {/* Static inner medal */}
+              <div className="relative z-10 h-40 w-40 rounded-full border border-emerald-500/40 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                <Leaf className="h-8 w-8 text-emerald-400" strokeWidth={1.5} />
+                <div className="mt-2.5 font-display text-base font-bold text-white leading-tight text-center">
+                  Carbon<br />Conscious
+                </div>
+                <div className="mt-1 text-[8px] uppercase tracking-[0.3em] font-mono text-emerald-400/70">by default</div>
               </div>
             </div>
           </motion.div>
