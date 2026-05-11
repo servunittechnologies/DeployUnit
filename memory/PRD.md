@@ -72,6 +72,20 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Logs UX overhaul + auto-heal voor verloren build-engine apps**
+  - **ServUnit hersteld**: app stond op stale `coolify_app_uuid` (uitgewist op de build engine). Nieuwe `/api/apps/{id}/reinstall` endpoint maakt een verse Coolify-app aan met de opgeslagen `repo_url` + `branch`. Auto-heal in `redeploy()`: pre-flight `coolify.app_exists()` check, valt automatisch terug op het create-app pad als de UUID dood is.
+  - **Heldere foutmeldingen**: pre-flight in `_coolify_deploy` detecteert private GitHub repos zonder OAuth-token en faalt FAST met "This is a private GitHub repo. Connect GitHub on your Account page…" — geen opaque Coolify "No such container" stacktrace meer.
+  - **`probe_repo_visibility()` upgrade**: accepteert nu `token` argument zodat we GitHub rate-limits omzeilen en correct detecteren of een repo écht privé is.
+  - **Nieuwe Coolify client methodes**: `_request_meta()` (data, status, error_text), `app_exists()` (404-check), `application_logs(uuid, lines)` (runtime container logs).
+  - **Nieuwe API endpoints**:
+    - `POST /api/apps/{id}/reinstall` — recreate build-engine app
+    - `GET /api/apps/{id}/console-logs?lines=N` — runtime stdout/stderr met `reason=build_engine_missing` hint
+  - **Frontend `BuildErrorPanel`** is nu pattern-aware: "private repo" → **Connect GitHub** CTA, "missing on build engine" → **Reinstall** CTA, "plan limit" → **Upgrade plan** CTA. Plus secundaire actions: redeploy, branch-hint, troubleshooting link.
+  - **`AppDetail.jsx` upgrades**:
+    - Nieuwe **Console tab**: live runtime logs viewer met 100/200/500/1000 lines, pause/resume, refresh, severity-coloring, 5s auto-poll.
+    - Nieuwe **DeploymentRow component**: elke deployment-rij is uitklapbaar — klik → fetch volledige logs + parsed_logs met severity, failure_summary banner bovenaan voor failed deploys, "raw json" link.
+    - Trigger-tag (`· REINSTALL`, `· auto-webhook`, etc.) in de branch-kolom.
+
 - **2026-05-11 — Account vs Workspace settings split (Iter12, 18/18 backend GREEN)**
   - **Plan, credits & notifications zijn nu account-niveau** (één plan, één wallet, één meldingen-inbox per gebruiker — toegepast over alle workspaces die de gebruiker bezit).
   - **Nieuwe `/app/account` pagina** met sticky sectie-nav: Profile, Plan & usage (met grafische usage-bars + plan-grid), Credits wallet (balance, monthly grant, recent activity, koop-packs), Billing & invoices (profile + PDF lijst), Notification preferences (matrix events × kanalen), Security (password change).

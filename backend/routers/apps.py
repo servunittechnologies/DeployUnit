@@ -317,14 +317,41 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
     # Decide: public repo → /applications/public
     #         private GitHub repo → generate deploy key, upload to GitHub,
     #                                register in Coolify, use /applications/private-deploy-key
+    #
+    # Pre-flight: figure out repo visibility and check that we have what's
+    # needed (deploy key/GitHub OAuth token) so we can fail FAST with a clear
+    # actionable message instead of letting Coolify die with "No such
+    # container" 90 seconds later.
     # -------------------------------------------------------------------
     res = None
     used_private_flow = False
     if is_github_https(app["repo_url"]):
-        visibility = await probe_repo_visibility(app["repo_url"])
+        # Use the workspace OWNER's GitHub token (if any) so we don't get
+        # rate-limited on unauthenticated probes. Falls back to anon probe.
+        owner_token = None
+        ws_doc = ws or await db.workspaces.find_one({"id": app["workspace_id"]}, {"_id": 0, "owner_id": 1})
+        if ws_doc and ws_doc.get("owner_id"):
+            owner = await db.users.find_one({"id": ws_doc["owner_id"]}, {"_id": 0, "github_token": 1})
+            owner_token = (owner or {}).get("github_token")
+        visibility = await probe_repo_visibility(app["repo_url"], token=owner_token)
+
         if visibility == "private":
+            # Need a token to register a deploy key. Without it, Coolify can't
+            # clone and you'll get an opaque "No such container" 60s later.
+            if not owner_token:
+                await _fail_deploy(
+                    "This is a private GitHub repo. Connect GitHub on your Account page so we can register a deploy key, then click Deploy again."
+                )
+                return
             used_private_flow = True
+            if deployment_id:
+                await _append_log(deployment_id, "[BUILD] private repo detected — registering deploy key")
             res = await _create_private_github_app(app, deployment_id, project_uuid, server_uuid)
+        elif visibility is None:
+            # Couldn't determine — log it and try public first (most common).
+            if deployment_id:
+                await _append_log(deployment_id, "[BUILD] repo visibility unknown (rate-limited or network) — trying public clone")
+
     if not used_private_flow:
         res = await coolify.create_public_app(
             project_uuid=project_uuid,
@@ -336,7 +363,7 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
             instant_deploy=False,
         )
     if not res or not res.get("uuid"):
-        await _fail_deploy("build engine create app failed — check repo URL and try again")
+        await _fail_deploy("Build engine couldn't create the application. Check that the repo URL is correct and you have access. If the repo is private, connect GitHub on your Account page.")
         return
 
     coolify_uuid = res["uuid"]
@@ -672,6 +699,21 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks, p
     await db.apps.update_one({"id": app_id}, {"$set": app_update})
 
     if coolify.configured and app.get("coolify_app_uuid"):
+        # First check the Coolify app actually still exists — out-of-band
+        # deletes (admin tooling, manual ops on the build engine, etc.) leave
+        # us with a stale UUID, which produces opaque "deploy failed" loops.
+        # If it's gone, transparently fall through to the full create-path so
+        # the user just sees a normal deploy that succeeds.
+        engine_ok = await coolify.app_exists(app["coolify_app_uuid"])
+        if not engine_ok:
+            await db.deployments.update_one(
+                {"id": deploy_doc["id"]},
+                {"$push": {"logs": "[BUILD] previous build-engine app was missing — auto-reinstalling from your repo"}},
+            )
+            # Clear stale uuid so _coolify_deploy creates a fresh app.
+            await db.apps.update_one({"id": app_id}, {"$set": {"coolify_app_uuid": None, "status": "building"}})
+            background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
+            return {**deploy_doc, "status": "building"}
         # Build Coolify patch (branch/commit) and hand off to background task.
         # The background task applies the patch, then retries coolify /deploy
         # with exponential backoff. Keeps the HTTP response fast.
@@ -696,6 +738,83 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks, p
         background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
 
     return {**deploy_doc, "status": "building" if coolify.configured else "queued"}
+
+
+@router.post("/apps/{app_id}/reinstall")
+async def reinstall_app(app_id: str, request: Request, background: BackgroundTasks):
+    """Recreate the build-engine application from the app's stored repo + branch.
+
+    Used when the underlying build-engine app was deleted out-of-band (admin
+    cleanup, manual ops) leaving DeployHub with a dead `coolify_app_uuid`.
+    Clears the stale uuid, queues a fresh deployment that goes through the
+    full create-app path.
+    """
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    deploy_doc = {
+        "id": str(uuid.uuid4()),
+        "app_id": app_id,
+        "workspace_id": app["workspace_id"],
+        "status": "queued",
+        "commit_sha": None,
+        "commit_message": "Reinstall on build engine",
+        "branch": app.get("branch") or "main",
+        "logs": [
+            "[REINSTALL] queued",
+            f"[REINSTALL] clearing stale build-engine uuid (was {app.get('coolify_app_uuid') or '-'})",
+            f"[REINSTALL] repo={app.get('repo_url')} branch={app.get('branch') or 'main'}",
+        ],
+        "started_at": _now_iso(),
+        "finished_at": None,
+        "trigger": "reinstall",
+    }
+    await db.deployments.insert_one(deploy_doc)
+    deploy_doc.pop("_id", None)
+    await db.apps.update_one(
+        {"id": app_id},
+        {"$set": {"coolify_app_uuid": None, "status": "queued",
+                  "last_deploy_at": _now_iso()}},
+    )
+    audit_log(action="app.reinstall", actor=user, workspace_id=app["workspace_id"],
+              resource_type="app", resource_id=app_id,
+              meta={"app_name": app.get("name")}, request=request)
+    background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
+    return {**deploy_doc, "status": "building"}
+
+
+@router.get("/apps/{app_id}/console-logs")
+async def get_console_logs(app_id: str, request: Request, lines: int = 200):
+    """Live runtime/container logs from the build engine — separate from
+    deployment build logs. Used by the Console tab in the app detail page.
+    Auto-detects when the build-engine app is missing and signals that to the
+    frontend so it can show the 'Reinstall' banner instead of a vague error.
+    """
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    if not coolify.configured:
+        return {"available": False, "reason": "build_engine_not_configured", "lines": []}
+    if not app.get("coolify_app_uuid"):
+        return {"available": False, "reason": "never_deployed", "lines": []}
+    log_lines, err = await coolify.application_logs(app["coolify_app_uuid"], lines=min(2000, max(20, lines)))
+    if err == "build-engine-missing":
+        return {
+            "available": False,
+            "reason": "build_engine_missing",
+            "message": "The application is missing on the build engine. Click 'Reinstall' on the app overview to recreate it from your repo.",
+            "lines": [],
+        }
+    if err:
+        return {"available": False, "reason": "fetch_failed", "message": err, "lines": []}
+    return {"available": True, "lines": log_lines, "count": len(log_lines)}
 
 
 @router.post("/apps/{app_id}/restart")

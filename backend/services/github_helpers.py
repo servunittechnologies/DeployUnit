@@ -115,20 +115,30 @@ async def detect_default_branch(repo_url: str, *, user_id: Optional[str] = None)
     return None
 
 
-async def probe_repo_visibility(repo_url: str) -> Optional[str]:
+async def probe_repo_visibility(repo_url: str, *, token: Optional[str] = None) -> Optional[str]:
     """Return 'public', 'private', or None if we can't tell (network issue or non-GitHub).
-    No auth used — a 404 without a token strongly suggests 'private' (or the repo
-    doesn't exist). 200 means public.
+
+    If `token` is given we pass it as an `Authorization` header so we can
+    bypass GitHub's 60/hr unauthenticated rate limit AND get a definitive
+    answer for private repos the token has access to.
     """
     parsed = parse_repo(repo_url)
     if not parsed:
         return None
     owner, repo = parsed
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         async with httpx.AsyncClient(timeout=8.0) as cli:
-            r = await cli.get(f"https://api.github.com/repos/{owner}/{repo}")
+            r = await cli.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers)
         if r.status_code == 200:
-            return "public"
+            try:
+                return "private" if r.json().get("private") else "public"
+            except Exception:
+                return "public"
+        # Without a token, 404 strongly means private (or repo doesn't exist).
+        # With a token that lacks access, 404 also means private.
         if r.status_code == 404:
             return "private"
     except Exception:

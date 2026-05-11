@@ -15,11 +15,12 @@ import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
   ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
   Webhook, Copy, Eye, EyeOff, RefreshCw, Clock, GitPullRequest,
-  Boxes, ArrowRightLeft,
+  Boxes, ArrowRightLeft, ChevronDown, ChevronRight, Terminal, AlertOctagon,
+  PauseCircle, PlayCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-const TABS = ["overview", "deployments", "domains", "env", "monitoring", "settings"];
+const TABS = ["overview", "deployments", "console", "domains", "env", "monitoring", "settings"];
 
 function timeAgo(iso) {
   if (!iso) return "—";
@@ -40,6 +41,231 @@ function fmtDuration(start, end) {
   if (sec < 60) return `${sec}s`;
   return `${Math.floor(sec / 60)}m ${sec % 60}s`;
 }
+
+/**
+ * One row in the Deployments tab — collapsed by default, expand to show
+ * the full build log + failure summary. This is the "build logs history per
+ * deployment" feature: every past deploy is replayable.
+ */
+function DeploymentRow({ deployment: d, appBranch, isCurrent, canRollback, onRollback, onReinstall, onRetry }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const expand = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !detail) {
+      setLoading(true);
+      try {
+        const r = await api.get(`/deployments/${d.id}/logs`);
+        setDetail(r.data);
+      } catch (e) {
+        setDetail({ logs: [`Failed to load logs: ${e.message}`], parsed_logs: [], status: d.status });
+      } finally { setLoading(false); }
+    }
+  };
+
+  return (
+    <div className="border-r border-b border-white/[0.06]">
+      <button
+        onClick={expand}
+        className="w-full grid grid-cols-12 px-4 py-3 items-center text-sm text-left hover:bg-white/[0.02] transition-colors"
+        data-testid={`deployment-${d.id}`}
+      >
+        <div className="col-span-2 inline-flex items-center gap-2">
+          {open ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />}
+          <StatusBadge status={d.status} />
+        </div>
+        <div className="col-span-2 font-mono text-xs flex items-center gap-1.5">
+          <GitCommit className="h-3 w-3 text-brand" />
+          {d.commit_sha ? d.commit_sha.slice(0, 7) : "HEAD"}
+        </div>
+        <div className="col-span-3 min-w-0 pr-3">
+          <div className="text-xs font-mono text-zinc-400 inline-flex items-center gap-1.5">
+            <GitBranch className="h-3 w-3" /> {d.branch || appBranch}
+            {d.trigger && d.trigger !== "?" && (
+              <span className="ml-2 text-[10px] text-zinc-500 uppercase tracking-wider">· {d.trigger}</span>
+            )}
+          </div>
+          <div className="text-xs text-zinc-500 truncate">{d.commit_message}</div>
+        </div>
+        <div className="col-span-2 font-mono text-xs">{fmtDuration(d.started_at, d.finished_at)}</div>
+        <div className="col-span-2 text-xs font-mono text-zinc-500">{timeAgo(d.started_at)}</div>
+        <div className="col-span-1 text-right">
+          {canRollback ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); onRollback(); }}
+              className="inline-flex items-center gap-1 px-2 py-1 border border-white/15 hover:border-brand hover:text-brand text-[11px] font-mono uppercase tracking-wider cursor-pointer"
+              data-testid={`rollback-${d.id}`}
+              title="Rollback to this deployment"
+            >
+              <Undo2 className="h-3 w-3" /> rollback
+            </span>
+          ) : isCurrent ? (
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-brand">// current</span>
+          ) : (
+            <span className="text-[10px] font-mono text-zinc-600">—</span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 bg-elevated/20 border-t border-white/[0.04]" data-testid={`deployment-${d.id}-expanded`}>
+          {loading && <div className="py-4 text-xs font-mono text-zinc-500">Loading logs…</div>}
+          {detail && (
+            <>
+              {detail.status === "failed" && (
+                <div className="my-3">
+                  <BuildErrorPanel deployment={detail} onRetry={onRetry} onReinstall={onReinstall} />
+                </div>
+              )}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">// build log · {detail.logs?.length || 0} lines</div>
+                  <a
+                    href={`/api/deployments/${d.id}/logs`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] uppercase tracking-[0.2em] font-mono text-zinc-500 hover:text-brand inline-flex items-center gap-1"
+                  >
+                    raw json <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <TerminalLog
+                  title={`${detail.status}.log`}
+                  lines={detail.parsed_logs && detail.parsed_logs.length ? detail.parsed_logs : (detail.logs || []).map((t) => ({ text: t, severity: "info" }))}
+                  height={420}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Console (runtime) logs tab — fetches container stdout/stderr from the
+ * build engine on a 5s poll. Shows a "Reinstall" CTA when the app is gone
+ * on the build engine instead of an opaque "no logs" message.
+ */
+function ConsoleLogsTab({ appId, appStatus, onReinstall }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [paused, setPaused] = useState(false);
+  const [linesToLoad, setLinesToLoad] = useState(200);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const r = await api.get(`/apps/${appId}/console-logs`, { params: { lines: linesToLoad } });
+      setData(r.data);
+      setError("");
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    }
+  }, [appId, linesToLoad]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useEffect(() => {
+    if (paused) return;
+    const i = setInterval(fetchLogs, 5000);
+    return () => clearInterval(i);
+  }, [paused, fetchLogs]);
+
+  const lines = (data?.lines || []).map((t) => ({
+    text: t,
+    severity: /\b(error|exception|failed|fatal)\b/i.test(t) ? "error"
+      : /\b(warn(ing)?)\b/i.test(t) ? "warn"
+      : "info",
+  }));
+
+  const banner = !data?.available && data?.reason ? (
+    <div className="border border-signal-queued/30 bg-signal-queued/[0.04] p-4 mb-4">
+      <div className="flex items-start gap-3">
+        <AlertOctagon className="h-5 w-5 text-signal-queued flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-1">
+            // {(data.reason || "").replaceAll("_", " ")}
+          </div>
+          <div className="text-sm text-zinc-200">
+            {data.message || "Console logs aren't available for this app right now."}
+          </div>
+          {data.reason === "build_engine_missing" && onReinstall && (
+            <button
+              onClick={onReinstall}
+              className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-brand text-brand-fg text-xs font-mono uppercase tracking-wider hover:bg-brand/90"
+              data-testid="console-reinstall"
+            >
+              <RefreshCw className="h-3 w-3" /> Reinstall on build engine
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className="p-6 space-y-3" data-testid="console-tab">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Runtime console</h2>
+          </div>
+          <p className="text-xs font-mono text-zinc-500 mt-1">
+            Live container stdout/stderr from the build engine — auto-refresh every 5s.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={linesToLoad}
+            onChange={(e) => setLinesToLoad(Number(e.target.value))}
+            className="bg-black border border-white/10 px-2 py-1.5 text-xs font-mono focus:border-brand outline-none"
+            data-testid="console-lines-select"
+          >
+            <option value={100} className="bg-black">100 lines</option>
+            <option value={200} className="bg-black">200 lines</option>
+            <option value={500} className="bg-black">500 lines</option>
+            <option value={1000} className="bg-black">1000 lines</option>
+          </select>
+          <button
+            onClick={() => setPaused((p) => !p)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/15 hover:border-brand text-xs font-mono uppercase tracking-wider"
+            data-testid="console-pause"
+          >
+            {paused ? <><PlayCircle className="h-3 w-3" /> resume</> : <><PauseCircle className="h-3 w-3" /> pause</>}
+          </button>
+          <button
+            onClick={fetchLogs}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/15 hover:border-brand text-xs font-mono uppercase tracking-wider"
+            data-testid="console-refresh"
+          >
+            <RefreshCw className="h-3 w-3" /> refresh
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="border border-signal-failed/30 bg-signal-failed/[0.06] p-3 text-sm text-signal-failed">
+          {error}
+        </div>
+      )}
+
+      {banner}
+
+      <TerminalLog
+        title={data?.available ? `console.log · ${appStatus} · ${data.count || lines.length} lines` : "console.log"}
+        lines={lines.length ? lines : data?.available === false ? [] : [{ text: "Loading runtime logs...", severity: "info" }]}
+        height={620}
+        live={!paused && !!data?.available}
+        connected={!paused && !!data?.available}
+      />
+    </div>
+  );
+}
+
 
 function SettingsForm({ app, onSaved }) {
   const [name, setName] = useState(app.name || "");
@@ -215,6 +441,21 @@ export default function AppDetail() {
     catch (e) { toast.error(getApiErrorMessage(e)); }
     finally { setBusy(false); }
   };
+
+  const reinstall = async () => {
+    if (!window.confirm(
+      "Reinstall on the build engine?\n\nThis will recreate the application from scratch using your repo URL and branch. " +
+      "It's the fix when the build-engine app got deleted out-of-band. Your app's settings stay intact."
+    )) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/apps/${id}/reinstall`);
+      toast.success(`Reinstall queued — deployment ${(r.data?.id || "").slice(0, 8)}`);
+      load();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(false); }
+  };
+
   const remove = async () => {
     if (!window.confirm("Delete this app? This cannot be undone.")) return;
     await api.delete(`/apps/${id}`);
@@ -328,7 +569,7 @@ export default function AppDetail() {
           </div>
 
           {latestDeploy?.status === "failed" && (
-            <BuildErrorPanel deployment={latestDeploy} onRetry={() => setDeployOpen(true)} />
+            <BuildErrorPanel deployment={latestDeploy} onRetry={() => setDeployOpen(true)} onReinstall={reinstall} />
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
@@ -357,6 +598,9 @@ export default function AppDetail() {
 
       {tab === "deployments" && (
         <div className="p-6">
+          <div className="text-xs font-mono text-zinc-500 mb-4">
+            Click any row to expand the full build log. Failed deployments show the parsed error summary at the top.
+          </div>
           <div className="border-t border-l border-white/[0.06]">
             <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 border-r border-b border-white/[0.06]">
               <div className="col-span-2">Status</div>
@@ -366,47 +610,26 @@ export default function AppDetail() {
               <div className="col-span-2">Started</div>
               <div className="col-span-1 text-right">Actions</div>
             </div>
-            {deployments.map((d, idx) => {
-              const isCurrent = idx === 0 && (d.status === "live" || d.status === "building" || d.status === "queued");
-              const inFlight = d.status === "queued" || d.status === "building";
-              const canRollback = !isCurrent && !inFlight;
-              return (
-                <div key={d.id} className="grid grid-cols-12 px-4 py-3 border-r border-b border-white/[0.06] items-center text-sm" data-testid={`deployment-${d.id}`}>
-                  <div className="col-span-2"><StatusBadge status={d.status} /></div>
-                  <div className="col-span-2 font-mono text-xs flex items-center gap-1.5">
-                    <GitCommit className="h-3 w-3 text-brand" />
-                    {d.commit_sha ? d.commit_sha.slice(0, 7) : "HEAD"}
-                  </div>
-                  <div className="col-span-3">
-                    <div className="text-xs font-mono text-zinc-400 inline-flex items-center gap-1.5">
-                      <GitBranch className="h-3 w-3" /> {d.branch || app.branch}
-                    </div>
-                    <div className="text-xs text-zinc-500 truncate">{d.commit_message}</div>
-                  </div>
-                  <div className="col-span-2 font-mono text-xs">{fmtDuration(d.started_at, d.finished_at)}</div>
-                  <div className="col-span-2 text-xs font-mono text-zinc-500">{timeAgo(d.started_at)}</div>
-                  <div className="col-span-1 text-right">
-                    {canRollback ? (
-                      <button
-                        onClick={() => rollback(d.id)}
-                        className="inline-flex items-center gap-1 px-2 py-1 border border-white/15 hover:border-brand hover:text-brand text-[11px] font-mono uppercase tracking-wider"
-                        data-testid={`rollback-${d.id}`}
-                        title="Rollback to this deployment"
-                      >
-                        <Undo2 className="h-3 w-3" /> rollback
-                      </button>
-                    ) : isCurrent ? (
-                      <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-brand">// current</span>
-                    ) : (
-                      <span className="text-[10px] font-mono text-zinc-600">—</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {deployments.map((d, idx) => (
+              <DeploymentRow
+                key={d.id}
+                deployment={d}
+                appBranch={app.branch}
+                isCurrent={idx === 0 && (d.status === "live" || d.status === "building" || d.status === "queued")}
+                canRollback={!(idx === 0) && d.status !== "queued" && d.status !== "building"}
+                onRollback={() => rollback(d.id)}
+                onReinstall={reinstall}
+                onRetry={() => setDeployOpen(true)}
+                appId={id}
+              />
+            ))}
             {deployments.length === 0 && <div className="p-10 text-zinc-500 text-sm">No deployments yet.</div>}
           </div>
         </div>
+      )}
+
+      {tab === "console" && (
+        <ConsoleLogsTab appId={id} appStatus={app.status} onReinstall={reinstall} />
       )}
 
       {tab === "domains" && (

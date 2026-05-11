@@ -34,19 +34,36 @@ class CoolifyClient:
     async def _request(self, method: str, path: str, **kwargs) -> Any:
         if not self.configured:
             return None
+        data, _status, _err = await self._request_meta(method, path, **kwargs)
+        return data
+
+    async def _request_meta(self, method: str, path: str, **kwargs) -> tuple[Any, int, str]:
+        """Like _request but also returns (data, status_code, error_text).
+        Used by callers that need to distinguish 404 (resource gone) from
+        500 (build engine down) etc. so they can show helpful messages."""
+        if not self.configured:
+            return None, 0, "build engine not configured"
         url = f"{self.base}/api/v1{path}"
         try:
             async with httpx.AsyncClient(timeout=15.0) as cli:
                 r = await cli.request(method, url, headers=self._headers(), **kwargs)
                 if r.status_code >= 400:
                     logger.warning("Coolify %s %s -> %s %s", method, path, r.status_code, r.text[:300])
-                    return None
+                    err = r.text[:500] if r.text else f"HTTP {r.status_code}"
+                    return None, r.status_code, err
                 if not r.content:
-                    return {}
-                return r.json()
+                    return {}, r.status_code, ""
+                return r.json(), r.status_code, ""
         except Exception as e:
             logger.warning("Coolify %s %s failed: %s", method, path, e)
-            return None
+            return None, 0, str(e)[:200]
+
+    async def app_exists(self, app_uuid: str) -> bool:
+        """Quick existence check — returns False on 404 from build engine."""
+        if not self.configured or not app_uuid:
+            return False
+        _data, status, _err = await self._request_meta("GET", f"/applications/{app_uuid}")
+        return 200 <= status < 300
 
     async def health(self) -> dict:
         """Coolify v4 exposes /api/health (no /v1 prefix). Use a direct call
@@ -207,6 +224,47 @@ class CoolifyClient:
 
     async def get_deployment(self, deployment_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/deployments/{deployment_uuid}")
+
+    async def application_logs(self, app_uuid: str, *, lines: int = 200) -> tuple[list[str], str]:
+        """Pull runtime container logs (stdout/stderr) for an application.
+
+        Returns (lines, error_text). Coolify v4 exposes `/applications/{uuid}/logs`
+        which returns either a list of {"output":..., "timestamp":...} entries
+        or a plain text blob — we normalise into a list of strings.
+
+        On 404 (app gone) returns ([], "build-engine-missing") so the caller
+        can show a clean "needs reinstall" message instead of a raw 404."""
+        if not self.configured or not app_uuid:
+            return [], "not-configured"
+        data, status, err = await self._request_meta(
+            "GET", f"/applications/{app_uuid}/logs", params={"lines": lines}
+        )
+        if status == 404:
+            return [], "build-engine-missing"
+        if status >= 400 or data is None:
+            return [], err or f"HTTP {status}"
+        # Possible shapes from Coolify:
+        #   1) list of {"output":"foo","timestamp":"..."}
+        #   2) {"logs": [...]} dict
+        #   3) plain string blob
+        entries = data.get("logs") if isinstance(data, dict) else data
+        if isinstance(entries, str):
+            return [ln for ln in entries.splitlines() if ln.strip()], ""
+        if not isinstance(entries, list):
+            return [], "unsupported log shape"
+        out = []
+        for e in entries:
+            if isinstance(e, str):
+                out.append(e)
+            elif isinstance(e, dict):
+                ts = e.get("timestamp") or e.get("time") or ""
+                txt = e.get("output") or e.get("message") or e.get("line") or ""
+                tag = (e.get("type") or e.get("stream") or "").lower()
+                prefix = f"{ts[:19]} " if ts else ""
+                if tag == "stderr":
+                    prefix += "[stderr] "
+                out.append(prefix + str(txt))
+        return out, ""
 
     # ─────────────────── Scheduled tasks (cron jobs) ───────────────────
     async def list_scheduled_tasks(self, app_uuid: str) -> list:
