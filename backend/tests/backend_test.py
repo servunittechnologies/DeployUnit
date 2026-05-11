@@ -1077,3 +1077,273 @@ class TestIsolation:
         assert rr.status_code == 200
         r = s.get(f"{API}/apps", params={"workspace_id": demo_workspace_id}, timeout=10)
         assert r.status_code == 403
+
+
+
+# ─────────────────────── Sprint 3 / Iter 8 — Twilio SMS/WhatsApp + prefs ───────
+SUPPORTED_EVENTS_EXPECTED = sorted([
+    "deploy_failed", "deploy_succeeded",
+    "app_down", "app_recovered",
+    "build_warning", "domain_expiring",
+    "credits_low",
+])
+
+
+class TestIter8NotificationPrefs:
+    """GET/PUT /api/notifications/prefs — phone validation, channels persistence."""
+
+    def test_get_prefs_returns_schema_with_7_supported_events(self, demo_session):
+        r = demo_session.get(f"{API}/notifications/prefs", timeout=10)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "phone_e164" in data
+        assert "channels" in data and isinstance(data["channels"], dict)
+        assert "supported_events" in data
+        assert isinstance(data["supported_events"], list)
+        assert len(data["supported_events"]) == 7
+        assert sorted(data["supported_events"]) == SUPPORTED_EVENTS_EXPECTED
+
+    def test_put_prefs_rejects_phone_without_plus(self, demo_session):
+        bad = demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": "32475123456", "channels": {}},
+            timeout=10,
+        )
+        assert bad.status_code == 400, f"expected 400 for non-E.164 phone, got {bad.status_code}: {bad.text}"
+        body = bad.json()
+        msg = (body.get("detail") or "").lower()
+        assert "e.164" in msg or "+" in msg or "phone" in msg
+
+    def test_put_prefs_roundtrip_get_returns_same_values(self, demo_session):
+        payload = {
+            "phone_e164": "+32475999000",
+            "channels": {
+                "sms": ["deploy_failed", "app_down"],
+                "whatsapp": ["app_down"],
+                "email": ["deploy_failed", "deploy_succeeded", "credits_low"],
+            },
+        }
+        up = demo_session.put(f"{API}/notifications/prefs", json=payload, timeout=10)
+        assert up.status_code == 200, up.text
+        assert up.json().get("ok") is True
+        # GET back and verify
+        g = demo_session.get(f"{API}/notifications/prefs", timeout=10)
+        assert g.status_code == 200
+        data = g.json()
+        assert data["phone_e164"] == payload["phone_e164"]
+        assert data["channels"].get("sms") == payload["channels"]["sms"]
+        assert data["channels"].get("whatsapp") == payload["channels"]["whatsapp"]
+        assert data["channels"].get("email") == payload["channels"]["email"]
+
+    def test_put_prefs_accepts_empty_phone(self, demo_session):
+        # phone_e164=None or empty string should be accepted (user clearing phone)
+        r = demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": None, "channels": {"email": ["deploy_failed"]}},
+            timeout=10,
+        )
+        assert r.status_code == 200, r.text
+
+
+class TestIter8NotificationTestEndpoint:
+    """POST /api/notifications/test — bypass-prefs test send."""
+
+    def test_email_channel_returns_queued_regardless_of_prefs(self, demo_session, demo_workspace_id):
+        # First, clear out email from prefs to prove the test endpoint bypasses the matrix
+        demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": "+32475999000", "channels": {"sms": [], "whatsapp": [], "email": []}},
+            timeout=10,
+        )
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "email"},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        results = body.get("results") if isinstance(body, dict) else body
+        assert isinstance(results, list) and len(results) == 1
+        item = results[0]
+        assert item["channel"] == "email"
+        assert item["status"] == "queued"
+        assert item.get("cost", 0) == 0
+
+    def test_email_test_creates_notification_row(self, demo_session, demo_workspace_id):
+        # Trigger an email test send, then verify a NEW notification row appears.
+        # /api/notifications is capped at 100; compare by IDs not by length.
+        before_ids = {n["id"] for n in demo_session.get(
+            f"{API}/notifications", params={"workspace_id": demo_workspace_id}, timeout=10
+        ).json()}
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "email"},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        time.sleep(0.5)
+        after = demo_session.get(
+            f"{API}/notifications", params={"workspace_id": demo_workspace_id}, timeout=10
+        ).json()
+        new_rows = [n for n in after if n["id"] not in before_ids]
+        assert new_rows, "no new notification row appeared after email test send"
+        latest = after[0]
+        assert latest.get("channel") == "email"
+        assert latest.get("event_type") == "deploy_succeeded"
+        assert "test" in (latest.get("title") or "").lower()
+
+    def test_sms_channel_skipped_when_twilio_unconfigured(self, demo_session, demo_workspace_id):
+        # Ensure a phone is set so the only reason for "skipped" is twilio config
+        demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": "+32475999000", "channels": {}},
+            timeout=10,
+        )
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "sms"},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        results = body.get("results") if isinstance(body, dict) else body
+        assert isinstance(results, list) and len(results) == 1
+        item = results[0]
+        assert item["channel"] == "sms"
+        assert item["status"] == "skipped", f"expected skipped, got {item}"
+
+    def test_sms_skip_logs_notification_sends_row_with_error(self, demo_session, demo_workspace_id):
+        """Verify send_alert logs to db.notification_sends with the correct error reason."""
+        from dotenv import load_dotenv
+        from pymongo import MongoClient
+        load_dotenv("/app/backend/.env")
+        mongo_url = os.environ.get("MONGO_URL")
+        db_name = os.environ.get("DB_NAME")
+        assert mongo_url and db_name, "MONGO_URL / DB_NAME required for DB assertion"
+        client = MongoClient(mongo_url)
+        db = client[db_name]
+
+        # Set phone so 'no phone' isn't the reason — twilio config is.
+        demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": "+32475999111", "channels": {}},
+            timeout=10,
+        )
+        marker_time = time.time()
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "sms"},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        time.sleep(0.6)
+
+        rows = list(db.notification_sends.find(
+            {"channel": "sms", "workspace_id": demo_workspace_id, "status": "skipped"},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(5))
+        assert rows, "no notification_sends rows found for skipped SMS"
+        latest = rows[0]
+        err = (latest.get("error") or "").lower()
+        assert "twilio not configured" in err or "no phone" in err, \
+            f"expected error to mention twilio config / phone, got: {latest.get('error')}"
+        assert latest.get("event_type") == "deploy_succeeded"
+        assert latest.get("cost_credits") == 0
+
+    def test_whatsapp_channel_also_skipped(self, demo_session, demo_workspace_id):
+        demo_session.put(
+            f"{API}/notifications/prefs",
+            json={"phone_e164": "+32475999000", "channels": {}},
+            timeout=10,
+        )
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "whatsapp"},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        results = r.json().get("results")
+        assert results[0]["channel"] == "whatsapp"
+        assert results[0]["status"] == "skipped"
+
+    def test_invalid_channel_returns_400(self, demo_session, demo_workspace_id):
+        r = demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "push"},
+            timeout=10,
+        )
+        assert r.status_code == 400, f"expected 400 for unknown channel, got {r.status_code}: {r.text}"
+
+    def test_test_endpoint_without_workspace_membership_forbidden(self, demo_workspace_id):
+        # New user with no membership in demo workspace
+        s = requests.Session()
+        email = f"TEST_nm_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        rr = s.post(f"{API}/auth/register",
+                    json={"email": email, "password": "pw12345x", "name": "NoMember"}, timeout=15)
+        assert rr.status_code == 200
+        r = s.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "email"},
+            timeout=10,
+        )
+        assert r.status_code in (403, 404), f"expected 403/404 for non-member, got {r.status_code}: {r.text}"
+
+
+class TestIter8IntegrationsHealthTwilio:
+    """/api/integrations/health must surface twilio entry (Sprint 3)."""
+
+    def test_integrations_health_includes_twilio_key(self, demo_session):
+        r = demo_session.get(f"{API}/integrations/health", timeout=20)
+        # tolerate the known coolify external-flake — still need twilio key in body
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "coolify" in data
+        assert "whmcs" in data
+        assert "twilio" in data, f"twilio key missing from /integrations/health: {list(data.keys())}"
+        tw = data["twilio"]
+        assert isinstance(tw, dict)
+        assert "configured" in tw
+        # Twilio is intentionally NOT configured in this env
+        assert tw["configured"] is False
+        assert tw.get("ok") is False
+
+
+class TestIter8SupportedEventsImport:
+    """Source-level assertion: SUPPORTED_EVENT_TYPES matches the contract."""
+
+    def test_supported_event_types_set_matches_spec(self):
+        # Add backend path so we can import the service module directly
+        import sys
+        if "/app/backend" not in sys.path:
+            sys.path.insert(0, "/app/backend")
+        from services.notifications_sms import SUPPORTED_EVENT_TYPES
+        assert isinstance(SUPPORTED_EVENT_TYPES, set)
+        assert SUPPORTED_EVENT_TYPES == set(SUPPORTED_EVENTS_EXPECTED), \
+            f"SUPPORTED_EVENT_TYPES drift: {SUPPORTED_EVENT_TYPES} vs {set(SUPPORTED_EVENTS_EXPECTED)}"
+
+
+class TestIter8NotificationsRegression:
+    """Regression: existing list/mark-read/mark-all-read still work alongside new routes."""
+
+    def test_list_mark_read_and_mark_all_read(self, demo_session, demo_workspace_id):
+        # Seed at least one notification via the email test send so list isn't empty
+        demo_session.post(
+            f"{API}/notifications/test",
+            json={"workspace_id": demo_workspace_id, "channel": "email"},
+            timeout=15,
+        )
+        time.sleep(0.4)
+        lst = demo_session.get(
+            f"{API}/notifications", params={"workspace_id": demo_workspace_id}, timeout=10
+        )
+        assert lst.status_code == 200
+        items = lst.json()
+        assert isinstance(items, list) and len(items) >= 1
+        nid = items[0]["id"]
+        mk = demo_session.post(f"{API}/notifications/{nid}/read", timeout=10)
+        assert mk.status_code == 200
+        ra = demo_session.post(
+            f"{API}/notifications/read-all",
+            params={"workspace_id": demo_workspace_id}, timeout=10,
+        )
+        assert ra.status_code == 200

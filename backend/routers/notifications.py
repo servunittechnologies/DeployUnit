@@ -89,13 +89,27 @@ class SendTestIn(BaseModel):
 
 @router.post("/notifications/test")
 async def test_send(payload: SendTestIn, request: Request):
-    """Fire a one-shot test alert to the current user. Consumes credits."""
+    """Fire a one-shot test alert to the current user via the chosen channel.
+    Bypasses the preference matrix (the user explicitly chose), but still
+    consumes credits like a real send."""
     user = await get_current_user(request)
     await require_workspace_member(payload.workspace_id, user)
+    if payload.channel not in ("sms", "whatsapp", "email"):
+        raise HTTPException(status_code=400, detail="channel must be sms, whatsapp or email")
+    # Inject a temporary pref so send_alert dispatches this channel for the
+    # synthetic event_type below.
+    test_event = "deploy_succeeded"
+    prefs = dict(user.get("notification_prefs") or {})
+    channels = dict(prefs.get("channels") or {})
+    existing = list(channels.get(payload.channel) or [])
+    if test_event not in existing:
+        existing.append(test_event)
+    channels[payload.channel] = existing
+    user_for_send = {**user, "notification_prefs": {**prefs, "channels": channels}}
     results = await send_alert(
         workspace_id=payload.workspace_id,
-        user=user,
-        event_type="deploy_succeeded",  # any whitelisted type works
+        user=user_for_send,
+        event_type=test_event,
         title="DeployHub test",
         body="If you got this, your notification channel works.",
         channels=[payload.channel],

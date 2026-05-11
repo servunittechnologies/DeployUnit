@@ -1,0 +1,46 @@
+{
+  "summary": "Iter8 Sprint 3 (Twilio SMS/WhatsApp + notification prefs) — all 14 new backend assertions GREEN on the public preview URL. Verified: (1) GET /api/notifications/prefs returns {phone_e164, channels, supported_events} with exactly the 7 SUPPORTED_EVENT_TYPES (deploy_failed, deploy_succeeded, app_down, app_recovered, build_warning, domain_expiring, credits_low). (2) PUT /api/notifications/prefs E.164 validation — phone '32475123456' (no plus) is rejected with HTTP 400 and detail mentions 'E.164'. (3) PUT prefs roundtrip — set {phone_e164:'+32475999000', channels:{sms:[...],whatsapp:[...],email:[...]}} then GET returns identical payload. PUT also accepts phone_e164=null (clearing). (4) POST /api/notifications/test channel='email' returns {results:[{channel:'email', status:'queued', cost:0}]} EVEN when email is empty in saved prefs — bypass-matrix contract is honored. The new notification row lands in db.notifications (title 'DeployHub test', event_type='deploy_succeeded'). (5) POST /api/notifications/test channel='sms' with Twilio unconfigured returns {results:[{channel:'sms', status:'skipped'}]} and writes a notification_sends Mongo row with error='twilio not configured' (since phone IS set on the user). channel='whatsapp' behaves identically — skipped, no crash. (6) Invalid channel='push' returns 400 with detail 'channel must be sms, whatsapp or email'. (7) Non-member user calling /notifications/test gets 403. (8) GET /api/integrations/health now exposes twilio:{configured:false, ok:false} alongside coolify+whmcs. (9) Source-level: services.notifications_sms.SUPPORTED_EVENT_TYPES set matches the 7-element contract exactly. (10) Regression: list /notifications + POST /notifications/{id}/read + POST /notifications/read-all still 200 OK after Sprint 3 changes. Full suite 77/78 — the only failure is the pre-existing TestIntegrations::test_integrations_health Coolify external-host ReadTimeout flake documented since iter6 (infra-dependent, NOT a Sprint 3 regression).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/integrations/health", "issue": "External Coolify host (149.12.246.205) intermittently times out at 15s causing the legacy TestIntegrations::test_integrations_health to flake. Pre-existing since iter6; new TestIter8IntegrationsHealthTwilio passed because it focuses on the body shape, not on the coolify upstream result. Consider lowering the coolify client timeout or returning 'unknown' instead of letting the request hang."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_iter8.xml",
+    "/app/test_reports/pytest/pytest_iter8_full.xml"
+  ],
+  "action_items": [
+    "(optional) Frontend testing of /app/frontend/src/pages/dashboard/Settings.jsx toggle matrix + phone input + test buttons is now safe to run — backend contracts confirmed stable.",
+    "(known infra) /api/integrations/health hangs on the external coolify host; tighten the upstream client timeout (currently ~15s) or return 'unknown' on timeout so the endpoint itself stays fast."
+  ],
+  "critical_code_review_comments": [
+    "routers/notifications.py — clean separation: GET /prefs at L58 exposes the supported_events list inline from the service module so the frontend never drifts from the source of truth. PUT /prefs validates E.164 with a simple startswith('+') check (L73) which is correct for the spec; could be tightened with a regex (^\\+[1-9]\\d{6,14}$) if you want to reject '+0' or '+abc'.",
+    "routers/notifications.py::test_send — bypass-prefs trick at L102-108 is elegant: clones user dict, injects the chosen channel into a temporary prefs.channels[ch] so send_alert's intersection logic dispatches it. Still consumes credits via consume_credits in send_alert. Good.",
+    "services/notifications_sms.py::send_alert — handles unsupported event_type with a warning log instead of raising (L80-81). Graceful. SMS path: when phone OR twilio missing, logs a notification_sends row with status='skipped' and a precise error string ('no phone' vs 'twilio not configured') — verified by test_sms_skip_logs_notification_sends_row_with_error.",
+    "services/notifications_sms.py — INCONSISTENCY: SMS skip writes a notification_sends row (L102-107), but WhatsApp skip at L150 does NOT — it just appends to results. Minor: this hurts observability symmetry. Recommend mirroring the _log_send call inside the whatsapp branch for consistency.",
+    "services/notifications_sms.py — refund flow on TwilioError (L136-145) correctly calls grant_credits with type_='refund' BEFORE logging the failed send. Safe ordering — even if _log_send fails, the customer is refunded.",
+    "clients/twilio.py::configured() — uses TwilioConfig.load() which silently returns None if decrypt_token raises (L36-37). Good defensive default — but you lose the signal that creds ARE set but the Fernet key is wrong. Consider distinguishing 'unset' vs 'set_but_undecryptable' in a future iter so admins can self-diagnose.",
+    "clients/twilio.py::cost_for_sms — EU prefix list is hardcoded; '352' Luxembourg and '353' Ireland are present but '350' Gibraltar / '356' Malta / '357' Cyprus / '359' Bulgaria / '420' Czechia / '421' Slovakia / '385' Croatia / '386' Slovenia / '36' Hungary / '40' Romania are missing. Customers on those routes will be billed 2 credits instead of 1. Tracked as P2 since pricing is still cheap heuristic.",
+    "routers/settings.py::/integrations/health — twilio entry returns {configured, ok} with identical values. Future: once outbound smoke-test is implemented, decouple 'configured' (creds present) from 'ok' (round-trip succeeded).",
+    "Pydantic SendTestIn at routers/notifications.py L85-87 — comment says 'sms | whatsapp' but channel='email' is allowed at L97. Update the docstring/comment to reflect the 3-channel reality."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {
+    "backend": "98.7% (77/78 full suite; 14/14 on the new Iter8 Sprint 3 class; only failure is the pre-existing Coolify external-host /integrations/health flake from iter6)",
+    "frontend": "skipped per request (backend-only iteration)"
+  },
+  "test_credentials": "demo@deployhub.dev / demo1234 — verified working in this run (cookie-based auth via requests.Session, access_token cookie set on /api/auth/login).",
+  "seed_data_creation": "test_test_endpoint_without_workspace_membership_forbidden registers a fresh TEST_nm_<hex>@deployhub-test.io user (not cleaned — same pattern as TestIsolation already in the suite). PUT /notifications/prefs mutates the demo user's notification_prefs in db.users; final state at end of run: phone_e164='+32475999111', channels populated from the last roundtrip test. The email test sends also leave 2-3 fresh rows in db.notifications and db.notification_sends — these are bounded by the /notifications limit(100) so they age out naturally.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter8 Sprint 3 backend is GREEN. The full regression suite is now 78 tests (was 64 at iter7) with the new TestIter8NotificationPrefs (4), TestIter8NotificationTestEndpoint (7), TestIter8IntegrationsHealthTwilio (1), TestIter8SupportedEventsImport (1), TestIter8NotificationsRegression (1) classes covering all Sprint 3 contracts. When frontend testing for /app/frontend/src/pages/dashboard/Settings.jsx starts: backend route is /api/notifications/prefs (PUT body: {phone_e164, channels:{sms:[],whatsapp:[],email:[]}}), test send route is POST /api/notifications/test (body: {workspace_id, channel}). Twilio is intentionally UNCONFIGURED — SMS/WhatsApp test buttons MUST surface a 'skipped' state, not an error toast. The pre-existing /integrations/health Coolify timeout still flakes ~30-50% of runs; consider gating that one test on a retry decorator or treating it as quarantined."
+}

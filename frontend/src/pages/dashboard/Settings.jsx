@@ -3,7 +3,23 @@ import { api, getApiErrorMessage } from "../../lib/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import GitHubButton from "../../components/GitHubButton";
-import { Save, UserPlus, Trash2, Github, CheckCircle2 } from "lucide-react";
+import { Save, UserPlus, Trash2, Github, CheckCircle2, Send, MessageSquare, Phone, Mail } from "lucide-react";
+
+const EVENT_LABELS = {
+  deploy_failed: "Deploy failed",
+  deploy_succeeded: "Deploy succeeded",
+  app_down: "App down (uptime)",
+  app_recovered: "App recovered",
+  build_warning: "Build warning",
+  domain_expiring: "Domain expiring soon",
+  credits_low: "Credits running low",
+};
+
+const CHANNEL_META = {
+  sms: { label: "SMS", icon: Phone, hint: "1–2 cr per send (EU = 1 cr)" },
+  whatsapp: { label: "WhatsApp", icon: MessageSquare, hint: "1 cr per send" },
+  email: { label: "Email", icon: Mail, hint: "Free (in-app)" },
+};
 
 export default function Settings() {
   const { user, refresh } = useAuth();
@@ -22,6 +38,17 @@ export default function Settings() {
 
   const [integ, setInteg] = useState(null);
 
+  // Notification preferences (Sprint 3 — Twilio SMS/WhatsApp + email)
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [phoneE164, setPhoneE164] = useState("");
+  const [channelMatrix, setChannelMatrix] = useState({}); // {event_type: {sms, whatsapp, email}}
+  const [supportedEvents, setSupportedEvents] = useState([]);
+  const [prefsMsg, setPrefsMsg] = useState("");
+  const [prefsErr, setPrefsErr] = useState("");
+  const [testBusy, setTestBusy] = useState(null); // "sms" | "whatsapp" | null
+  const [testMsg, setTestMsg] = useState("");
+  const [testErr, setTestErr] = useState("");
+
   useEffect(() => {
     setName(user?.name || "");
   }, [user]);
@@ -35,6 +62,82 @@ export default function Settings() {
   useEffect(() => {
     api.get("/integrations/health").then((r) => setInteg(r.data)).catch(() => setInteg(null));
   }, []);
+
+  // Load notification prefs once on mount
+  useEffect(() => {
+    api.get("/notifications/prefs").then((r) => {
+      const data = r.data || {};
+      setPhoneE164(data.phone_e164 || "");
+      const events = data.supported_events || [];
+      setSupportedEvents(events);
+      const channels = data.channels || {};
+      const matrix = {};
+      events.forEach((ev) => {
+        matrix[ev] = {
+          sms: (channels.sms || []).includes(ev),
+          whatsapp: (channels.whatsapp || []).includes(ev),
+          email: (channels.email || []).includes(ev),
+        };
+      });
+      setChannelMatrix(matrix);
+      setPrefsLoaded(true);
+    }).catch(() => setPrefsLoaded(true));
+  }, []);
+
+  const toggleEventChannel = (event, channel) => {
+    setChannelMatrix((m) => ({
+      ...m,
+      [event]: { ...(m[event] || {}), [channel]: !(m[event] || {})[channel] },
+    }));
+  };
+
+  const savePrefs = async () => {
+    setPrefsMsg("");
+    setPrefsErr("");
+    // Convert matrix back to {sms: [events], whatsapp: [events], email: [events]}
+    const channels = { sms: [], whatsapp: [], email: [] };
+    Object.entries(channelMatrix).forEach(([ev, ch]) => {
+      ["sms", "whatsapp", "email"].forEach((c) => {
+        if (ch?.[c]) channels[c].push(ev);
+      });
+    });
+    try {
+      await api.put("/notifications/prefs", {
+        phone_e164: phoneE164.trim() || null,
+        channels,
+      });
+      setPrefsMsg("Preferences saved.");
+      setTimeout(() => setPrefsMsg(""), 2500);
+    } catch (e) {
+      setPrefsErr(getApiErrorMessage(e));
+    }
+  };
+
+  const sendTest = async (channel) => {
+    if (!active) return;
+    setTestBusy(channel);
+    setTestMsg("");
+    setTestErr("");
+    try {
+      const r = await api.post("/notifications/test", { workspace_id: active.id, channel });
+      const result = (r.data?.results || [])[0];
+      if (!result) {
+        setTestErr(`No ${channel} preference enabled for "deploy_succeeded" — toggle it on first.`);
+      } else if (result.status === "sent") {
+        setTestMsg(`Test ${channel} sent (cost: ${result.cost} cr). Check your phone.`);
+      } else if (result.status === "insufficient_credits") {
+        setTestErr("Insufficient credits. Top up your wallet first.");
+      } else if (result.status === "skipped") {
+        setTestErr(`Skipped — ${result.error || "channel not ready"}.`);
+      } else {
+        setTestErr(`Test ${channel} ${result.status}: ${result.error || ""}`);
+      }
+    } catch (e) {
+      setTestErr(getApiErrorMessage(e));
+    } finally {
+      setTestBusy(null);
+    }
+  };
 
   const saveProfile = async () => {
     setProfileMsg("");
@@ -123,6 +226,122 @@ export default function Settings() {
         </form>
       </section>
 
+      {/* Notification preferences (Sprint 3 — SMS/WhatsApp via Twilio + Email) */}
+      <section className="border border-white/[0.06] p-6 space-y-4" data-testid="notif-prefs-section">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="font-display text-xl">Notification preferences</h2>
+            <p className="text-xs text-zinc-500 mt-1">
+              Get pinged on your phone when something breaks. SMS &amp; WhatsApp are billed from your{" "}
+              <span className="text-brand">credit wallet</span>; email is free.
+            </p>
+          </div>
+        </div>
+
+        {/* Phone */}
+        <div>
+          <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
+            Phone (E.164, e.g. +32475123456)
+          </label>
+          <input
+            value={phoneE164}
+            onChange={(e) => setPhoneE164(e.target.value)}
+            placeholder="+32475123456"
+            inputMode="tel"
+            className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+            data-testid="notif-phone-input"
+          />
+          <div className="text-[10px] font-mono text-zinc-600 mt-1">
+            Must start with <span className="text-brand">+</span> and country code. Required for SMS/WhatsApp.
+          </div>
+        </div>
+
+        {/* Per-event matrix */}
+        <div className="border border-white/[0.06]">
+          <div className="grid grid-cols-[1fr_72px_72px_72px] text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500 border-b border-white/[0.06]">
+            <div className="p-3">Event</div>
+            {["sms", "whatsapp", "email"].map((c) => {
+              const Icon = CHANNEL_META[c].icon;
+              return (
+                <div key={c} className="p-3 text-center flex flex-col items-center gap-1">
+                  <Icon className="h-3 w-3" />
+                  {CHANNEL_META[c].label}
+                </div>
+              );
+            })}
+          </div>
+          {prefsLoaded && supportedEvents.length === 0 && (
+            <div className="p-4 text-xs font-mono text-zinc-500">No event types available.</div>
+          )}
+          {supportedEvents.map((ev) => (
+            <div
+              key={ev}
+              className="grid grid-cols-[1fr_72px_72px_72px] border-b border-white/[0.06] last:border-b-0 items-center"
+              data-testid={`notif-event-row-${ev}`}
+            >
+              <div className="p-3">
+                <div className="text-sm">{EVENT_LABELS[ev] || ev}</div>
+                <div className="text-[10px] font-mono text-zinc-600">{ev}</div>
+              </div>
+              {["sms", "whatsapp", "email"].map((c) => {
+                const on = !!channelMatrix[ev]?.[c];
+                return (
+                  <div key={c} className="p-3 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => toggleEventChannel(ev, c)}
+                      className={`h-6 w-11 relative rounded-full transition-colors ${on ? "bg-brand" : "bg-white/[0.08] hover:bg-white/[0.14]"}`}
+                      data-testid={`notif-toggle-${ev}-${c}`}
+                      aria-pressed={on}
+                      aria-label={`${EVENT_LABELS[ev] || ev} via ${CHANNEL_META[c].label}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-black transition-all ${on ? "left-[22px]" : "left-0.5"}`}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="text-[10px] font-mono text-zinc-600 leading-relaxed">
+          Pricing: <span className="text-brand">SMS</span> EU = 1 cr (~€0.10), intl = 2 cr ·{" "}
+          <span className="text-brand">WhatsApp</span> = 1 cr · <span className="text-brand">Email</span> = free
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={savePrefs}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90"
+            data-testid="notif-prefs-save"
+          >
+            <Save className="h-4 w-4" /> Save preferences
+          </button>
+          <button
+            onClick={() => sendTest("sms")}
+            disabled={testBusy === "sms" || !phoneE164}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono hover:border-brand/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="notif-test-sms"
+          >
+            <Send className="h-3 w-3" /> {testBusy === "sms" ? "sending…" : "Test SMS"}
+          </button>
+          <button
+            onClick={() => sendTest("whatsapp")}
+            disabled={testBusy === "whatsapp" || !phoneE164}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono hover:border-brand/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="notif-test-whatsapp"
+          >
+            <Send className="h-3 w-3" /> {testBusy === "whatsapp" ? "sending…" : "Test WhatsApp"}
+          </button>
+          {prefsMsg && <span className="text-xs font-mono text-signal-live">{prefsMsg}</span>}
+          {prefsErr && <span className="text-xs font-mono text-signal-failed">{prefsErr}</span>}
+          {testMsg && <span className="text-xs font-mono text-signal-live" data-testid="notif-test-success">{testMsg}</span>}
+          {testErr && <span className="text-xs font-mono text-signal-failed" data-testid="notif-test-error">{testErr}</span>}
+        </div>
+      </section>
+
       {/* Members */}
       <section className="border border-white/[0.06] p-6 space-y-3">
         <h2 className="font-display text-xl">Workspace members</h2>
@@ -206,8 +425,9 @@ export default function Settings() {
           {[
             ["coolify", "Coolify (deploy engine)"],
             ["whmcs", "WHMCS (billing)"],
+            ["twilio", "Twilio (SMS / WhatsApp)"],
           ].map(([k, label]) => (
-            <div key={k} className="bg-background p-4 flex items-center justify-between">
+            <div key={k} className="bg-background p-4 flex items-center justify-between" data-testid={`integ-${k}`}>
               <div>
                 <div className="text-sm">{label}</div>
                 <div className="text-xs font-mono text-zinc-500">
