@@ -4,7 +4,7 @@ import { api, getApiErrorMessage, API_BASE } from "../../lib/api";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import StatusBadge from "../../components/StatusBadge";
 import BillingProfileForm from "../../components/BillingProfileForm";
-import { CreditCard, ExternalLink, Loader2, Download, Check, AlertTriangle } from "lucide-react";
+import { CreditCard, ExternalLink, Loader2, Download, Check, AlertTriangle, Sparkles, Plus, Minus, Coins } from "lucide-react";
 import { toast } from "sonner";
 
 function format(d) {
@@ -228,6 +228,9 @@ export default function Billing() {
         </section>
       )}
 
+      {/* Credits section */}
+      <CreditsSection workspaceId={active?.id} />
+
       {/* Invoices */}
       <section>
         <div className="flex items-center gap-3 mb-4">
@@ -268,5 +271,133 @@ export default function Billing() {
         )}
       </section>
     </div>
+  );
+}
+
+/* ─────────────────────────── Credits ─────────────────────────── */
+function CreditsSection({ workspaceId }) {
+  const [balance, setBalance] = useState(null);
+  const [packs, setPacks] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState("");
+
+  const load = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const [b, p, h] = await Promise.all([
+        api.get("/credits/balance", { params: { workspace_id: workspaceId } }),
+        api.get("/credits/packs"),
+        api.get("/credits/history", { params: { workspace_id: workspaceId, limit: 20 } }).catch(() => ({ data: [] })),
+      ]);
+      setBalance(b.data); setPacks(p.data); setHistory(h.data);
+    } catch (e) { /* ignore */ }
+  }, [workspaceId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const buy = async (packId) => {
+    setBusy(packId);
+    try {
+      const r = await api.post("/credits/checkout", { workspace_id: workspaceId, pack: packId });
+      if (r.data.checkout_url) window.location.href = r.data.checkout_url;
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    } finally { setBusy(""); }
+  };
+
+  if (!balance) return null;
+  const isPaid = balance.monthly_grant > 0;
+
+  return (
+    <section id="credits" data-testid="credits-section">
+      <div className="flex items-center gap-3 mb-4">
+        <Coins className="h-4 w-4 text-brand" />
+        <h2 className="font-display text-xl">Credits</h2>
+      </div>
+
+      {/* Balance card */}
+      <div className="border border-white/[0.08] bg-[#0a0a0a] p-6 mb-6">
+        <div className="flex items-end justify-between flex-wrap gap-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-mono">current balance</div>
+            <div className="mt-1 font-display text-5xl tracking-tighter">
+              {balance.balance}
+              <span className="text-base text-zinc-500 ml-2">credits</span>
+            </div>
+            {isPaid && (
+              <div className="mt-2 text-xs font-mono text-zinc-500">
+                Plan grants {balance.monthly_grant}/mo
+                {balance.next_reset_at && (
+                  <> · next reset {format(balance.next_reset_at)}</>
+                )}
+              </div>
+            )}
+            {!isPaid && (
+              <div className="mt-2 text-xs font-mono text-zinc-500">
+                Your plan doesn't include monthly credits. Buy a pack below to enable SMS alerts and overages.
+              </div>
+            )}
+          </div>
+          <div className="text-xs font-mono text-zinc-500">
+            granted lifetime: <span className="text-zinc-300">{balance.granted_total}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Pack purchase */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {packs.map((pack) => (
+          <div key={pack.id} className={`border ${pack.bonus_pct ? "border-brand/30" : "border-white/[0.08]"} bg-[#0a0a0a] p-5 flex flex-col`} data-testid={`credit-pack-${pack.id}`}>
+            <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-mono">{pack.label}</div>
+            <div className="mt-2 font-display text-3xl tracking-tighter">€{pack.price_eur.toFixed(0)}</div>
+            <div className="mt-1 text-sm text-zinc-400">{pack.credits} credits</div>
+            {pack.bonus_pct && (
+              <div className="mt-2 inline-block text-[10px] font-mono uppercase tracking-[0.3em] text-brand">
+                +{pack.bonus_pct}% bonus
+              </div>
+            )}
+            <button
+              onClick={() => buy(pack.id)}
+              disabled={busy === pack.id}
+              className="magnetic-btn mt-4 inline-flex items-center justify-center gap-2 py-2 border border-white/10 hover:border-brand/70 hover:text-brand text-sm font-mono disabled:opacity-50"
+              data-testid={`credit-buy-${pack.id}`}
+            >
+              {busy === pack.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              Buy
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Transaction history */}
+      {history.length > 0 && (
+        <div className="border border-white/[0.06]">
+          <div className="px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 border-b border-white/[0.06]">
+            recent activity
+          </div>
+          <div className="divide-y divide-white/[0.06]" data-testid="credit-history">
+            {history.map((t) => (
+              <div key={t.id} className="grid grid-cols-12 px-4 py-2.5 text-sm font-mono items-center">
+                <div className="col-span-2">
+                  <span className={`text-[10px] uppercase tracking-[0.3em] ${
+                    t.type === "consume" ? "text-signal-failed" :
+                    t.type === "topup" ? "text-signal-live" :
+                    t.type === "grant" ? "text-brand" : "text-zinc-400"
+                  }`}>
+                    {t.type}
+                  </span>
+                </div>
+                <div className="col-span-6 text-zinc-300 truncate">{t.reason}</div>
+                <div className="col-span-2 text-zinc-500 text-xs">{format(t.created_at)}</div>
+                <div className={`col-span-1 text-right ${t.type === "consume" ? "text-signal-failed" : "text-signal-live"}`}>
+                  {t.type === "consume" ? <Minus className="inline h-3 w-3" /> : <Plus className="inline h-3 w-3" />}{t.amount}
+                </div>
+                <div className="col-span-1 text-right text-zinc-400 text-xs">→ {t.balance_after}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

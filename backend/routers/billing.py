@@ -505,15 +505,46 @@ async def mollie_webhook(request: Request):
 
     # Recurring subs payments also don't carry plan/vat metadata — reconstruct from latest known profile/subscription.
     if workspace_id and status == "paid":
+        # Credit-pack payments: short-circuit — grant credits, store invoice
+        if kind == "credit_pack":
+            try:
+                from services.credits import grant_credits, get_pack
+                pack_id = meta.get("pack")
+                credits_amount = int(meta.get("credits") or 0)
+                if not credits_amount and pack_id:
+                    pack = get_pack(pack_id)
+                    credits_amount = (pack or {}).get("credits", 0)
+                if credits_amount > 0:
+                    await grant_credits(
+                        workspace_id,
+                        credits_amount,
+                        reason=f"credit pack '{pack_id}' purchase",
+                        type_="topup",
+                        ref_id=payment_id,
+                        ref_type="mollie_payment",
+                    )
+                await db.credit_pack_orders.update_one(
+                    {"mollie_payment_id": payment_id},
+                    {"$set": {"status": "paid", "paid_at": payment.get("paidAt") or _now_iso()}},
+                )
+            except Exception as e:
+                logger.warning("credit pack grant failed for %s: %s", payment_id, e)
+            return PlainTextResponse("ok", status_code=200)
+
         sub = await db.subscriptions.find_one({"workspace_id": workspace_id})
         profile = await db.billing_profiles.find_one({"workspace_id": workspace_id}, {"_id": 0}) or {}
         plan = await plans_get(plan_id or (sub or {}).get("plan") or "pro")
+        # Grandfathered price — workspace may still be paying the old rate.
+        effective_subtotal = float(plan["price"]) if plan else amount
+        if plan:
+            from services.grandfathering import effective_price
+            effective_subtotal = await effective_price(workspace_id, plan)
         vat = compute_vat(
             country=profile.get("country", ""),
             is_business=bool(profile.get("is_business")),
             has_valid_vat_id=bool(profile.get("vat_id_valid")),
         )
-        subtotal = float(plan["price"]) if plan else amount
+        subtotal = effective_subtotal
         totals = compute_totals(subtotal=subtotal, vat_rate=vat["rate"])
 
         # Upsert payment row

@@ -8,6 +8,8 @@ from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from models import WorkspaceIn, WorkspaceOut, WorkspaceMemberIn
 from services.plans import workspace_plan, workspace_usage
+from services.credits import get_balance as credits_balance
+from services.grandfathering import effective_price, upcoming_change
 
 router = APIRouter(tags=["workspaces"])
 
@@ -133,14 +135,18 @@ async def remove_member(workspace_id: str, user_id: str, request: Request):
 
 @router.get("/workspaces/{workspace_id}/usage")
 async def get_workspace_usage(workspace_id: str, request: Request):
-    """Return current plan + usage counters so the dashboard can render
-    'X/Y apps used' badges and 'upgrade for more' CTAs."""
+    """Return current plan + usage counters + credit balance + any pending
+    price change. One call powers the entire dashboard header."""
     user = await get_current_user(request)
     await require_workspace_member(workspace_id, user)
     plan = await workspace_plan(workspace_id)
     usage = await workspace_usage(workspace_id)
+    credits = await credits_balance(workspace_id)
     return {
         "plan": plan,
         "usage": usage,
+        "credits": credits,
+        "effective_price": await effective_price(workspace_id, plan),
+        "price_change": await upcoming_change(workspace_id, plan),
     }
 

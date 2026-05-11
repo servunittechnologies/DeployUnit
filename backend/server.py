@@ -17,6 +17,7 @@ from db import connect, ensure_indexes, disconnect
 from seed import seed_initial_data
 from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog
 from services.plans import seed_default_plans
+from services.credits import monthly_grant_tick
 
 from routers import (
     auth as auth_router,
@@ -33,6 +34,7 @@ from routers import (
     github as github_router,
     github_oauth as github_oauth_router,
     admin as admin_router,
+    credits as credits_router,
 )
 
 
@@ -52,6 +54,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_monitor_tick, "interval", seconds=60, id="monitor", replace_existing=True)
     scheduler.add_job(sync_deployments, "interval", seconds=15, id="deploy_sync", replace_existing=True)
     scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True, max_instances=2)
+    # Credit-wallet monthly grant — runs hourly so anniversary resets are
+    # accurate to the hour without spamming the DB.
+    scheduler.add_job(monthly_grant_tick, "interval", hours=1, id="credits_grant", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
@@ -88,6 +93,7 @@ api_router.include_router(notifications_router.router)
 api_router.include_router(settings_router.router)
 api_router.include_router(github_router.router)
 api_router.include_router(admin_router.router)
+api_router.include_router(credits_router.router)
 
 app.include_router(api_router)
 

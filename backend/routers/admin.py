@@ -26,6 +26,7 @@ from services.plans import (
     update_plan as plans_update,
     workspace_usage,
 )
+from services.grandfathering import apply_price_change, DEFAULT_NOTICE_DAYS
 
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -182,18 +183,29 @@ class PlanUpdate(BaseModel):
     active: bool | None = None
     fleet_view: bool | None = None
     support_sla_hours: int | None = None
+    notice_days: int | None = None   # grandfather window if price increases
 
 
 @router.put("/admin/plans/{plan_id}")
 async def admin_update_plan(plan_id: str, payload: PlanUpdate, request: Request):
     await _require_admin(request)
     updates = payload.model_dump(exclude_unset=True)
+    notice_days = updates.pop("notice_days", DEFAULT_NOTICE_DAYS)
     if not updates:
         raise HTTPException(status_code=400, detail="nothing to update")
-    plan = await plans_update(plan_id, updates)
-    if not plan:
+    # If the price is changing UP, lock existing subscribers to the old price
+    # for `notice_days` (default 180 ≈ 6 months) so customers aren't surprised.
+    current = await plans_get(plan_id)
+    if not current:
         raise HTTPException(status_code=404, detail="plan not found")
-    return plan
+    affected = 0
+    if "price" in updates:
+        old_price = float(current.get("price") or 0)
+        new_price = float(updates["price"])
+        if new_price > old_price:
+            affected = await apply_price_change(plan_id, old_price, new_price, notice_days=notice_days)
+    plan = await plans_update(plan_id, updates)
+    return {**(plan or {}), "grandfathered_subs": affected}
 
 
 @router.get("/admin/plans/{plan_id}/usage")

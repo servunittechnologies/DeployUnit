@@ -24,6 +24,8 @@ export default function UsageStrip({ workspaceId }) {
   if (!data) return null;
   const plan = data.plan;
   const usage = data.usage;
+  const credits = data.credits;
+  const priceChange = data.price_change;
 
   const rows = [
     { key: "apps", label: "Apps", used: usage.apps, cap: plan.limits?.apps },
@@ -32,23 +34,36 @@ export default function UsageStrip({ workspaceId }) {
   ];
   const isFree = (plan.id === "free") || plan.price === 0;
   const anyMaxed = rows.some((r) => r.cap > 0 && r.used >= r.cap);
+  const creditsLow = credits && credits.monthly_grant > 0 && credits.balance < (credits.monthly_grant * 0.2);
 
   return (
-    <div className="border-b border-white/[0.06] bg-white/[0.01]" data-testid="usage-strip">
-      <div className="px-6 py-3 flex items-center gap-6 flex-wrap">
+    <div data-testid="usage-strip">
+      {priceChange && (
+        <div className="border-b border-brand/40 bg-brand/5 px-6 py-2 text-xs font-mono text-brand flex items-center gap-2" data-testid="usage-price-change">
+          <Sparkles className="h-3 w-3" />
+          You're on a grandfathered <span className="text-white">€{priceChange.current_price.toFixed(0)}/mo</span> rate.
+          New price is €{priceChange.new_price.toFixed(0)}/mo, effective in {priceChange.days_remaining} days.
+        </div>
+      )}
+      <div className="border-b border-white/[0.06] bg-white/[0.01] px-6 py-3 flex items-center gap-6 flex-wrap">
         <div className="flex items-center gap-2">
           <span className={`px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] ${plan.highlight ? "border border-brand/40 text-brand" : "border border-white/10 text-zinc-400"}`}>
             {plan.name}
           </span>
-          <span className="text-xs font-mono text-zinc-500">{plan.price > 0 ? `€${plan.price}/mo` : "free"}</span>
+          <span className="text-xs font-mono text-zinc-500">
+            {(data.effective_price ?? plan.price) > 0 ? `€${(data.effective_price ?? plan.price).toFixed(0)}/mo` : "free"}
+          </span>
         </div>
         <div className="flex items-center gap-5 flex-1 min-w-[300px]">
           {rows.map((r) => (
             <UsageBar key={r.key} {...r} />
           ))}
-          {plan.credits > 0 && (
-            <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-500" data-testid="usage-credits">
-              <Sparkles className="h-3 w-3 text-brand" /> {plan.credits} credits/mo
+          {credits && credits.monthly_grant > 0 && (
+            <div className={`flex items-center gap-1.5 text-xs font-mono ${creditsLow ? "text-signal-queued" : "text-zinc-300"}`} data-testid="usage-credits">
+              <Sparkles className={`h-3 w-3 ${creditsLow ? "text-signal-queued" : "text-brand"}`} />
+              <span className="text-zinc-500">credits</span>
+              <span>{credits.balance}/{credits.monthly_grant}</span>
+              {creditsLow && <AlertTriangle className="h-3 w-3 text-signal-queued" />}
             </div>
           )}
         </div>
@@ -59,6 +74,15 @@ export default function UsageStrip({ workspaceId }) {
             data-testid="usage-upgrade"
           >
             <Zap className="h-3 w-3" /> Upgrade
+          </Link>
+        )}
+        {creditsLow && (
+          <Link
+            to="/app/billing#credits"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-brand/40 text-brand hover:bg-brand/10 transition-colors"
+            data-testid="usage-buy-credits"
+          >
+            <Sparkles className="h-3 w-3" /> Buy credits
           </Link>
         )}
       </div>
