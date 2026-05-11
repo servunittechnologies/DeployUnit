@@ -1,7 +1,10 @@
 """Authentication routes."""
+import asyncio
+import secrets
 import uuid
-from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Request, Response
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from pydantic import BaseModel, EmailStr
 from pymongo import ReturnDocument
 
 from db import get_db
@@ -13,6 +16,7 @@ from auth_utils import (
     get_current_user,
 )
 from slugify import slugify
+from services.emails import send_welcome, send_password_reset_link
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -66,7 +70,7 @@ async def _bootstrap_workspace_for(user: dict):
 
 
 @router.post("/register", response_model=UserOut)
-async def register(payload: RegisterIn, response: Response):
+async def register(payload: RegisterIn, response: Response, background: BackgroundTasks):
     db = get_db()
     email_in = payload.email.strip()
     email_ci = email_in.lower()
@@ -93,6 +97,10 @@ async def register(payload: RegisterIn, response: Response):
     access = create_access_token(user["id"], user["email"])
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
+    # Fire-and-forget welcome email. If MailerSend isn't configured, this no-ops.
+    background.add_task(send_welcome, user)
+    from services.audit import log as audit_log
+    audit_log(action="auth.register", actor=user, resource_type="user", resource_id=user["id"])
     return _user_public(user)
 
 
@@ -148,3 +156,73 @@ async def logout(response: Response):
 async def me(request: Request):
     user = await get_current_user(request)
     return _user_public(user)
+
+
+# ─────────────────────── Forgot password (self-serve) ───────────────────────
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordIn, request: Request, background: BackgroundTasks):
+    """Issue a one-time reset link by email. Always returns 200 even if the
+    email is unknown — don't leak which addresses are registered."""
+    db = get_db()
+    user = await db.users.find_one(_email_query(payload.email))
+    # Always respond identically to prevent enumeration.
+    if user:
+        token = secrets.token_urlsafe(40)
+        expires = datetime.now(timezone.utc) + timedelta(minutes=60)
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "reset_token": token,
+                "reset_token_expires_at": expires.isoformat(),
+            }},
+        )
+        frontend = (request.headers.get("origin") or "").rstrip("/")
+        if not frontend:
+            import os as _os
+            frontend = (_os.environ.get("FRONTEND_URL") or "").rstrip("/")
+        reset_url = f"{frontend}/reset-password?token={token}"
+        background.add_task(send_password_reset_link, user, reset_url, 60)
+        from services.audit import log as audit_log
+        audit_log(action="auth.forgot_password_request", actor=user,
+                  meta={"email": user["email"]}, request=request)
+    return {"ok": True, "message": "If that email exists, a reset link is on its way."}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordIn, request: Request):
+    """Consume a one-time token and set a new password."""
+    db = get_db()
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user = await db.users.find_one({"reset_token": payload.token})
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    expires = user.get("reset_token_expires_at")
+    if expires:
+        try:
+            dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+        except Exception:
+            dt = None
+        if dt and dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Reset token has expired")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "password_hash": hash_password(payload.new_password),
+            "password_updated_at": datetime.now(timezone.utc).isoformat(),
+        }, "$unset": {"reset_token": "", "reset_token_expires_at": ""}},
+    )
+    from services.audit import log as audit_log
+    audit_log(action="auth.password_reset_self", actor=user,
+              resource_type="user", resource_id=user["id"], request=request)
+    return {"ok": True}
+

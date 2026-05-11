@@ -366,6 +366,48 @@ function PlansTab() {
 
 /* ─────────────────────── Platform Domain + Cloudflare ─────────────────────── */
 function PlatformTab() {
+  // Test sender component declared inline so it can reach api directly
+  const MailerSendTester = ({ from_email_set, api_key_set }) => {
+    const [to, setTo] = useState("");
+    const [busy, setBusy] = useState(false);
+    const send = async () => {
+      if (!to.includes("@")) { toast.error("Enter a valid email"); return; }
+      setBusy(true);
+      try {
+        const r = await api.post("/admin/mailersend/test", { to_email: to });
+        if (r.data.ok) toast.success(`Sent! Check ${to} (message id: ${r.data.message_id || "n/a"})`);
+        else toast.error(`Send failed: ${r.data.error || r.data.status}`);
+      } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+      finally { setBusy(false); }
+    };
+    return (
+      <div className="mt-4 pt-4 border-t border-white/[0.04]">
+        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-2">Diagnostic test send</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="email"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="your@email.com"
+            className="flex-1 min-w-[260px] bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
+            data-testid="admin-mailersend-test-email"
+          />
+          <button
+            onClick={send}
+            disabled={busy || !from_email_set || !api_key_set}
+            className="px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-40 text-sm"
+            data-testid="admin-mailersend-test-send"
+          >
+            {busy ? "Sending…" : "Send test"}
+          </button>
+        </div>
+        {(!from_email_set || !api_key_set) && (
+          <div className="text-[10px] font-mono text-zinc-600 mt-2">Save the API key and a verified from-email first.</div>
+        )}
+      </div>
+    );
+  };
+
   const [s, setS] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -389,6 +431,11 @@ function PlatformTab() {
     twilio_whatsapp_from: "",
     twilio_status_callback: "",
     twilio_test_mode: false,
+    // MailerSend
+    mailersend_api_key: "",
+    mailersend_from_email: "",
+    mailersend_from_name: "",
+    mailersend_reply_to: "",
   });
 
   const load = async () => {
@@ -416,6 +463,10 @@ function PlatformTab() {
         twilio_whatsapp_from: r.data.twilio_whatsapp_from || "",
         twilio_status_callback: r.data.twilio_status_callback || "",
         twilio_test_mode: !!r.data.twilio_test_mode,
+        mailersend_api_key: "",
+        mailersend_from_email: r.data.mailersend_from_email || "",
+        mailersend_from_name: r.data.mailersend_from_name || "",
+        mailersend_reply_to: r.data.mailersend_reply_to || "",
       }));
     } finally {
       setLoading(false);
@@ -429,12 +480,12 @@ function PlatformTab() {
       const payload = {};
       Object.entries(form).forEach(([k, v]) => {
         // Only send tokens if user typed a new value (avoid clearing by empty string)
-        if ((k === "cloudflare_api_token" || k === "twilio_auth_token") && v === "") return;
+        if ((k === "cloudflare_api_token" || k === "twilio_auth_token" || k === "mailersend_api_key") && v === "") return;
         payload[k] = v;
       });
       const r = await api.put("/admin/platform-settings", payload);
       setS(r.data);
-      setForm((f) => ({ ...f, cloudflare_api_token: "", twilio_auth_token: "" }));
+      setForm((f) => ({ ...f, cloudflare_api_token: "", twilio_auth_token: "", mailersend_api_key: "" }));
       toast.success("Platform settings saved");
     } catch (e) {
       toast.error("Save failed: " + (e?.response?.data?.detail || e.message));
@@ -622,6 +673,48 @@ function PlatformTab() {
             </label>
           </div>
         </div>
+      </Section>
+
+      <Section
+        title="MailerSend (transactional email)"
+        description="Welcome emails, password resets, notification alerts. Get an API key at mailersend.com → Domains → API tokens (Email permission). The from-email must be on a domain you've verified in MailerSend."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Field label="API token" hint={s.mailersend_api_key_set ? "A token is already saved. Leave blank to keep it." : "MailerSend → Email → API tokens → Create new token with 'Email' permission."}>
+            <Input
+              type="password"
+              value={form.mailersend_api_key}
+              onChange={(e) => setForm({ ...form, mailersend_api_key: e.target.value })}
+              placeholder={s.mailersend_api_key_set ? "•••••••• (saved)" : "mlsn.xxxxxxxxxxxxxxxxxxxxxxx"}
+              data-testid="admin-mailersend-token"
+            />
+          </Field>
+          <Field label="From email" hint="Must be an address on a domain you've verified in MailerSend (DKIM + Return-Path DNS records added).">
+            <Input
+              value={form.mailersend_from_email}
+              onChange={(e) => setForm({ ...form, mailersend_from_email: e.target.value })}
+              placeholder="hello@yourdomain.com"
+              data-testid="admin-mailersend-from"
+            />
+          </Field>
+          <Field label="From name" hint="Display name in the inbox. Default 'DeployHub' if blank.">
+            <Input
+              value={form.mailersend_from_name}
+              onChange={(e) => setForm({ ...form, mailersend_from_name: e.target.value })}
+              placeholder="DeployHub"
+              data-testid="admin-mailersend-from-name"
+            />
+          </Field>
+          <Field label="Reply-To (optional)" hint="Email replies will land here instead of your noreply address.">
+            <Input
+              value={form.mailersend_reply_to}
+              onChange={(e) => setForm({ ...form, mailersend_reply_to: e.target.value })}
+              placeholder="support@yourdomain.com"
+              data-testid="admin-mailersend-reply"
+            />
+          </Field>
+        </div>
+        <MailerSendTester from_email_set={!!form.mailersend_from_email} api_key_set={!!s.mailersend_api_key_set || !!form.mailersend_api_key} />
       </Section>
 
       <div className="flex justify-end">

@@ -187,8 +187,7 @@ async def send_alert(
                 results.append({"channel": "whatsapp", "status": "failed", "error": str(e)})
 
         elif ch == "email":
-            # Email is free + still mocked — the in-app notifications collection
-            # already covers most needs. Real email integration is P1 backlog.
+            # Always write the in-app notification (free, always available)
             db = get_db()
             await db.notifications.insert_one({
                 "id": str(uuid.uuid4()),
@@ -201,6 +200,19 @@ async def send_alert(
                 "created_at": _now_iso(),
                 "read": False,
             })
+            # Also fire a real transactional email via MailerSend if configured.
+            # Graceful: if MailerSend isn't configured, we just skip the real email
+            # but the in-app notification still landed.
+            try:
+                from services.emails import send_notification as send_email_notification
+                from clients.mailersend import configured as ms_configured
+                if await ms_configured():
+                    await send_email_notification(
+                        user=user, workspace_id=workspace_id,
+                        event_type=event_type, title=title, body=body,
+                    )
+            except Exception as e:
+                logger.warning("mailersend notification failed: %s", e)
             results.append({"channel": "email", "status": "queued", "cost": 0})
 
         elif ch in ("slack", "discord"):

@@ -56,6 +56,7 @@ def _redact_settings(doc: dict) -> dict:
     # Never leak the encrypted tokens — just tell the UI whether one is configured.
     out["cloudflare_api_token_set"] = bool(out.pop("cloudflare_api_token_enc", None))
     out["twilio_auth_token_set"] = bool(out.pop("twilio_auth_token_enc", None))
+    out["mailersend_api_key_set"] = bool(out.pop("mailersend_api_key_enc", None))
     out.pop("_id", None)
     return out
 
@@ -89,11 +90,15 @@ async def integrations(request: Request):
     # Twilio status (creds in DB platform_settings, Fernet-encrypted)
     from clients.twilio import configured as twilio_ok
     tw = {"configured": await twilio_ok()}
+    # MailerSend status
+    from clients.mailersend import configured as ms_ok
+    ms = {"configured": await ms_ok()}
     return {
         "coolify": cool,
         "mollie": moll,
         "github_oauth": gh,
         "twilio": tw,
+        "mailersend": ms,
         "company_country": await effective_home_country(),
         "eu_vat_countries": len(EU_VAT_RATES),
     }
@@ -127,6 +132,11 @@ class PlatformSettingsUpdate(BaseModel):
     twilio_whatsapp_from: str | None = None    # e.g. "whatsapp:+14155238886"
     twilio_status_callback: str | None = None  # webhook URL for delivery status
     twilio_test_mode: bool | None = None
+    # MailerSend transactional email. API key encrypted at rest.
+    mailersend_api_key: str | None = None       # plaintext from form; "" → clear
+    mailersend_from_email: str | None = None    # must be on a verified domain
+    mailersend_from_name: str | None = None
+    mailersend_reply_to: str | None = None      # optional
 
 
 @router.put("/admin/platform-settings")
@@ -152,6 +162,14 @@ async def update_platform_settings(payload: PlatformSettingsUpdate, request: Req
         else:
             current.pop("twilio_auth_token_enc", None)
 
+    # MailerSend API key: encrypt + persist; "" means "clear".
+    if "mailersend_api_key" in data:
+        tok = (data.pop("mailersend_api_key") or "").strip()
+        if tok:
+            current["mailersend_api_key_enc"] = encrypt_token(tok)
+        else:
+            current.pop("mailersend_api_key_enc", None)
+
     for k, v in data.items():
         if v is None or v == "":
             current.pop(k, None)
@@ -175,6 +193,29 @@ class VatTestIn(BaseModel):
 async def test_vat(payload: VatTestIn, request: Request):
     await _require_admin(request)
     return await validate_vies(payload.vat_id)
+
+
+
+class EmailTestIn(BaseModel):
+    to_email: str
+
+
+@router.post("/admin/mailersend/test")
+async def test_mailersend(payload: EmailTestIn, request: Request):
+    """Send a one-shot diagnostic email to verify MailerSend config."""
+    actor = await _require_admin(request)
+    from clients.mailersend import send as ms_send
+    res = await ms_send(
+        to_email=payload.to_email,
+        subject="DeployHub · MailerSend test email",
+        html="<p>If you got this, your MailerSend integration is working.</p>"
+             "<p style='font-family:ui-monospace;font-size:11px;color:#888'>"
+             f"Triggered by {actor.get('email')} from the Admin Console.</p>",
+        text="If you got this, your MailerSend integration is working.",
+        tags=["admin-test"],
+    )
+    return res
+
 
 
 @router.get("/admin/plans")

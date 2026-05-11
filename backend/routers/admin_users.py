@@ -136,6 +136,13 @@ async def set_password(user_id: str, payload: PasswordIn, request: Request):
             "password_updated_at": _now_iso(),
         }},
     )
+    # Fire-and-forget email so the user knows their password changed + what it is.
+    try:
+        from services.emails import send_password_reset_admin
+        import asyncio as _asyncio
+        _asyncio.create_task(send_password_reset_admin(u, payload.new_password, actor.get("email")))
+    except Exception as e:
+        logger.warning("admin password reset email failed: %s", e)
     audit_log(action="admin.user.password_reset", actor=actor,
               resource_type="user", resource_id=user_id,
               meta={"target_email": u.get("email")}, request=request)
