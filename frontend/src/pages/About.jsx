@@ -41,10 +41,10 @@ const VALUES = [
 ];
 
 const TIMELINE = [
-  { year: "2023", title: "ServUnit Technologies BV", body: "Founded as a Belgian web-engineering studio building production software for SaaS startups and agencies." },
-  { year: "2024", title: "The internal PaaS", body: "We rebuilt our own deploy tooling because every off-the-shelf provider locked us into US data, opaque pricing, or vendor-branded dashboards." },
-  { year: "2025", title: "DeployHub goes public", body: "We open the platform up — keeping the green-energy commitment, the EU-first promise, and the agency-first design as cornerstones." },
-  { year: "Today", title: "Shipping every week", body: "Heatmaps, database branching, AI co-pilot, mailserver hosting — the roadmap is public, the velocity is real." },
+  { year: "2022", title: "ServUnit Technologies BV",   body: "Founded in Belgium as a web-engineering studio building production software for SaaS startups and agencies." },
+  { year: "2023", title: "ServUnit launches",          body: "Our flagship platform goes live — the proof-ground for the engineering patterns that would later become DeployHub." },
+  { year: "2024", title: "GameUnit launches",          body: "We ship a second product on the same in-house deploy stack, proving the platform handles realtime workloads as easily as marketing sites." },
+  { year: "2026", title: "DeployHub goes public",      body: "We open the internal PaaS to everyone — keeping the green-energy commitment, the EU-first promise, and the agency-first design as cornerstones." },
 ];
 
 export default function About() {
