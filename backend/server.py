@@ -1,4 +1,4 @@
-"""DeployHub API entrypoint."""
+"""DeployUnit API entrypoint."""
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -60,7 +60,7 @@ from routers import (
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("deployhub")
+logger = logging.getLogger("deployunit")
 
 
 scheduler = AsyncIOScheduler()
@@ -101,20 +101,20 @@ async def lifespan(app: FastAPI):
     # Public status page — ping every component every 60 seconds.
     scheduler.add_job(status_ping_tick, "interval", seconds=60, id="status_ping", replace_existing=True)
     scheduler.start()
-    logger.info("DeployHub backend started")
+    logger.info("DeployUnit backend started")
     yield
     scheduler.shutdown(wait=False)
     await disconnect()
 
 
-app = FastAPI(title="DeployHub", lifespan=lifespan)
+app = FastAPI(title="DeployUnit", lifespan=lifespan)
 
 api_router = APIRouter(prefix="/api")
 
 
 @api_router.get("/")
 async def root():
-    return {"service": "deployhub", "status": "ok"}
+    return {"service": "deployunit", "status": "ok"}
 
 
 @api_router.get("/health")

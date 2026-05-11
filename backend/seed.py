@@ -60,9 +60,9 @@ async def _ensure_workspace(owner_id: str, name: str, ws_type: str = "solo") -> 
 
 
 async def seed_initial_data():
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@deployhub.dev")
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@deployunit.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
-    demo_email = os.environ.get("DEMO_EMAIL", "demo@deployhub.dev")
+    demo_email = os.environ.get("DEMO_EMAIL", "demo@deployunit.com")
     demo_password = os.environ.get("DEMO_PASSWORD", "demo1234")
 
     admin = await _ensure_user(admin_email, admin_password, "Platform Admin", "admin")
@@ -160,7 +160,7 @@ async def seed_initial_data():
                 "workspace_id": demo_ws["id"],
                 "user_id": demo["id"],
                 "type": "welcome",
-                "title": "Welcome to DeployHub",
+                "title": "Welcome to DeployUnit",
                 "message": "Connect a repo and deploy your first app in 2 clicks.",
                 "severity": "info",
                 "read": False,
@@ -174,7 +174,7 @@ async def seed_initial_data():
         os.makedirs("/app/memory", exist_ok=True)
         with open("/app/memory/test_credentials.md", "w") as f:
             f.write(
-                "# DeployHub Test Credentials\n\n"
+                "# DeployUnit Test Credentials\n\n"
                 f"## Admin\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: admin\n\n"
                 f"## Demo user (has seeded workspace + apps)\n- Email: {demo_email}\n- Password: {demo_password}\n- Role: user\n\n"
                 "## Auth endpoints\n"

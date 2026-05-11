@@ -20,9 +20,9 @@ load_dotenv("/app/frontend/.env")
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@deployhub.dev"
+ADMIN_EMAIL = "admin@deployunit.com"
 ADMIN_PASS = "admin123"
-DEMO_EMAIL = "demo@deployhub.dev"
+DEMO_EMAIL = "demo@deployunit.com"
 DEMO_PASS = "demo1234"
 DEMO_WORKSPACE_ID = "ee9ace3a-0b82-4df5-9dd7-d543c1e0c022"
 
@@ -318,12 +318,12 @@ class TestAdminUsers:
                                     json={"role": "user"}, timeout=20)
             assert r3.status_code == 400, r3.text
         else:
-            # >1 admin in this env (martijn@servunit.com + admin@deployhub.dev). Can't
+            # >1 admin in this env (martijn@servunit.com + admin@deployunit.com). Can't
             # exercise the guard without breaking the platform; just record the count.
             assert len(active_admins) >= 1
 
     def test_suspend_self_blocked(self, admin_session):
-        adm_r = admin_session.get(f"{API}/admin/users?q=admin@deployhub.dev", timeout=20).json()
+        adm_r = admin_session.get(f"{API}/admin/users?q=admin@deployunit.com", timeout=20).json()
         admin_id = next(u["id"] for u in adm_r["users"] if u["email"] == ADMIN_EMAIL)
         r = admin_session.post(f"{API}/admin/users/{admin_id}/suspend", timeout=20)
         assert r.status_code == 400, r.text
@@ -339,7 +339,7 @@ class TestAdminUsers:
         assert r2.json()["is_active"] is True
 
     def test_delete_self_and_last_admin_guards(self, admin_session):
-        adm_r = admin_session.get(f"{API}/admin/users?q=admin@deployhub.dev", timeout=20).json()
+        adm_r = admin_session.get(f"{API}/admin/users?q=admin@deployunit.com", timeout=20).json()
         admin_id = next(u["id"] for u in adm_r["users"] if u["email"] == ADMIN_EMAIL)
         r = admin_session.delete(f"{API}/admin/users/{admin_id}", timeout=20)
         assert r.status_code == 400, r.text

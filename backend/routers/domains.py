@@ -97,7 +97,7 @@ async def _live_dns_check(domain: str, target: dict) -> dict:
     msg = "Resolved ✓" if resolves else (
         "DNS record not found yet — changes can take up to ~15 minutes to propagate."
         if not observed else
-        f"Domain resolves but not to the DeployHub target ({rtype} {expected})."
+        f"Domain resolves but not to the DeployUnit target ({rtype} {expected})."
     )
     return {
         "resolves": resolves,

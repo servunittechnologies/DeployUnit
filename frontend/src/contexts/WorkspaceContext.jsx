@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { useAuth } from "./AuthContext";
 
 const WorkspaceContext = createContext(null);
-const STORAGE_KEY = "deployhub.activeWorkspace";
+const STORAGE_KEY = "deployunit.activeWorkspace";
 
 export function WorkspaceProvider({ children }) {
   const { user } = useAuth();

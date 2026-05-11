@@ -34,4 +34,4 @@ async def list_repos(request: Request):
 async def connect_github(payload: ConnectIn, request: Request):
     await get_current_user(request)
     # Mock — pretend we stored an installation_id for this workspace.
-    return {"connected": True, "workspace_id": payload.workspace_id, "username": "deployhub-mock"}
+    return {"connected": True, "workspace_id": payload.workspace_id, "username": "deployunit-mock"}

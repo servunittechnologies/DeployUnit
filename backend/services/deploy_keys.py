@@ -1,6 +1,6 @@
 """Deploy-key automation: generate ed25519 keypair, add it to a GitHub repo as
 a read-only deploy key, and register the private half in Coolify as a git-
-related private key. Lets DeployHub deploy private GitHub repos end-to-end
+related private key. Lets DeployUnit deploy private GitHub repos end-to-end
 without the user ever touching Coolify.
 
 Reused on:

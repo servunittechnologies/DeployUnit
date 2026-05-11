@@ -2,7 +2,7 @@
 
 De build engine (Coolify) lekt zijn merknaam, helper image hostname,
 env-var prefixes en logo overal in de build-output. We willen NIETS van die
-strings naar onze UI laten lekken — alles moet eruit zien alsof DeployHub
+strings naar onze UI laten lekken — alles moet eruit zien alsof DeployUnit
 de build engine zelf is. Deze module is de single source of truth voor die
 substituties.
 """

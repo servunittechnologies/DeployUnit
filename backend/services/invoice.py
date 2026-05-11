@@ -18,7 +18,7 @@ def _storage_path() -> str:
 
 def _company() -> dict:
     return {
-        "name": os.environ.get("COMPANY_NAME", "DeployHub"),
+        "name": os.environ.get("COMPANY_NAME", "DeployUnit"),
         "address": os.environ.get("COMPANY_ADDRESS", ""),
         "postcode": os.environ.get("COMPANY_POSTCODE", ""),
         "city": os.environ.get("COMPANY_CITY", ""),

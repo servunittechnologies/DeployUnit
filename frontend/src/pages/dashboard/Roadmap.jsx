@@ -287,7 +287,7 @@ export default function Roadmap() {
       )}
 
       <div className="mt-14 border-t border-white/[0.06] pt-6 text-[11px] font-mono text-zinc-500 flex items-center justify-between flex-wrap gap-2">
-        <span>Want something else? <a href="mailto:hello@deployhub.app" className="text-brand hover:underline">Tell us</a> what would unblock you next.</span>
+        <span>Want something else? <a href="mailto:hello@deployunit.com" className="text-brand hover:underline">Tell us</a> what would unblock you next.</span>
         <span>You'll be the first to know when these ship — check Settings → Notifications for in-app pings.</span>
       </div>
     </div>

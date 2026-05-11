@@ -63,7 +63,7 @@ async def _trigger_coolify_deploy_with_retry(
 ) -> str | None:
     """Call coolify.deploy() with exponential backoff. Returns the Coolify
     deployment_uuid on success, or None if every attempt fails. Logs each
-    attempt to the DeployHub deployment row so the user sees what happened.
+    attempt to the DeployUnit deployment row so the user sees what happened.
     """
     delay = 2.0
     last_error = "unknown"
@@ -182,7 +182,7 @@ async def _create_private_github_app(
         await _append_log(deployment_id, f"[BUILD] private repo detected ({owner}/{repo_name}) — setting up deploy key")
 
     private_pem, public_key = generate_deploy_keypair()
-    key_title = f"deployhub-{app['slug']}"
+    key_title = f"deployunit-{app['slug']}"
     gh_key_id = await add_github_deploy_key(owner, repo_name, key_title, public_key, gh_token)
     if not gh_key_id:
         if deployment_id:
@@ -196,8 +196,8 @@ async def _create_private_github_app(
         await _append_log(deployment_id, f"[BUILD] deploy key uploaded to GitHub (id={gh_key_id}, read-only)")
 
     coolify_key = await coolify.create_private_key(
-        name=f"deployhub-{app['slug']}-key",
-        description=f"DeployHub auto-key for {owner}/{repo_name}",
+        name=f"deployunit-{app['slug']}-key",
+        description=f"DeployUnit auto-key for {owner}/{repo_name}",
         private_key=private_pem,
     )
     coolify_key_uuid = (coolify_key or {}).get("uuid")
@@ -296,7 +296,7 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
     if ws and ws.get("coolify_project_uuid"):
         project_uuid = ws["coolify_project_uuid"]
     else:
-        proj = await coolify.create_project(name=ws["name"] if ws else f"deployhub-{app['workspace_id'][:6]}")
+        proj = await coolify.create_project(name=ws["name"] if ws else f"deployunit-{app['workspace_id'][:6]}")
         if proj and proj.get("uuid"):
             project_uuid = proj["uuid"]
             await db.workspaces.update_one({"id": app["workspace_id"]}, {"$set": {"coolify_project_uuid": project_uuid}})
@@ -768,7 +768,7 @@ async def reinstall_app(app_id: str, request: Request, background: BackgroundTas
     """Recreate the build-engine application from the app's stored repo + branch.
 
     Used when the underlying build-engine app was deleted out-of-band (admin
-    cleanup, manual ops) leaving DeployHub with a dead `coolify_app_uuid`.
+    cleanup, manual ops) leaving DeployUnit with a dead `coolify_app_uuid`.
     Clears the stale uuid, queues a fresh deployment that goes through the
     full create-app path.
     """
@@ -905,7 +905,7 @@ async def app_health(app_id: str, request: Request):
     start = time.perf_counter()
     try:
         async with _httpx.AsyncClient(timeout=8.0, follow_redirects=True) as cli:
-            r = await cli.get(url, headers={"User-Agent": "DeployHub-Health/1.0"})
+            r = await cli.get(url, headers={"User-Agent": "DeployUnit-Health/1.0"})
         elapsed = int((time.perf_counter() - start) * 1000)
         title = None
         if r.headers.get("content-type", "").lower().startswith("text/html"):

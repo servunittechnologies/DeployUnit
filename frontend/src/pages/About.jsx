@@ -47,7 +47,7 @@ const TIMELINE = [
     body: <>Our enterprise hosting brand goes live at <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">servunit.com</a> — web hosting, domains, VPS, dedicated servers and colocation for developers, entrepreneurs and organisations, served from EU datacenters over our own 40 Gbps+ network.</> },
   { year: "2024", title: "GameUnit launches",
     body: <>We open a second front for gamers at <a href="https://gameunit.pro" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">gameunit.pro</a> — Minecraft, FiveM, ARK, Rust, Satisfactory and more, with 12 TB/s DDoS protection, instant delivery, and a control panel built for low-latency multiplayer.</> },
-  { year: "2026", title: "DeployHub — new",
+  { year: "2026", title: "DeployUnit — new",
     body: "Now we open the same EU infrastructure to modern developers and agencies as a fully-managed PaaS. Push to Git, get a live URL, full container metrics — backed by the network and operations team that already runs ServUnit and GameUnit." },
 ];
 
@@ -62,7 +62,7 @@ export default function About() {
             Built by people who <span className="text-cyan-400">ship for a living.</span>
           </h1>
           <p className="mt-6 text-base sm:text-lg text-zinc-400 max-w-2xl leading-relaxed">
-            DeployHub is the EU-hosted PaaS we wished existed when running our own agency.
+            DeployUnit is the EU-hosted PaaS we wished existed when running our own agency.
             We're crafting it in Belgium, powered by ServUnit Technologies BV, and we're betting
             that European teams deserve a deploy platform that takes their data, their carbon footprint,
             and their craft seriously.
@@ -169,7 +169,7 @@ export default function About() {
       <Section className="py-20 text-center">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
           <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tighter">Want to join the journey?</h2>
-          <p className="mt-3 text-zinc-400 max-w-xl mx-auto">Try DeployHub free for 14 days, or get in touch — we're easy to reach.</p>
+          <p className="mt-3 text-zinc-400 max-w-xl mx-auto">Try DeployUnit free for 14 days, or get in touch — we're easy to reach.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <Link
               to="/register"

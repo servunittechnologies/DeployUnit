@@ -1,4 +1,4 @@
-# DeployHub — PRD
+# DeployUnit — PRD
 
 ## Original problem statement
 Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **on top of Coolify** (deployment engine) and **Mollie** (direct billing, replacing WHMCS). Designed for individuals AND agencies, with workspaces, projects, apps, deployments, domains, monitoring, alerts, billing, and notifications.
@@ -68,8 +68,8 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Coupon system on checkout.
 
 ## Test credentials
-- Admin: `admin@deployhub.dev` / `admin123`
-- Demo: `demo@deployhub.dev` / `demo1234`
+- Admin: `admin@deployunit.com` / `admin123`
+- Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
 - **2026-05-11 — Support Ticket System (P0 COMPLETE — 19/19 backend, frontend E2E green)**
@@ -83,7 +83,7 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - **2026-05-11 — Real container metrics via agent (CPU/Mem/Disk/Network — live + history)**
   - **`services/metrics.py`**: agent-key auth (sha256-hashed in `platform_settings.metrics_agent`), `ingest_samples()` (resolves `coolify_app_uuid` → app), `downsample_and_gc()` (30s raw → 5m rollup after 24h, drop after 30d), `app_metrics_series(app, window)`.
   - **`routers/metrics.py`**: `POST /api/metrics/ingest` (X-Agent-Key auth), `GET/POST /api/admin/metrics/agent[/rotate]`, `GET /api/agent/install.sh` (public installer), `GET /api/agent/agent.py` (public python script), `GET /api/apps/{id}/metrics`.
-  - **Metrics agent**: 60-lijns Python script in een `python:3.11-slim` docker-compose container met read-only `/var/run/docker.sock` mount. Filtert op `coolify.applicationId` label, berekent CPU%/Memory%/Network/Disk per 30s, POST naar DeployHub.
+  - **Metrics agent**: 60-lijns Python script in een `python:3.11-slim` docker-compose container met read-only `/var/run/docker.sock` mount. Filtert op `coolify.applicationId` label, berekent CPU%/Memory%/Network/Disk per 30s, POST naar DeployUnit.
   - **Frontend `AppMetricsCharts.jsx`**: 4 KPI tiles (CPU now, Memory now, Net in/out, Disk I/O) + 6 SVG sparklines (CPU%, Mem%, Net rx/tx, Disk read/write). Auto-refresh 30s. Falls back to "Install agent" CTA als geen samples.
   - **Frontend `AppAnalyticsPanel`**: metrics-section toegevoegd bovenaan, naast existing uptime/response/timeline.
   - **Admin → Integrations → Metrics agent**: statusbadge (live/stale/awaiting), last-sample-count, install-command met copy, "Generate/Rotate key" knop met one-time reveal.
@@ -107,7 +107,7 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Transparant labelen**: omdat Coolify geen container-level CPU/memory stats exposeert, tonen we "allocated resources" (de gegarandeerde limit) i.p.v. een fake usage %. Wel exact gemeten: uptime probes, response times, build minutes, credit consumption.
 
 - **2026-05-11 — Resources + Credit-billed Addons + DB↔App Connections (Iter13, 14/14 backend GREEN, 24/24 iter11 regression)**
-  - **DB → App attach**: meerdere databases per app met user-editable env-var naam (`DATABASE_URL` default, A-Z0-9_ ge-clamped). Bij attach pusht DeployHub de `connection_string` direct als env-var naar de build engine via `coolify.update_env`. Detach zet env-var leeg op de volgende deploy.
+  - **DB → App attach**: meerdere databases per app met user-editable env-var naam (`DATABASE_URL` default, A-Z0-9_ ge-clamped). Bij attach pusht DeployUnit de `connection_string` direct als env-var naar de build engine via `coolify.update_env`. Detach zet env-var leeg op de volgende deploy.
   - **Per-app resource limieten (HARD enforced)**: CPU/memory worden bij elke deploy via `coolify.update_application({limits_cpus, limits_memory, limits_memory_swap})` op de container gezet. Plan defaults (Free=0.25 vCPU/256MB/1GB, Pro=0.5/512MB/5GB, Agency=1/1GB/20GB) zijn alle admin-editable.
   - **Credit-based addons**: per app slidersaurus voor +vCPU/+MB RAM/+GB storage. Pricing in admin (100cr/0.5vCPU, 50cr/512MB, 25cr/5GB per maand). Bij upgrade pro-rated credit-charge, bij downgrade pro-rated refund. **Verificatie**: upgrade 150cr → onmiddellijke downgrade gaf 145cr refund (29 dagen ongebruikt).
   - **Monthly billing tick**: nieuwe `services.resources.charge_due_addons` hourly scheduler — apps met `monthly_resource_cost > 0` en `resource_addons_charged_at` ≥30 dagen oud krijgen de credit-charge. Bij ontoereikende credits: **auto-downgrade naar plan defaults + notification met `kind=resource_downgrade`**.
@@ -208,7 +208,7 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **New `/status` route** — fully public (no auth), auto-refreshes every 30 seconds in the browser. Live at the same domain (no separate subdomain yet) and linked from the landing-page footer under "Resources".
   - **Background ping orchestrator**: APScheduler `status_ping_tick` runs every 60s, concurrently pings all 10 components via `asyncio.gather`, persists `status_pings` rows (component_id, ts, day, ok, latency_ms, error). 95-day retention with auto-GC.
   - **10 components monitored** in 3 groups:
-    - **Core**: DeployHub API (self-test) · Database (Mongo ping) · Web analytics (`tracker.js` GET) · Metrics ingest (`install.sh` GET)
+    - **Core**: DeployUnit API (self-test) · Database (Mongo ping) · Web analytics (`tracker.js` GET) · Metrics ingest (`install.sh` GET)
     - **Infrastructure**: Coolify (reads `platform_settings.coolify_base_url` → `/api/health`; skipped if not configured)
     - **Integrations**: GitHub (`api.github.com/zen`) · Cloudflare (`api.cloudflare.com/client/v4/`) · Mollie (`api.mollie.com/v2/`) · MailerSend (`api.mailersend.com/v1/`) · Twilio (`status.twilio.com/api/v2/status.json`)
   - **Auto-incident logic**: after 2 consecutive failed pings on the same component, a `status_incidents` row is auto-opened with severity `major` (for api/db/tracker) or `minor` (other). First successful ping auto-resolves the incident with `resolved_at`. No flapping.
@@ -249,17 +249,17 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Design blueprint** generated by `design_agent_full_stack` and saved to `/app/design_guidelines.json` — strict dark/terminal with cyan brand + emerald green-USP accent, sharp `rounded-none` edges, Outfit display + JetBrains Mono accents, bento grid for features, no rounded corners.
   - **Page structure** (in order, all animated, scroll-triggered staggers):
     1. **Sticky nav** with backdrop-blur, brand logo, Features/Compare/Green/Pricing/Login + Deploy-now CTA
-    2. **Hero** — animated split layout: left = "Deploy anything. Faster. Greener." H1 with cyan+emerald accents, EU-hosted/green/GDPR/white-label mono pills, primary + outline CTAs · right = animated terminal (`HeroTerminal`) streaming a realistic 8-line deploy log (`deployhub deploy --repo servunit/web → … → ✓ 100% green energy`) over a `ConstellationCanvas` background.
+    2. **Hero** — animated split layout: left = "Deploy anything. Faster. Greener." H1 with cyan+emerald accents, EU-hosted/green/GDPR/white-label mono pills, primary + outline CTAs · right = animated terminal (`HeroTerminal`) streaming a realistic 8-line deploy log (`deployunit deploy --repo servunit/web → … → ✓ 100% green energy`) over a `ConstellationCanvas` background.
     3. **Logo strip** — auto-detected frameworks (Next.js 14 · Node · Bun · TS · Postgres · Redis · Docker · Tailwind · Prisma · Nixpacks).
     4. **How it works** — 3-step grid (Connect GitHub · Auto-detect stack · Ship + observe). Each step has its own live mini-animation: GitHub sync pill, framework-tag stagger reveal, Recharts CPU sparkline drawing in.
-    5. **Features bento** — 5 big tiles + 6 small capability tiles, all with REAL DeployHub data viz:
+    5. **Features bento** — 5 big tiles + 6 small capability tiles, all with REAL DeployUnit data viz:
        - **Live container metrics** (2-col span) → Recharts CPU+MEM dual-line chart (cyan + emerald) drawing on scroll
        - **Google PageSpeed** → animated SVG ring gauge spinning to score 98 + Core Web Vitals breakdown
        - **Cookieless analytics** → grid-pattern visitor "dot map" with 15 cyan dots animating in
        - **Alerts everywhere** → Slack/Discord/SMS message rows sliding in
        - **Agency multi-tenant** → workspace switcher mock with 4 customer workspaces
        - 6 small tiles: PR previews · Managed databases · Custom domains+DNS · Audit log+RBAC · Per-app resource limits · Custom cron tasks
-    6. **Comparison table** — DeployHub vs Vercel vs Render vs Coolify (DIY) on 10 capabilities. DeployHub column highlighted in cyan-950 with cyan border. Lucide check/x icons, "partial"/"self-host"/"DIY" mono labels for nuance. Row stagger reveal.
+    6. **Comparison table** — DeployUnit vs Vercel vs Render vs Coolify (DIY) on 10 capabilities. DeployUnit column highlighted in cyan-950 with cyan border. Lucide check/x icons, "partial"/"self-host"/"DIY" mono labels for nuance. Row stagger reveal.
     7. **Green Energy spotlight** — full-bleed unsplash wind-turbine bg with emerald overlay + black gradient, "100% wind & solar powered" massive H2 (emerald accent), 4-stat grid (100% renewable · 0g CO₂ · EU-only · ISO 14001), rotating Wind icon "Carbon Neutral by default" circular badge on right, 14 floating emerald particles animating upward continuously.
     8. **Roadmap teaser** — 8 coming-soon tiles (dashed borders, Lucide icons, "SOON" mono labels) linking to /login → /app/roadmap.
     9. **Stats marquee** — infinite-scroll mono ticker (1.2M deploys · 99.99% uptime · 47ms response · 0g CO₂ · EU regions · 14-day money back · From €9/mo · 240+ agencies).
@@ -317,8 +317,8 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - **2026-05-11 — Metrics Agent UUID-mapping P0 fix + diagnostics**
   - **Problem**: Live container metrics agent on user's Coolify VPS was pinging `/api/metrics/ingest` (heartbeat OK) but `last_sample_count` stuck at 0. Coolify v4 stores integer DB id in `coolify.applicationId` label, not the UUID, and the prior name-regex `^([a-z0-9]{20,32})(?:-\d+)?$` rejected newer Coolify revision suffixes that are alphanumeric.
   - **Fix**: Robuster UUID extraction — try `coolify.applicationUUID` / `coolify.application.uuid` / `coolify.databaseUUID` / `coolify.serviceUUID` / `coolify.resource.uuid` labels first, then fall back to relaxed regex `^([a-z0-9]{20,32})(?:-[a-z0-9]+)?$`. Skip known Coolify infra container prefixes explicitly.
-  - **Diagnostics**: Agent now logs per-tick summary (`tick: managed=N sampled=M skipped_no_uuid=K`) and per-sample line so user can see exactly what's found/skipped via `docker logs deployhub-metrics-agent`. Server-side ingest logs unmapped UUIDs and surfaces last 10 of them in `GET /api/admin/metrics/agent` response.
-  - **UI**: Admin → Metrics agent section now shows `accepted / skipped of seen` triplet plus a yellow "unmapped containers detected" panel listing UUIDs that don't match any DeployHub app/database.
+  - **Diagnostics**: Agent now logs per-tick summary (`tick: managed=N sampled=M skipped_no_uuid=K`) and per-sample line so user can see exactly what's found/skipped via `docker logs deployunit-metrics-agent`. Server-side ingest logs unmapped UUIDs and surfaces last 10 of them in `GET /api/admin/metrics/agent` response.
+  - **UI**: Admin → Metrics agent section now shows `accepted / skipped of seen` triplet plus a yellow "unmapped containers detected" panel listing UUIDs that don't match any DeployUnit app/database.
   - **Heartbeat**: Server now updates `last_seen_at` even on empty batches so the admin can tell "agent is alive but found no containers".
   - **Verified**: Full ingest flow E2E via curl — wrong UUID → skipped + surfaced in `last_skipped_uuids`; correct UUID → accepted, stored in `container_metrics_samples`, app metrics query returns data.
   - **Action required from user**: Reinstall the agent on the VPS to pick up the new `agent.py` and rotate to a fresh agent key (old key still valid in DB; only needed if user wants forced rotation).

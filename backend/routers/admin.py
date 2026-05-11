@@ -5,7 +5,7 @@ Everything here requires user.role == 'admin'. Exposes:
   * GET  /admin/platform-settings  → current Cloudflare + root-domain config (token is redacted)
   * PUT  /admin/platform-settings  → update Cloudflare token + root domain; encrypted at rest
   * POST /admin/vat/test           → wraps services.vat.validate_vies for the admin UI
-  * GET  /admin/users              → list DeployHub users (for future user-management)
+  * GET  /admin/users              → list DeployUnit users (for future user-management)
 """
 import asyncio
 import os
@@ -115,7 +115,7 @@ async def read_platform_settings(request: Request):
 class PlatformSettingsUpdate(BaseModel):
     cloudflare_api_token: str | None = None   # plaintext from the form; "" → clear
     cloudflare_zone_id: str | None = None
-    cloudflare_zone_name: str | None = None   # root domain, e.g. "deployhub.app"
+    cloudflare_zone_name: str | None = None   # root domain, e.g. "deployunit.com"
     default_subdomain_target_ip: str | None = None  # A-record target (Coolify server IP)
     default_subdomain_target_host: str | None = None  # optional CNAME target
     company_country: str | None = None
@@ -208,7 +208,7 @@ async def test_mailersend(payload: EmailTestIn, request: Request):
     from clients.mailersend import send as ms_send
     res = await ms_send(
         to_email=payload.to_email,
-        subject="DeployHub · MailerSend test email",
+        subject="DeployUnit · MailerSend test email",
         html="<p>If you got this, your MailerSend integration is working.</p>"
              "<p style='font-family:ui-monospace;font-size:11px;color:#888'>"
              f"Triggered by {actor.get('email')} from the Admin Console.</p>",

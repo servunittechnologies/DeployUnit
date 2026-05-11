@@ -32,9 +32,9 @@ const CONTACT = [
   {
     icon: Mail,
     label: "Email",
-    value: "hello@deployhub.app",
+    value: "hello@deployunit.com",
     hint: "Replied within one business day",
-    href: "mailto:hello@deployhub.app",
+    href: "mailto:hello@deployunit.com",
     tag: null,
   },
   {

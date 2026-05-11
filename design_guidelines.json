@@ -1,5 +1,5 @@
 {
-  "project_name": "DeployHub",
+  "project_name": "DeployUnit",
   "app_type": "marketing_site",
   "theme": "dark",
   "archetype": "Archetype 4 (Swiss & High-Contrast) + Retro-Futurism/Terminal variant",
@@ -86,7 +86,7 @@
   "page_sections": [
     {
       "name": "Navigation",
-      "spec": "Sticky top (z-50) with backdrop-blur-xl bg-black/60. Sharp bottom border (border-b border-zinc-800). Left: DeployHub Logo (mono font, cyan accent). Right: Log in, 'Deploy Now' primary button."
+      "spec": "Sticky top (z-50) with backdrop-blur-xl bg-black/60. Sharp bottom border (border-b border-zinc-800). Left: DeployUnit Logo (mono font, cyan accent). Right: Log in, 'Deploy Now' primary button."
     },
     {
       "name": "Hero",
@@ -102,7 +102,7 @@
     },
     {
       "name": "Comparison Table",
-      "spec": "Section titled 'Why DeployHub?'. A sharp, border-collapse table comparing DeployHub, Vercel, Render, and DIY (Coolify). Rows: 'Data Residency', 'Monitoring Included', 'White-label', 'Green Energy', 'Agency Pricing'. DeployHub column has a cyan-950 background with a cyan border. Use Lucide check (cyan) and x (zinc-600) icons."
+      "spec": "Section titled 'Why DeployUnit?'. A sharp, border-collapse table comparing DeployUnit, Vercel, Render, and DIY (Coolify). Rows: 'Data Residency', 'Monitoring Included', 'White-label', 'Green Energy', 'Agency Pricing'. DeployUnit column has a cyan-950 background with a cyan border. Use Lucide check (cyan) and x (zinc-600) icons."
     },
     {
       "name": "Green Energy USP (Spotlight)",

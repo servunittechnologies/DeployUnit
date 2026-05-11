@@ -76,7 +76,7 @@ function FaqItem({ q, a, defaultOpen = false }) {
 const QUICK_LINKS = [
   { title: "Live system status",  body: "Real-time health of every component.",    to: "/status",  icon: ShieldCheck },
   { title: "Email a human",       body: "Reach support in one business day.",      to: "/contact", icon: Mail },
-  { title: "About DeployHub",     body: "Why we exist, what we believe.",          to: "/about",   icon: HeartHandshake },
+  { title: "About DeployUnit",     body: "Why we exist, what we believe.",          to: "/about",   icon: HeartHandshake },
 ];
 
 export default function Support() {

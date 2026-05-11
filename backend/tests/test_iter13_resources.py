@@ -18,9 +18,9 @@ BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL must be set"
 API = f"{BASE_URL}/api"
 
-ADMIN = {"email": "admin@deployhub.dev", "password": "admin123"}
+ADMIN = {"email": "admin@deployunit.com", "password": "admin123"}
 MARTIJN = {"email": "martijn@servunit.com", "password": "servunit123"}
-DEMO = {"email": "demo@deployhub.dev", "password": "demo1234"}
+DEMO = {"email": "demo@deployunit.com", "password": "demo1234"}
 
 
 # ──────────────────── fixtures ────────────────────

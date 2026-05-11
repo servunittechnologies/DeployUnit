@@ -107,7 +107,7 @@ function Nav() {
 
 function HeroTerminal() {
   const lines = useMemo(() => [
-    { t: "$ deployhub deploy --repo servunit/web", c: "text-zinc-300" },
+    { t: "$ deployunit deploy --repo servunit/web", c: "text-zinc-300" },
     { t: "→ Connected: GitHub (oauth · push verified)", c: "text-zinc-500" },
     { t: "→ Detected: Next.js 14 · App Router", c: "text-zinc-500" },
     { t: "→ Buildpack: nixpacks · region eu", c: "text-zinc-500" },
@@ -132,7 +132,7 @@ function HeroTerminal() {
         <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
         <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
-        <span className="ml-3 text-[10px] uppercase tracking-[0.3em] text-zinc-500">~/deployhub</span>
+        <span className="ml-3 text-[10px] uppercase tracking-[0.3em] text-zinc-500">~/deployunit</span>
       </div>
       <div className="p-4 sm:p-5 space-y-1 min-h-[260px]">
         {lines.slice(0, idx + 1).map((l, i) => (
@@ -1070,7 +1070,7 @@ function Compare() {
         <div className="mb-12 max-w-2xl">
           <Overline>Compare</Overline>
           <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">
-            Why teams switch to DeployHub.
+            Why teams switch to DeployUnit.
           </h2>
           <p className="mt-3 text-zinc-400">
             Apples-to-apples against the platforms you already know.
@@ -1089,7 +1089,7 @@ function Compare() {
             <thead>
               <tr className="border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
                 <th className="text-left p-4 font-normal">Capability</th>
-                <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployHub</th>
+                <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployUnit</th>
                 <th className="p-4 font-normal">Vercel</th>
                 <th className="p-4 font-normal">Render</th>
                 <th className="p-4 font-normal">Coolify (DIY)</th>
@@ -1268,7 +1268,7 @@ function GreenEnergy() {
             </div>
 
             <p className="text-sm sm:text-base text-zinc-300 max-w-xl">
-              Every single app you deploy through DeployHub plants <span className="text-emerald-400 font-semibold">one extra tree</span> through our partnership with{" "}
+              Every single app you deploy through DeployUnit plants <span className="text-emerald-400 font-semibold">one extra tree</span> through our partnership with{" "}
               <a href="https://teamtrees.org" target="_blank" rel="noreferrer" className="underline text-emerald-400 hover:text-emerald-300" data-testid="team-trees-link">teamtrees.org</a>. Real trees, real coordinates, real impact — verified by the Arbor Day Foundation.
             </p>
 
@@ -1444,7 +1444,7 @@ function Footer() {
           ))}
         </div>
         <div className="mt-10 pt-6 border-t border-zinc-900 flex items-center justify-between flex-wrap gap-3 text-[11px] font-mono text-zinc-600">
-          <span>© {new Date().getFullYear()} DeployHub. Crafted in the EU.</span>
+          <span>© {new Date().getFullYear()} DeployUnit. Crafted in the EU.</span>
           <span className="inline-flex items-center gap-1.5">
             Powered by <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-zinc-400 hover:text-cyan-400 transition-colors">ServUnit Technologies BV</a>
           </span>

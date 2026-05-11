@@ -1,4 +1,4 @@
-"""DeployHub transactional email service.
+"""DeployUnit transactional email service.
 
 Top-level senders for the 3 system flows:
   * send_welcome(user)
@@ -55,7 +55,7 @@ def _shell(title: str, body: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{title}</title><style>{_BASE_CSS}</style></head>
 <body><div class="wrap"><div class="card">{body}</div>
-<div class="footer">DeployHub · Hosting for Next.js &amp; Node<br>This is a transactional email.</div></div></body></html>"""
+<div class="footer">DeployUnit · Hosting for Next.js &amp; Node<br>This is a transactional email.</div></div></body></html>"""
 
 
 # ─────────────────────── shared persistence helper ───────────────────────
@@ -84,9 +84,9 @@ async def send_welcome(user: dict) -> dict:
     """Sent the moment a user registers. Non-blocking — call from a BackgroundTask."""
     if not user or not user.get("email"):
         return {"ok": False, "status": "bad_user"}
-    base = _frontend_url() or "https://deployhub.app"
+    base = _frontend_url() or "https://deployunit.com"
     name = user.get("name") or user["email"].split("@")[0]
-    html = _shell("Welcome to DeployHub", f"""
+    html = _shell("Welcome to DeployUnit", f"""
       <h1>Welcome aboard, {name}.</h1>
       <p>Your account is live. You can start deploying Next.js or Node apps from a GitHub repo in under 60 seconds.</p>
       <p><a class="btn" href="{base}/app">Open the dashboard →</a></p>
@@ -94,18 +94,18 @@ async def send_welcome(user: dict) -> dict:
       <ul style="font-size:13px;color:#a0a0a0;line-height:1.7;">
         <li>Connect GitHub in <a href="{base}/app/settings">Settings → Connected accounts</a></li>
         <li>Hit <span class="accent">+ New App</span> and pick a repo</li>
-        <li>Add a custom domain or use the free <span class="accent">{{slug}}.deployhub.app</span></li>
+        <li>Add a custom domain or use the free <span class="accent">{{slug}}.deployunit.com</span></li>
       </ul>
-      <p class="meta">If you didn't sign up for DeployHub, ignore this email or reply to let us know.</p>
+      <p class="meta">If you didn't sign up for DeployUnit, ignore this email or reply to let us know.</p>
     """)
-    text = f"Welcome to DeployHub, {name}.\n\nYour account is live. Open the dashboard: {base}/app\n\nIf this wasn't you, ignore this email."
+    text = f"Welcome to DeployUnit, {name}.\n\nYour account is live. Open the dashboard: {base}/app\n\nIf this wasn't you, ignore this email."
     res = await mailersend.send(
         to_email=user["email"], to_name=name,
-        subject="Welcome to DeployHub",
+        subject="Welcome to DeployUnit",
         html=html, text=text, tags=["welcome"],
     )
     await _log_email(user_id=user.get("id"), workspace_id=None,
-                     to=user["email"], subject="Welcome to DeployHub",
+                     to=user["email"], subject="Welcome to DeployUnit",
                      event_type="welcome", result=res)
     return res
 
@@ -116,11 +116,11 @@ async def send_password_reset_admin(user: dict, new_password: str, actor_email: 
     We email the user the new credentials with a strong nudge to change it."""
     if not user or not user.get("email"):
         return {"ok": False, "status": "bad_user"}
-    base = _frontend_url() or "https://deployhub.app"
+    base = _frontend_url() or "https://deployunit.com"
     name = user.get("name") or user["email"].split("@")[0]
     html = _shell("Your password was reset", f"""
       <h1>Your password was reset by an administrator.</h1>
-      <p>A DeployHub admin{f' ({actor_email})' if actor_email else ''} set a new password for your account.</p>
+      <p>A DeployUnit admin{f' ({actor_email})' if actor_email else ''} set a new password for your account.</p>
       <div class="alert-amber"><p><strong>Your temporary password:</strong></p>
         <p style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:15px; background:#000; padding:12px; border:1px solid #1f1f1f;">{new_password}</p>
       </div>
@@ -128,15 +128,15 @@ async def send_password_reset_admin(user: dict, new_password: str, actor_email: 
       <p>For your safety, change this password immediately under <a href="{base}/app/settings">Settings → Change password</a>.</p>
       <p class="meta">Didn't expect this? Contact support immediately.</p>
     """)
-    text = (f"Your DeployHub password was reset by an admin{f' ({actor_email})' if actor_email else ''}.\n\n"
+    text = (f"Your DeployUnit password was reset by an admin{f' ({actor_email})' if actor_email else ''}.\n\n"
             f"Temporary password: {new_password}\n\nSign in: {base}/login\nChange it immediately under Settings → Change password.")
     res = await mailersend.send(
         to_email=user["email"], to_name=name,
-        subject="Your DeployHub password was reset",
+        subject="Your DeployUnit password was reset",
         html=html, text=text, tags=["password_reset", "admin"],
     )
     await _log_email(user_id=user.get("id"), workspace_id=None,
-                     to=user["email"], subject="Your DeployHub password was reset",
+                     to=user["email"], subject="Your DeployUnit password was reset",
                      event_type="password_reset_admin", result=res)
     return res
 
@@ -148,22 +148,22 @@ async def send_password_reset_link(user: dict, reset_url: str, expires_minutes: 
         return {"ok": False, "status": "bad_user"}
     name = user.get("name") or user["email"].split("@")[0]
     html = _shell("Reset your password", f"""
-      <h1>Reset your DeployHub password.</h1>
-      <p>Hi {name}, we got a request to reset the password on your DeployHub account.</p>
+      <h1>Reset your DeployUnit password.</h1>
+      <p>Hi {name}, we got a request to reset the password on your DeployUnit account.</p>
       <p><a class="btn" href="{reset_url}">Reset password →</a></p>
       <p class="meta">This link expires in {expires_minutes} minutes.<br>
         If the button doesn't work, copy this URL:<br>
         <span class="accent">{reset_url}</span></p>
       <p class="meta">Didn't request this? You can safely ignore the email — your password won't change.</p>
     """)
-    text = f"Reset your DeployHub password.\n\n{reset_url}\n\nExpires in {expires_minutes} minutes. If this wasn't you, ignore this email."
+    text = f"Reset your DeployUnit password.\n\n{reset_url}\n\nExpires in {expires_minutes} minutes. If this wasn't you, ignore this email."
     res = await mailersend.send(
         to_email=user["email"], to_name=name,
-        subject="Reset your DeployHub password",
+        subject="Reset your DeployUnit password",
         html=html, text=text, tags=["password_reset", "self_serve"],
     )
     await _log_email(user_id=user.get("id"), workspace_id=None,
-                     to=user["email"], subject="Reset your DeployHub password",
+                     to=user["email"], subject="Reset your DeployUnit password",
                      event_type="password_reset_link", result=res)
     return res
 
@@ -183,7 +183,7 @@ _NOTIFICATION_PALETTE = {
 # ─────────────────────── 4. Support tickets ───────────────────────
 def _ticket_card_html(*, ticket: dict, message_body: str, who: str) -> str:
     """Shared inner card for ticket emails."""
-    base = _frontend_url() or "https://deployhub.app"
+    base = _frontend_url() or "https://deployunit.com"
     safe_body = (message_body or "").replace("\n", "<br>")
     return f"""
       <h1>{who} on ticket #{ticket['id'][:8]}</h1>
@@ -213,7 +213,7 @@ async def send_ticket_created(*, ticket: dict, message_body: str,
     text = (f"New ticket #{ticket['id'][:8]} from "
             f"{ticket.get('user_name') or ticket.get('user_email')}\n\n"
             f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
-            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/admin")
+            f"Open: {(_frontend_url() or 'https://deployunit.com')}/app/admin")
     last_res = {"ok": False}
     for adm in admin_recipients:
         last_res = await mailersend.send(
@@ -238,7 +238,7 @@ async def send_ticket_reply_to_user(*, ticket: dict, message_body: str) -> dict:
     html = _shell(subject, inner)
     text = (f"Support replied on ticket #{ticket['id'][:8]}.\n\n"
             f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
-            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/tickets/{ticket['id']}")
+            f"Open: {(_frontend_url() or 'https://deployunit.com')}/app/tickets/{ticket['id']}")
     res = await mailersend.send(
         to_email=to_email, to_name=ticket.get("user_name"),
         subject=subject, html=html, text=text,
@@ -263,7 +263,7 @@ async def send_ticket_reply_to_admins(*, ticket: dict, message_body: str,
     html = _shell(subject, inner)
     text = (f"User reply on ticket #{ticket['id'][:8]}.\n\n"
             f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
-            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/admin")
+            f"Open: {(_frontend_url() or 'https://deployunit.com')}/app/admin")
     last_res = {"ok": False}
     for adm in admin_recipients:
         last_res = await mailersend.send(
@@ -281,7 +281,7 @@ async def send_notification(*, user: dict, workspace_id: Optional[str], event_ty
     the user has email enabled for `event_type`."""
     if not user or not user.get("email"):
         return {"ok": False, "status": "bad_user"}
-    base = _frontend_url() or "https://deployhub.app"
+    base = _frontend_url() or "https://deployunit.com"
     css_class, _emoji = _NOTIFICATION_PALETTE.get(event_type, ("alert-amber", "🔔"))
     extra_html = ""
     if extras:
@@ -304,10 +304,10 @@ async def send_notification(*, user: dict, workspace_id: Optional[str], event_ty
     text = f"{title}\n\n{body}\n\nEvent: {event_type}\nOpen: {base}/app\n\nManage preferences in Settings → Notification preferences."
     res = await mailersend.send(
         to_email=user["email"], to_name=user.get("name"),
-        subject=f"[DeployHub] {title}",
+        subject=f"[DeployUnit] {title}",
         html=html, text=text, tags=["notification", event_type],
     )
     await _log_email(user_id=user.get("id"), workspace_id=workspace_id,
-                     to=user["email"], subject=f"[DeployHub] {title}",
+                     to=user["email"], subject=f"[DeployUnit] {title}",
                      event_type=event_type, result=res)
     return res

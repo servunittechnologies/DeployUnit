@@ -46,7 +46,7 @@ async def _settings() -> Optional[dict]:
         logger.warning("mailersend: decrypt api key failed: %s", e)
         return None
     from_email = doc.get("mailersend_from_email")
-    from_name = doc.get("mailersend_from_name") or "DeployHub"
+    from_name = doc.get("mailersend_from_name") or "DeployUnit"
     reply_to = doc.get("mailersend_reply_to") or None
     if not api_key or not from_email:
         return None

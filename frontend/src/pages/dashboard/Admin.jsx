@@ -113,7 +113,7 @@ function IntegrationsTab() {
         </div>
         {data.build_engine?.configured && !data.build_engine?.health?.ok && (
           <div className="mt-3 text-[11px] font-mono text-zinc-500 leading-relaxed">
-            Credentials are saved, but DeployHub's backend couldn't reach <span className="text-zinc-300">{data.build_engine.base_url}</span> right now.
+            Credentials are saved, but DeployUnit's backend couldn't reach <span className="text-zinc-300">{data.build_engine.base_url}</span> right now.
             Check firewall rules, server uptime, or network routing. Deployments will queue until reachable.
             {data.build_engine?.health?.error && <span className="text-signal-failed"> · {data.build_engine.health.error}</span>}
           </div>
@@ -409,7 +409,7 @@ function MetricsAgentSection() {
             ⚠ unmapped containers detected
           </div>
           <div className="text-xs text-zinc-400 mb-2">
-            The agent reports stats for containers whose UUID isn't linked to any DeployHub app or database.
+            The agent reports stats for containers whose UUID isn't linked to any DeployUnit app or database.
             Either these are infra containers you don't need to monitor, or the app needs to be (re)imported so its UUID is registered.
           </div>
           <div className="font-mono text-xs text-zinc-300 space-y-1">
@@ -806,14 +806,14 @@ function PlatformTab() {
 
       <Section
         title="Default subdomain (Cloudflare)"
-        description="Every new app automatically gets a subdomain like {slug}.yourzone.app. DeployHub creates the DNS A-record via Cloudflare on your behalf."
+        description="Every new app automatically gets a subdomain like {slug}.yourzone.app. DeployUnit creates the DNS A-record via Cloudflare on your behalf."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Field label="Root domain (must be in Cloudflare)" hint="e.g. deployhub.app">
+          <Field label="Root domain (must be in Cloudflare)" hint="e.g. deployunit.com">
             <Input
               value={form.cloudflare_zone_name}
               onChange={(e) => setForm({ ...form, cloudflare_zone_name: e.target.value })}
-              placeholder="deployhub.app"
+              placeholder="deployunit.com"
               data-testid="admin-cf-zone-name"
             />
           </Field>
@@ -846,7 +846,7 @@ function PlatformTab() {
             <Input
               value={form.default_subdomain_target_host}
               onChange={(e) => setForm({ ...form, default_subdomain_target_host: e.target.value })}
-              placeholder="server-1.deployhub.internal"
+              placeholder="server-1.deployunit.internal"
               data-testid="admin-target-host"
             />
           </Field>
@@ -944,11 +944,11 @@ function PlatformTab() {
               data-testid="admin-mailersend-from"
             />
           </Field>
-          <Field label="From name" hint="Display name in the inbox. Default 'DeployHub' if blank.">
+          <Field label="From name" hint="Display name in the inbox. Default 'DeployUnit' if blank.">
             <Input
               value={form.mailersend_from_name}
               onChange={(e) => setForm({ ...form, mailersend_from_name: e.target.value })}
-              placeholder="DeployHub"
+              placeholder="DeployUnit"
               data-testid="admin-mailersend-from-name"
             />
           </Field>

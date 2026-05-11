@@ -37,7 +37,7 @@ def _client() -> httpx.AsyncClient:
             timeout=httpx.Timeout(6.0, connect=3.0),
             limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=120),
             follow_redirects=True,
-            headers={"User-Agent": "DeployHub-StatusBot/1.0"},
+            headers={"User-Agent": "DeployUnit-StatusBot/1.0"},
         )
     return _http_client
 
@@ -115,7 +115,7 @@ async def check_self(url: str) -> dict:
 
 
 COMPONENTS = [
-    {"id": "api",        "name": "DeployHub API",      "desc": "Public REST API and dashboard backend",  "group": "Core"},
+    {"id": "api",        "name": "DeployUnit API",      "desc": "Public REST API and dashboard backend",  "group": "Core"},
     {"id": "db",         "name": "Database",           "desc": "Primary cluster",                         "group": "Core"},
     {"id": "tracker",    "name": "Web analytics",      "desc": "Pageview tracker endpoint",              "group": "Core"},
     {"id": "metrics",    "name": "Metrics ingest",     "desc": "VPS agent ingestion pipeline",           "group": "Core"},

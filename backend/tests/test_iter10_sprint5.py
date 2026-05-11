@@ -23,9 +23,9 @@ load_dotenv("/app/frontend/.env")
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
 
-DEMO_EMAIL = "demo@deployhub.dev"
+DEMO_EMAIL = "demo@deployunit.com"
 DEMO_PASS = "demo1234"
-ADMIN_EMAIL = "admin@deployhub.dev"
+ADMIN_EMAIL = "admin@deployunit.com"
 ADMIN_PASS = "admin123"
 DEMO_WS = "ee9ace3a-0b82-4df5-9dd7-d543c1e0c022"
 

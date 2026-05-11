@@ -36,7 +36,7 @@ async def send_slack(*, webhook_url: str, title: str, body: str, event_type: str
             "color": _accent_hex(event_type),
             "title": title,
             "text": body,
-            "footer": f"DeployHub · {event_type}",
+            "footer": f"DeployUnit · {event_type}",
         }]
     }
     async with httpx.AsyncClient(timeout=10.0) as cli:
@@ -52,7 +52,7 @@ async def send_discord(*, webhook_url: str, title: str, body: str, event_type: s
             "title": title,
             "description": body,
             "color": _accent_int(event_type),
-            "footer": {"text": f"DeployHub · {event_type}"},
+            "footer": {"text": f"DeployUnit · {event_type}"},
         }]
     }
     async with httpx.AsyncClient(timeout=10.0) as cli:

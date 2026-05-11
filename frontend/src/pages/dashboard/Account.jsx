@@ -303,7 +303,7 @@ export default function Account() {
         <div className="col-span-12 lg:col-span-9 space-y-10">
           {/* Profile */}
           <section className="border border-white/[0.06] p-6 space-y-4" data-testid="section-profile">
-            <SectionHeader id="profile" icon={UserIcon} title="Profile" subtitle="How you show up across DeployHub." />
+            <SectionHeader id="profile" icon={UserIcon} title="Profile" subtitle="How you show up across DeployUnit." />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Email</label>
@@ -537,7 +537,7 @@ export default function Account() {
           {/* Notifications */}
           <section className="border border-white/[0.06] p-6 space-y-5" data-testid="section-notifications">
             <SectionHeader id="notifications" icon={Bell} title="Notification preferences"
-              subtitle="Where DeployHub pings you when things break. SMS & WhatsApp use credits; email & in-app are free." />
+              subtitle="Where DeployUnit pings you when things break. SMS & WhatsApp use credits; email & in-app are free." />
 
             <Field label="Phone (E.164, e.g. +32475123456)" v={phoneE164} on={setPhoneE164} testId="notif-phone" />
 

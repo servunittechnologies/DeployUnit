@@ -88,7 +88,7 @@ async def verify_agent_key(provided: str) -> bool:
 # ─────────────────────── Sample ingestion ───────────────────────
 async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None) -> dict:
     """Persist a batch of agent samples. Each sample is matched to an app via
-    `coolify_app_uuid` so we only store stats for apps DeployHub knows about.
+    `coolify_app_uuid` so we only store stats for apps DeployUnit knows about.
 
     Returns counts so the agent can log success/skip rates.
     """

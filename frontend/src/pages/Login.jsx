@@ -83,7 +83,7 @@ export default function Login() {
         >
           <Link to="/" className="lg:hidden block mb-6"><Logo /></Link>
           <h1 className="font-display text-4xl font-semibold tracking-tighter">Sign in</h1>
-          <p className="mt-1 text-sm text-zinc-400">Welcome back to DeployHub.</p>
+          <p className="mt-1 text-sm text-zinc-400">Welcome back to DeployUnit.</p>
 
           {oauthError && (
             <div className="mt-4 px-3 py-2 border border-signal-failed/30 bg-signal-failed/10 text-signal-failed text-sm" data-testid="oauth-error">
@@ -141,7 +141,7 @@ export default function Login() {
           </div>
           <div className="mt-8 p-3 border border-white/5 bg-white/[0.02] text-xs font-mono text-zinc-500">
             <div className="text-zinc-400 mb-1">Demo credentials</div>
-            demo@deployhub.dev / demo1234
+            demo@deployunit.com / demo1234
           </div>
         </motion.div>
       </div>

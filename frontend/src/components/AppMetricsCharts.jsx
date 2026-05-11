@@ -27,7 +27,7 @@ function fmtTime(iso) {
 }
 
 /**
- * Show REAL container metrics (CPU/mem/net/disk) collected by the DeployHub
+ * Show REAL container metrics (CPU/mem/net/disk) collected by the DeployUnit
  * metrics agent. Falls back to an "Install agent" CTA when no data is
  * flowing yet.
  */
@@ -58,7 +58,7 @@ export default function AppMetricsCharts({ appId, onInstallAgent }) {
           <div className="flex-1">
             <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-1">// metrics agent not reporting</div>
             <div className="text-sm text-zinc-200">
-              Live container CPU/memory/disk/network stats arrive once you install the DeployHub metrics agent on your build engine VPS.
+              Live container CPU/memory/disk/network stats arrive once you install the DeployUnit metrics agent on your build engine VPS.
             </div>
             <div className="text-xs text-zinc-500 mt-1">
               Without the agent we only show what's measurable from outside the container (HTTP uptime, response time, deployments, build minutes).
@@ -100,7 +100,7 @@ export default function AppMetricsCharts({ appId, onInstallAgent }) {
             <h3 className="font-display text-lg">Container metrics</h3>
             <span className="text-[10px] font-mono text-zinc-500 ml-2">{samples.length} samples · last @ {fmtTime(latest.sampled_at)}</span>
           </div>
-          <p className="text-xs font-mono text-zinc-500 mt-0.5">Reported by DeployHub agent every 30s. Auto-refresh.</p>
+          <p className="text-xs font-mono text-zinc-500 mt-0.5">Reported by DeployUnit agent every 30s. Auto-refresh.</p>
         </div>
         <div className="flex gap-1 border border-white/10">
           {WINDOWS.map((w) => (

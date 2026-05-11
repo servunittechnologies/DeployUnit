@@ -1,5 +1,5 @@
 """
-DeployHub backend API tests.
+DeployUnit backend API tests.
 Uses the public preview URL from REACT_APP_BACKEND_URL and cookie-based auth.
 """
 import os
@@ -11,9 +11,9 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://help-desk-151.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-DEMO_EMAIL = "demo@deployhub.dev"
+DEMO_EMAIL = "demo@deployunit.com"
 DEMO_PASS = "demo1234"
-EMAIL_DOMAIN = "deployhub-test.io"  # avoid pydantic reserved .test TLD
+EMAIL_DOMAIN = "deployunit-test.io"  # avoid pydantic reserved .test TLD
 
 
 # ----- Shared fixtures -----
@@ -58,14 +58,14 @@ class TestHealth:
     def test_root(self):
         r = requests.get(f"{API}/", timeout=10)
         assert r.status_code == 200
-        assert r.json().get("service") == "deployhub"
+        assert r.json().get("service") == "deployunit"
 
 
 # ----- Auth -----
 class TestAuth:
     def test_register_new_user_sets_cookies_and_bootstraps_workspace(self):
         s = requests.Session()
-        email = f"TEST_{uuid.uuid4().hex[:8]}@deployhub-test.io"
+        email = f"TEST_{uuid.uuid4().hex[:8]}@deployunit-test.io"
         r = s.post(f"{API}/auth/register", json={"email": email, "password": "pass1234", "name": "Test User"}, timeout=15)
         assert r.status_code == 200, r.text
         data = r.json()
@@ -97,7 +97,7 @@ class TestAuth:
 
     def test_brute_force_lockout_returns_429(self):
         # Use a new email that has never logged in to get a fresh counter
-        email = f"TEST_bf_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        email = f"TEST_bf_{uuid.uuid4().hex[:6]}@deployunit-test.io"
         last = None
         for _ in range(6):
             s = requests.Session()
@@ -756,7 +756,7 @@ class TestBilling:
     # Profile saves & VAT calculation
     def test_profile_nl_b2c_returns_21(self, demo_session, demo_workspace_id):
         body = {"company_name": "Demo NL", "address": "Keizersgracht 1", "postal_code": "1015CJ",
-                "city": "Amsterdam", "country": "NL", "email": "demo@deployhub.dev", "is_business": False}
+                "city": "Amsterdam", "country": "NL", "email": "demo@deployunit.com", "is_business": False}
         r = demo_session.put(f"{API}/billing/profile",
                              params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
         assert r.status_code == 200, r.text
@@ -770,7 +770,7 @@ class TestBilling:
 
     def test_profile_de_b2c_returns_19(self, demo_session, demo_workspace_id):
         body = {"company_name": "Demo DE", "address": "Strasse 1", "postal_code": "10115",
-                "city": "Berlin", "country": "DE", "email": "demo@deployhub.dev", "is_business": False}
+                "city": "Berlin", "country": "DE", "email": "demo@deployunit.com", "is_business": False}
         r = demo_session.put(f"{API}/billing/profile",
                              params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
         assert r.status_code == 200
@@ -780,7 +780,7 @@ class TestBilling:
 
     def test_profile_us_returns_zero(self, demo_session, demo_workspace_id):
         body = {"company_name": "Demo US", "address": "1 Main St", "postal_code": "10001",
-                "city": "NYC", "country": "US", "email": "demo@deployhub.dev", "is_business": False}
+                "city": "NYC", "country": "US", "email": "demo@deployunit.com", "is_business": False}
         r = demo_session.put(f"{API}/billing/profile",
                              params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
         assert r.status_code == 200
@@ -790,7 +790,7 @@ class TestBilling:
 
     def test_profile_de_invalid_vat_falls_back_to_b2c(self, demo_session, demo_workspace_id):
         body = {"company_name": "Demo DE B2B", "address": "Strasse 2", "postal_code": "10115",
-                "city": "Berlin", "country": "DE", "email": "demo@deployhub.dev",
+                "city": "Berlin", "country": "DE", "email": "demo@deployunit.com",
                 "is_business": True, "vat_id": "INVALID"}
         r = demo_session.put(f"{API}/billing/profile",
                              params={"workspace_id": demo_workspace_id}, json=body, timeout=20)
@@ -830,7 +830,7 @@ class TestBilling:
     def test_pro_checkout_requires_profile_then_returns_mollie_url(self, demo_session, demo_workspace_id):
         # Make sure profile exists (set via earlier tests; re-set NL for determinism)
         body = {"company_name": "Demo B.V.", "address": "Keizersgracht 1", "postal_code": "1015CJ",
-                "city": "Amsterdam", "country": "NL", "email": "demo@deployhub.dev", "is_business": False}
+                "city": "Amsterdam", "country": "NL", "email": "demo@deployunit.com", "is_business": False}
         demo_session.put(f"{API}/billing/profile",
                          params={"workspace_id": demo_workspace_id}, json=body, timeout=15)
         r = demo_session.post(f"{API}/billing/checkout",
@@ -845,7 +845,7 @@ class TestBilling:
     def test_pro_checkout_without_profile_returns_400(self, demo_session):
         # Use a fresh workspace with no profile
         s = requests.Session()
-        email = f"TEST_noprof_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        email = f"TEST_noprof_{uuid.uuid4().hex[:6]}@deployunit-test.io"
         rr = s.post(f"{API}/auth/register",
                     json={"email": email, "password": "pw12345x", "name": "NoProf User"}, timeout=15)
         assert rr.status_code == 200
@@ -930,7 +930,7 @@ class TestGitHub:
 class TestSettings:
     def test_update_name_and_change_password(self):
         s = requests.Session()
-        email = f"TEST_settings_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        email = f"TEST_settings_{uuid.uuid4().hex[:6]}@deployunit-test.io"
         r = s.post(f"{API}/auth/register",
                    json={"email": email, "password": "origpass1", "name": "Orig Name"}, timeout=15)
         assert r.status_code == 200
@@ -1071,7 +1071,7 @@ class TestIter7SitePreview:
 class TestIsolation:
     def test_stranger_cannot_read_others_apps(self, demo_workspace_id):
         s = requests.Session()
-        email = f"TEST_iso_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        email = f"TEST_iso_{uuid.uuid4().hex[:6]}@deployunit-test.io"
         rr = s.post(f"{API}/auth/register",
                     json={"email": email, "password": "pw12345x", "name": "Iso User"}, timeout=15)
         assert rr.status_code == 200
@@ -1277,7 +1277,7 @@ class TestIter8NotificationTestEndpoint:
     def test_test_endpoint_without_workspace_membership_forbidden(self, demo_workspace_id):
         # New user with no membership in demo workspace
         s = requests.Session()
-        email = f"TEST_nm_{uuid.uuid4().hex[:6]}@deployhub-test.io"
+        email = f"TEST_nm_{uuid.uuid4().hex[:6]}@deployunit-test.io"
         rr = s.post(f"{API}/auth/register",
                     json={"email": email, "password": "pw12345x", "name": "NoMember"}, timeout=15)
         assert rr.status_code == 200

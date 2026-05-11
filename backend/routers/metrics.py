@@ -121,15 +121,15 @@ async def app_metrics(app_id: str, request: Request, window: str = "24h"):
 # Inline installer + agent — kept here so we can ship via plain HTTP
 # ===================================================================
 AGENT_INSTALL_SH = r"""#!/usr/bin/env bash
-# DeployHub metrics agent installer — run on your build engine VPS.
-# It deploys a tiny container that POSTs `docker stats` to DeployHub every 30s.
+# DeployUnit metrics agent installer — run on your build engine VPS.
+# It deploys a tiny container that POSTs `docker stats` to DeployUnit every 30s.
 set -e
 
 API_BASE="{api_base}"
-INSTALL_DIR="/opt/deployhub-agent"
+INSTALL_DIR="/opt/deployunit-agent"
 
 echo ""
-echo "DeployHub metrics agent installer"
+echo "DeployUnit metrics agent installer"
 echo "================================="
 echo "  target server: $API_BASE"
 echo ""
@@ -148,7 +148,7 @@ if [ -z "${{DH_AGENT_KEY:-}}" ]; then
     echo "  curl -sSL $API_BASE/api/agent/install.sh | DH_AGENT_KEY=dh-agent-xxxx bash" >&2
     exit 1
   fi
-  echo "Paste your DeployHub agent API key (input hidden). Get it in Admin → Integrations → Metrics agent."
+  echo "Paste your DeployUnit agent API key (input hidden). Get it in Admin → Integrations → Metrics agent."
   read -r -s -p "key: " DH_AGENT_KEY < /dev/tty
   echo ""
 fi
@@ -173,7 +173,7 @@ cat > docker-compose.yml <<DCYAML
 services:
   agent:
     image: python:3.11-slim
-    container_name: deployhub-metrics-agent
+    container_name: deployunit-metrics-agent
     restart: unless-stopped
     pid: "host"
     network_mode: "host"
@@ -188,21 +188,21 @@ services:
 DCYAML
 
 # Stop any previous version cleanly
-docker rm -f deployhub-metrics-agent >/dev/null 2>&1 || true
+docker rm -f deployunit-metrics-agent >/dev/null 2>&1 || true
 docker compose up -d
 
 echo ""
-echo "Done. DeployHub agent running."
-echo "  watch logs:  docker logs -f deployhub-metrics-agent"
+echo "Done. DeployUnit agent running."
+echo "  watch logs:  docker logs -f deployunit-metrics-agent"
 echo "  reinstall:   curl -sSL $API_BASE/api/agent/install.sh | bash"
-echo "  uninstall:   docker rm -f deployhub-metrics-agent && rm -rf $INSTALL_DIR"
+echo "  uninstall:   docker rm -f deployunit-metrics-agent && rm -rf $INSTALL_DIR"
 echo ""
 """
 
 
-AGENT_PY = r'''"""DeployHub metrics agent — runs inside `python:3.11-slim` next to Docker
+AGENT_PY = r'''"""DeployUnit metrics agent — runs inside `python:3.11-slim` next to Docker
 on the build engine VPS. Loops every $INTERVAL_SEC, posts a JSON batch to
-DeployHub. Lean by design (one file, two deps)."""
+DeployUnit. Lean by design (one file, two deps)."""
 import os
 import re
 import sys
@@ -233,7 +233,7 @@ client = docker.from_env()
 #                                  digits OR alphanumeric depending on the
 #                                  Coolify version
 # The `coolify.applicationId` label is the integer Laravel DB id, NOT the
-# UUID we use in DeployHub, so we ALSO try several UUID-bearing labels
+# UUID we use in DeployUnit, so we ALSO try several UUID-bearing labels
 # before falling back to a name-prefix regex.
 NAME_RE = re.compile(r"^([a-z0-9]{20,32})(?:-[a-z0-9]+)?$")
 
@@ -401,7 +401,7 @@ def push(samples: list[dict]) -> None:
 
 
 def main() -> None:
-    log.info("DeployHub agent starting endpoint=%s interval=%ss", API_URL, INTERVAL)
+    log.info("DeployUnit agent starting endpoint=%s interval=%ss", API_URL, INTERVAL)
     while True:
         t0 = time.time()
         push(collect_samples())

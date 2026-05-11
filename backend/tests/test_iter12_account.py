@@ -22,9 +22,9 @@ load_dotenv("/app/frontend/.env")
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL must be set"
 
-DEMO_EMAIL = "demo@deployhub.dev"
+DEMO_EMAIL = "demo@deployunit.com"
 DEMO_PW = "demo1234"
-ADMIN_EMAIL = "admin@deployhub.dev"
+ADMIN_EMAIL = "admin@deployunit.com"
 ADMIN_PW = "admin123"
 
 

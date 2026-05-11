@@ -424,7 +424,7 @@ function HeatmapsPane({ features }) {
           </h3>
           <p className="text-zinc-400 max-w-xl mb-6">
             See exactly where visitors click, how far they scroll, and replay anonymized real-user sessions —
-            built natively into DeployHub. No third-party login, no extra setup, all data stays on your platform.
+            built natively into DeployUnit. No third-party login, no extra setup, all data stays on your platform.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mb-8">
@@ -504,7 +504,7 @@ export default function RootLayout({ children }) {
       <div className="border border-white/[0.06] p-6">
         <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-2">// step 2 · deploy + verify</div>
         <ol className="space-y-2 text-sm text-zinc-300 list-decimal pl-5">
-          <li>Commit + push your change — DeployHub will redeploy automatically.</li>
+          <li>Commit + push your change — DeployUnit will redeploy automatically.</li>
           <li>Visit your site at <a href={config.primary_url || "#"} target="_blank" rel="noreferrer" className="text-brand hover:underline">{config.primary_url || "your URL"}</a>.</li>
           <li>Come back to the <strong>Visitors</strong> tab — first pageviews appear within ~10 seconds.</li>
         </ol>

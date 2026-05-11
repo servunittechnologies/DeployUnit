@@ -6,7 +6,7 @@ export default function Logo({ className = "", small = false }) {
         <span className="relative">/</span>
       </div>
       <span className={`font-display font-semibold tracking-tight ${small ? "text-base" : "text-lg"}`}>
-        deploy<span className="text-brand">hub</span>
+        deploy<span className="text-brand">unit</span>
       </span>
     </div>
   );

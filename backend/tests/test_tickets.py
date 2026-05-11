@@ -16,9 +16,9 @@ _fe_env = dotenv_values("/app/frontend/.env")
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL")
             or _fe_env.get("REACT_APP_BACKEND_URL")).rstrip("/")
 
-ADMIN_EMAIL = "admin@deployhub.dev"
+ADMIN_EMAIL = "admin@deployunit.com"
 ADMIN_PASSWORD = "admin123"
-USER_EMAIL = "demo@deployhub.dev"
+USER_EMAIL = "demo@deployunit.com"
 USER_PASSWORD = "demo1234"
 OTHER_EMAIL = "martijn@servunit.com"
 OTHER_PASSWORD = "Reset-NMsS5GTQh-vx4g"

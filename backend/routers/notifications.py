@@ -124,7 +124,7 @@ async def test_send(payload: SendTestIn, request: Request):
         workspace_id=payload.workspace_id,
         user=user_for_send,
         event_type=test_event,
-        title="DeployHub test",
+        title="DeployUnit test",
         body="If you got this, your notification channel works.",
         channels=[payload.channel],
     )

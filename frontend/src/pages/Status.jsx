@@ -250,7 +250,7 @@ export default function Status() {
               className="hidden sm:inline-flex items-center gap-1 text-xs font-mono text-zinc-400 hover:text-cyan-400 transition-colors"
               data-testid="status-back-home"
             >
-              back to deployhub <ChevronRight className="h-3 w-3" />
+              back to deployunit <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
         </div>
@@ -262,7 +262,7 @@ export default function Status() {
             <Activity className="h-3 w-3" /> system status
           </div>
           <p className="text-zinc-400 text-sm max-w-2xl">
-            Live health of every DeployHub component and third-party dependency. Pinged every 60 seconds.
+            Live health of every DeployUnit component and third-party dependency. Pinged every 60 seconds.
             Page refreshes automatically every 30 seconds.
           </p>
         </div>

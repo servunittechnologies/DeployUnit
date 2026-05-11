@@ -186,7 +186,7 @@ export default function Settings() {
           <h2 className="font-display text-xl">Team members</h2>
         </div>
         <p className="text-xs text-zinc-500">
-          Invite collaborators to <strong>{active.name}</strong>. Members must already have a DeployHub account.
+          Invite collaborators to <strong>{active.name}</strong>. Members must already have a DeployUnit account.
         </p>
         <form onSubmit={invite} className="flex gap-2 flex-wrap">
           <input

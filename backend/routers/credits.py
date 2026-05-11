@@ -82,7 +82,7 @@ async def credits_checkout(payload: CreditCheckoutIn, request: Request):
     try:
         payment = await mollie.create_payment(payload={
             "amount": {"currency": "EUR", "value": f"{totals['total']:.2f}"},
-            "description": f"DeployHub {pack['label']} pack — {pack['credits']} credits",
+            "description": f"DeployUnit {pack['label']} pack — {pack['credits']} credits",
             "redirectUrl": f"{redirect}/app/billing?credit_pack={pack['id']}",
             "webhookUrl": webhook,
             "metadata": {
