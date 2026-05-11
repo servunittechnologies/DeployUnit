@@ -13,6 +13,7 @@ import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
   ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
+  Webhook, Copy, Eye, EyeOff, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -493,8 +494,9 @@ export default function AppDetail() {
       )}
 
       {tab === "settings" && (
-        <div className="p-6">
+        <div className="p-6 space-y-10">
           <SettingsForm app={app} onSaved={(updated) => setApp(updated)} />
+          <WebhookSection appId={app.id} />
           <div className="mt-10 max-w-2xl border border-signal-failed/30 p-5">
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-signal-failed">Danger zone</div>
             <div className="mt-2 flex items-center justify-between gap-4">
@@ -509,5 +511,145 @@ export default function AppDetail() {
 
       <DeployModal app={app} open={deployOpen} onClose={() => setDeployOpen(false)} onDeployed={() => load()} />
     </div>
+  );
+}
+
+/* ─────────────────────── GitHub Webhook section ─────────────────────── */
+function WebhookSection({ appId }) {
+  const [data, setData] = useState(null);
+  const [showSecret, setShowSecret] = useState(false);
+  const [busy, setBusy] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.get(`/apps/${appId}/webhook`);
+      setData(r.data);
+    } catch (e) { /* ignore */ }
+  }, [appId]);
+  useEffect(() => { load(); }, [load]);
+
+  const copy = (txt, label) => {
+    navigator.clipboard.writeText(txt || "");
+    toast.success(`${label} copied`);
+  };
+
+  const toggle = async () => {
+    setBusy("toggle");
+    try {
+      const r = await api.post(`/apps/${appId}/webhook/toggle`);
+      setData((d) => ({ ...d, enabled: r.data.enabled }));
+      toast.success(`Auto-deploy ${r.data.enabled ? "enabled" : "disabled"}`);
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  const rotate = async () => {
+    if (!window.confirm("Rotate the webhook secret? The old one will stop working immediately and the new one will be re-registered with GitHub.")) return;
+    setBusy("rotate");
+    try {
+      const r = await api.post(`/apps/${appId}/webhook/rotate`);
+      setData((d) => ({ ...d, secret: r.data.secret }));
+      toast.success("Secret rotated · re-registering with GitHub…");
+      // GitHub re-registration runs in background; reload after a beat.
+      setTimeout(load, 1800);
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  const registerNow = async () => {
+    setBusy("register");
+    try {
+      const r = await api.post(`/apps/${appId}/webhook/register`);
+      if (r.data.registered) {
+        toast.success("Webhook registered with GitHub");
+      } else {
+        toast.error(`Could not register: ${r.data.reason}. Add it manually below.`);
+      }
+      load();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(""); }
+  };
+
+  if (!data) return null;
+  const maskedSecret = data.secret ? (showSecret ? data.secret : "•".repeat(Math.min(data.secret.length, 32))) : "—";
+
+  return (
+    <section className="max-w-3xl border border-white/[0.06] p-6 space-y-5" data-testid="webhook-section">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Auto-deploy on push</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mt-1">
+            Every push to <span className="text-brand font-mono">{data.branch}</span> triggers a fresh deployment.
+          </p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={busy === "toggle"}
+          className={`h-7 w-14 relative rounded-full transition-colors ${data.enabled ? "bg-brand" : "bg-white/[0.1]"} disabled:opacity-50`}
+          data-testid="webhook-toggle"
+          aria-pressed={data.enabled}
+          aria-label={`Auto-deploy ${data.enabled ? "on" : "off"}`}
+        >
+          <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-black transition-all ${data.enabled ? "left-[30px]" : "left-0.5"}`} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Webhook URL</div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-black border border-white/10 px-3 py-2 text-xs text-brand truncate font-mono" data-testid="webhook-url">{data.url}</code>
+            <button onClick={() => copy(data.url, "URL")} className="px-2.5 py-2 border border-white/10 hover:border-brand/70 hover:text-brand">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Secret (HMAC-SHA256)</div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-black border border-white/10 px-3 py-2 text-xs text-zinc-300 truncate font-mono" data-testid="webhook-secret">{maskedSecret}</code>
+            <button onClick={() => setShowSecret((v) => !v)} className="px-2.5 py-2 border border-white/10 hover:border-brand/70 hover:text-brand" data-testid="webhook-secret-toggle">
+              {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+            <button onClick={() => copy(data.secret, "Secret")} disabled={!data.secret} className="px-2.5 py-2 border border-white/10 hover:border-brand/70 hover:text-brand disabled:opacity-40">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 flex-wrap pt-2 border-t border-white/[0.04]">
+        <div className="text-xs font-mono text-zinc-500">
+          {data.auto_registered ? (
+            <span className="text-signal-live">✓ Registered with GitHub (hook #{data.github_hook_id})</span>
+          ) : (
+            <span>Not auto-registered. <button onClick={registerNow} disabled={busy === "register"} className="text-brand hover:underline" data-testid="webhook-register-now">register now</button> or add it manually in your repo's <code className="text-zinc-300">Settings → Webhooks</code>.</span>
+          )}
+        </div>
+        <button
+          onClick={rotate}
+          disabled={busy === "rotate"}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-white/10 hover:border-brand/50 disabled:opacity-50"
+          data-testid="webhook-rotate"
+        >
+          <RefreshCw className={`h-3 w-3 ${busy === "rotate" ? "animate-spin" : ""}`} /> rotate secret
+        </button>
+      </div>
+
+      <details className="text-[11px] text-zinc-500 font-mono">
+        <summary className="cursor-pointer hover:text-zinc-300">Manual setup instructions</summary>
+        <ol className="mt-3 space-y-1.5 list-decimal list-inside leading-relaxed">
+          <li>Open your repo on GitHub → <span className="text-zinc-300">Settings → Webhooks → Add webhook</span></li>
+          <li>Payload URL: <code className="text-brand">{data.url}</code></li>
+          <li>Content type: <code className="text-zinc-300">application/json</code></li>
+          <li>Secret: paste the value above</li>
+          <li>Events: <code className="text-zinc-300">Just the push event</code></li>
+          <li>Save. GitHub will send a ping — we'll reply <code className="text-zinc-300">pong</code> on success.</li>
+        </ol>
+      </details>
+    </section>
   );
 }

@@ -27,6 +27,14 @@ from services.deploy_keys import (
     remove_github_deploy_key,
 )
 from services.log_parser import parse_log_lines, extract_failure_summary
+from services.subdomains import provision_subdomain, release_subdomain
+from services.github_webhooks import (
+    generate_secret as wh_generate_secret,
+    public_webhook_url as wh_public_url,
+    register_webhook as wh_register,
+    unregister_webhook as wh_unregister,
+)
+from services.plans import assert_limit
 
 router = APIRouter(tags=["apps"])
 logger = logging.getLogger(__name__)
@@ -333,6 +341,20 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
     await db.apps.update_one({"id": app_id}, {"$set": {"coolify_app_uuid": coolify_uuid}})
     if deployment_id:
         await _append_log(deployment_id, f"[BUILD] application created (uuid={coolify_uuid})")
+
+    # Tell Coolify about the auto-provisioned subdomain so Traefik issues SSL.
+    if app.get("cloudflare_fqdn"):
+        try:
+            await coolify.update_application(
+                coolify_uuid, {"fqdn": f"https://{app['cloudflare_fqdn']}"}
+            )
+            if deployment_id:
+                await _append_log(
+                    deployment_id, f"[BUILD] domain assigned: {app['cloudflare_fqdn']}"
+                )
+        except Exception as e:
+            logger.warning("coolify fqdn sync for auto-subdomain failed: %s", e)
+
     if app.get("env_vars"):
         await coolify.update_env(coolify_uuid, app["env_vars"])
         if deployment_id:
@@ -375,7 +397,6 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
     user = await get_current_user(request)
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "developer"])
     # Enforce the workspace's plan limit before we do any work.
-    from services.plans import assert_limit
     await assert_limit(payload.workspace_id, "apps")
     db = get_db()
     repo = _validate_repo_url(payload.repo_url)
@@ -411,6 +432,22 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "last_deploy_at": _now_iso(),
         "created_at": _now_iso(),
     }
+
+    # Auto-provision a free {slug}.zone subdomain if Cloudflare is configured.
+    # Falls back silently if not — app still gets created with a Coolify URL.
+    sub = await provision_subdomain(doc)
+    if sub:
+        doc["primary_url"] = sub["primary_url"]
+        doc["cloudflare_dns_record_id"] = sub["record_id"]
+        doc["cloudflare_fqdn"] = sub["fqdn"]
+
+    # Generate a webhook secret upfront so the registration + UI work in
+    # one round-trip. If we can't talk to GitHub yet, the secret stays
+    # local and the user can paste the URL manually.
+    doc["webhook_secret"] = wh_generate_secret()
+    doc["webhook_url"] = wh_public_url(app_id)
+    doc["webhook_enabled"] = True
+
     await db.apps.insert_one(doc)
     doc.pop("_id", None)
 
@@ -433,7 +470,26 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
     await db.deployments.insert_one(deploy_doc)
     deploy_doc.pop("_id", None)
     background.add_task(_coolify_deploy, app_id, deploy_doc["id"])
+    # Best-effort GitHub webhook auto-registration. Fires in the background so
+    # we don't slow down /apps response. The function itself is no-op-safe.
+    background.add_task(_auto_register_webhook, app_id)
     return doc
+
+
+async def _auto_register_webhook(app_id: str) -> None:
+    """Background task: try to register a GitHub webhook for this app. Stores
+    `webhook_github_id` on success so we can unregister it later."""
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        return
+    res = await wh_register(app=app, workspace_id=app["workspace_id"])
+    if not res:
+        return
+    await db.apps.update_one(
+        {"id": app_id},
+        {"$set": {"webhook_github_id": res["id"], "webhook_secret": res["secret"]}},
+    )
 
 
 @router.get("/apps/{app_id}")
@@ -455,6 +511,21 @@ async def delete_app(app_id: str, request: Request):
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    # Release any auto-provisioned Cloudflare subdomain.
+    if app.get("cloudflare_dns_record_id"):
+        try:
+            await release_subdomain(app)
+        except Exception as e:
+            logger.warning("cloudflare release_subdomain failed: %s", e)
+
+    # Unregister the GitHub webhook so we don't leave a dead endpoint on the
+    # customer's repo.
+    if app.get("webhook_github_id"):
+        try:
+            await wh_unregister(app=app, workspace_id=app["workspace_id"])
+        except Exception as e:
+            logger.warning("github webhook unregister failed: %s", e)
 
     # Clean up deploy key artefacts so we don't leave dead keys on GitHub or Coolify.
     if app.get("coolify_app_uuid"):
@@ -716,3 +787,75 @@ async def update_env(app_id: str, payload: EnvVarUpdate, request: Request, backg
     if coolify.configured and app.get("coolify_app_uuid"):
         background.add_task(coolify.update_env, app["coolify_app_uuid"], payload.env_vars)
     return {"env_vars": payload.env_vars}
+
+
+
+# ─────────────────────── GitHub Webhook controls ───────────────────────
+@router.get("/apps/{app_id}/webhook")
+async def get_webhook(app_id: str, request: Request):
+    """Returns the webhook URL + secret + GitHub registration status for the
+    AppDetail UI to display."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    return {
+        "url": app.get("webhook_url") or wh_public_url(app_id),
+        "secret": app.get("webhook_secret"),
+        "enabled": bool(app.get("webhook_enabled", True)),
+        "github_hook_id": app.get("webhook_github_id"),
+        "auto_registered": bool(app.get("webhook_github_id")),
+        "branch": app.get("branch") or "main",
+    }
+
+
+@router.post("/apps/{app_id}/webhook/toggle")
+async def toggle_webhook(app_id: str, request: Request):
+    """Enable/disable auto-deploy on push (flips webhook_enabled)."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    new_val = not bool(app.get("webhook_enabled", True))
+    await db.apps.update_one({"id": app_id}, {"$set": {"webhook_enabled": new_val}})
+    return {"enabled": new_val}
+
+
+@router.post("/apps/{app_id}/webhook/rotate")
+async def rotate_webhook(app_id: str, request: Request, background: BackgroundTasks):
+    """Generate a new secret + re-register with GitHub. Used when the user
+    suspects the secret leaked."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    new_secret = wh_generate_secret()
+    await db.apps.update_one({"id": app_id}, {"$set": {"webhook_secret": new_secret}})
+    background.add_task(_auto_register_webhook, app_id)
+    return {"secret": new_secret, "url": app.get("webhook_url") or wh_public_url(app_id)}
+
+
+@router.post("/apps/{app_id}/webhook/register")
+async def manual_register_webhook(app_id: str, request: Request):
+    """Trigger a fresh GitHub webhook registration (e.g. after connecting GH
+    OAuth post-creation). Returns 200 even if registration is skipped."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    res = await wh_register(app=app, workspace_id=app["workspace_id"])
+    if res:
+        await db.apps.update_one(
+            {"id": app_id},
+            {"$set": {"webhook_github_id": res["id"], "webhook_secret": res["secret"]}},
+        )
+        return {"registered": True, "hook_id": res["id"]}
+    return {"registered": False, "reason": "no GitHub token, or repo not accessible"}

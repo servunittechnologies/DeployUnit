@@ -7,7 +7,7 @@ import Logo from "./Logo";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, CreditCard, Settings, LogOut,
   Plus, Boxes, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
-  ShieldCheck,
+  ShieldCheck, Layers,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -18,6 +18,7 @@ import { Button } from "./ui/button";
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/app/projects", label: "Projects", icon: FolderKanban },
+  { to: "/app/fleet", label: "Fleet", icon: Layers, agencyOnly: true },
   { to: "/app/domains", label: "Domains", icon: Globe },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
   { to: "/app/alerts", label: "Alerts", icon: BellRing },
@@ -189,6 +190,7 @@ function UserMenu() {
 
 export default function DashboardLayout() {
   const { user } = useAuth();
+  const { active } = useWorkspace();
   return (
     <div className="min-h-screen flex bg-background text-foreground">
       <aside className="w-64 hidden lg:flex flex-col border-r border-white/[0.06] sticky top-0 h-screen">
@@ -199,7 +201,7 @@ export default function DashboardLayout() {
           <WorkspaceSwitcher />
         </div>
         <nav className="flex-1 py-4">
-          {NAV.map((n) => (
+          {NAV.filter((n) => !n.agencyOnly || active?.type === "agency").map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

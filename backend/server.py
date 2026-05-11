@@ -35,6 +35,8 @@ from routers import (
     github_oauth as github_oauth_router,
     admin as admin_router,
     credits as credits_router,
+    webhooks as webhooks_router,
+    fleet as fleet_router,
 )
 
 
@@ -94,6 +96,8 @@ api_router.include_router(settings_router.router)
 api_router.include_router(github_router.router)
 api_router.include_router(admin_router.router)
 api_router.include_router(credits_router.router)
+api_router.include_router(webhooks_router.router)
+api_router.include_router(fleet_router.router)
 
 app.include_router(api_router)
 
