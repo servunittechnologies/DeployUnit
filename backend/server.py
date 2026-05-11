@@ -21,6 +21,8 @@ from services.credits import monthly_grant_tick
 from services.resources import charge_due_addons
 from services.metrics import downsample_and_gc
 from services.account_migration import migrate_accounts, needs_migration
+from services.pagespeed import daily_pagespeed_tick
+from services.analytics import gc as analytics_gc
 
 from routers import (
     auth as auth_router,
@@ -48,6 +50,7 @@ from routers import (
     account as account_router,
     resources as resources_router,
     metrics as metrics_router,
+    analytics as analytics_router,
 )
 
 
@@ -86,6 +89,10 @@ async def lifespan(app: FastAPI):
     # Container-metrics downsampling: roll raw 30s samples up to 5-min buckets
     # for anything older than 24h, drop anything older than 30 days.
     scheduler.add_job(downsample_and_gc, "interval", hours=1, id="metrics_rollup", replace_existing=True)
+    # Daily PageSpeed audits for every app with a primary URL.
+    scheduler.add_job(daily_pagespeed_tick, "interval", hours=12, id="pagespeed_daily", replace_existing=True)
+    # Analytics retention — drop pageview events older than 90 days.
+    scheduler.add_job(analytics_gc, "interval", hours=24, id="analytics_gc", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
@@ -133,6 +140,7 @@ api_router.include_router(admin_users_router.router)
 api_router.include_router(account_router.router)
 api_router.include_router(resources_router.router)
 api_router.include_router(metrics_router.router)
+api_router.include_router(analytics_router.router)
 
 app.include_router(api_router)
 

@@ -10,6 +10,7 @@ import SitePreview from "../../components/SitePreview";
 import BuildErrorPanel from "../../components/BuildErrorPanel";
 import AppResourcesTab from "../../components/AppResourcesTab";
 import AppAnalyticsPanel from "../../components/AppAnalyticsPanel";
+import AppWebAnalyticsTab from "../../components/AppWebAnalyticsTab";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const TABS = ["overview", "deployments", "console", "domains", "env", "resources", "monitoring", "settings"];
+const TABS = ["overview", "deployments", "console", "domains", "env", "resources", "monitoring", "analytics", "settings"];
 
 function timeAgo(iso) {
   if (!iso) return "—";
@@ -632,6 +633,10 @@ export default function AppDetail() {
 
       {tab === "console" && (
         <ConsoleLogsTab appId={id} appStatus={app.status} onReinstall={reinstall} />
+      )}
+
+      {tab === "analytics" && (
+        <AppWebAnalyticsTab appId={id} />
       )}
 
       {tab === "domains" && (

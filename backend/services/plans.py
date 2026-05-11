@@ -65,6 +65,7 @@ DEFAULT_PLANS = [
         "active": True,
         "fleet_view": False,
         "support_sla_hours": 0,  # community
+        "features_block": {"pageviews": True, "pagespeed": False, "heatmaps": False},
     },
     {
         "id": "pro",
@@ -96,6 +97,7 @@ DEFAULT_PLANS = [
         "active": True,
         "fleet_view": False,
         "support_sla_hours": 24,
+        "features_block": {"pageviews": True, "pagespeed": True, "heatmaps": False},
     },
     {
         "id": "agency",
@@ -128,19 +130,31 @@ DEFAULT_PLANS = [
         "active": True,
         "fleet_view": True,
         "support_sla_hours": 4,
+        "features_block": {"pageviews": True, "pagespeed": True, "heatmaps": True},
     },
 ]
 
 
 async def seed_default_plans() -> None:
     """Insert default plans if missing. Safe to call repeatedly — never
-    overwrites a plan that already exists, so admin edits survive restarts."""
+    overwrites a plan that already exists, so admin edits survive restarts.
+
+    Also backfills the `features_block` capability map on any plan that
+    predates that field, so feature-gated routes don't break existing admins.
+    """
     db = get_db()
     for plan in DEFAULT_PLANS:
-        existing = await db.platform_plans.find_one({"id": plan["id"]}, {"_id": 0, "id": 1})
+        existing = await db.platform_plans.find_one({"id": plan["id"]}, {"_id": 0})
         if not existing:
             await db.platform_plans.insert_one(plan.copy())
             logger.info("seeded plan: %s", plan["id"])
+            continue
+        if "features_block" not in existing and "features_block" in plan:
+            await db.platform_plans.update_one(
+                {"id": plan["id"]},
+                {"$set": {"features_block": plan["features_block"]}},
+            )
+            logger.info("backfilled features_block on plan: %s", plan["id"])
 
 
 async def list_plans(*, only_active: bool = True) -> list[dict]:
@@ -169,7 +183,7 @@ async def update_plan(plan_id: str, updates: dict) -> Optional[dict]:
         if k in {
             "name", "price", "currency", "interval", "tagline", "features",
             "limits", "credits", "highlight", "order", "active",
-            "fleet_view", "support_sla_hours",
+            "fleet_view", "support_sla_hours", "features_block",
         }
     }
     if not safe_updates:
