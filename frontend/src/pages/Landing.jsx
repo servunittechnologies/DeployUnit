@@ -112,7 +112,7 @@ function HeroTerminal() {
     { t: "→ Container up · 384 MB · 0.5 vCPU", c: "text-zinc-500" },
     { t: "→ Domain assigned: servunit.app · TLS issued", c: "text-emerald-400" },
     { t: "→ Live URL: https://servunit.app  ⏱  41 s", c: "text-cyan-400" },
-    { t: "✓ Deploy succeeded · 100% green energy", c: "text-emerald-400" },
+    { t: "✓ Deploy succeeded · powered by green energy", c: "text-emerald-400" },
   ], []);
 
   const [idx, setIdx] = useState(0);
@@ -170,7 +170,7 @@ function Hero() {
           <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
             The all-in-one PaaS built for agencies and modern teams.
             Push to Git → live URL, container metrics, analytics and
-            uptime alerts — on 100% renewable EU infrastructure.
+            uptime alerts — on 70%+ renewable EU infrastructure, climbing daily.
             Zero config, full white-label.
           </motion.p>
           <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
@@ -1073,7 +1073,7 @@ function Footer() {
             </p>
             <div className="mt-5 flex gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-emerald-500/30 text-emerald-400">
-                <Leaf className="h-3 w-3" /> 100% green
+                <Leaf className="h-3 w-3" /> 70%+ green
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-cyan-500/30 text-cyan-400">
                 <ShieldCheck className="h-3 w-3" /> GDPR
