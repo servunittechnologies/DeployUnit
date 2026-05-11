@@ -42,13 +42,13 @@ const VALUES = [
 
 const TIMELINE = [
   { year: "2022", title: "ServUnit Technologies BV",
-    body: "Founded in Belgium as a web-engineering studio building production software for SaaS startups and agencies." },
+    body: "Founded in Belgium. We start building the infrastructure layer — datacenters, dark-fiber network, and the operational tooling — that will eventually power three brands." },
   { year: "2023", title: "ServUnit launches",
-    body: <>Our flagship SaaS platform goes live at <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">servunit.com</a> — the proof-ground for the engineering patterns that would later become DeployHub.</> },
+    body: <>Our enterprise hosting brand goes live at <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">servunit.com</a> — web hosting, domains, VPS, dedicated servers and colocation for developers, entrepreneurs and organisations, served from SmartDC Rotterdam over our own 40 Gbps+ network.</> },
   { year: "2024", title: "GameUnit launches",
-    body: <>A second product ships on the same in-house deploy stack at <a href="https://gameunit.pro" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">gameunit.pro</a>, proving the platform handles realtime workloads as easily as marketing sites.</> },
+    body: <>We open a second front for gamers at <a href="https://gameunit.pro" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">gameunit.pro</a> — Minecraft, FiveM, ARK, Rust, Satisfactory and more, with 12 TB/s DDoS protection, instant delivery, and a control panel built for low-latency multiplayer.</> },
   { year: "2026", title: "DeployHub — new",
-    body: "We open the internal PaaS that powers ServUnit and GameUnit to everyone. Same EU-first, green-powered, agency-grade foundation — now a product on its own." },
+    body: "Now we open the same EU infrastructure to modern developers and agencies as a fully-managed PaaS. Push to Git, get a live URL, full container metrics — backed by the network and operations team that already runs ServUnit and GameUnit." },
 ];
 
 export default function About() {
