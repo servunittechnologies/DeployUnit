@@ -542,26 +542,23 @@ function Features() {
             <WorkspaceSwitcherMock />
           </BentoCard>
 
-          {/* Three small icon-led capability tiles */}
-          {[
-            { icon: GitBranch, title: "PR previews", body: "Every pull request gets its own URL + container, killed on merge." },
-            { icon: Database, title: "Managed databases", body: "Postgres · MySQL · Redis attached to apps with zero-touch creds." },
-            { icon: Globe, title: "Custom domains + DNS", body: "Cloudflare DNS provisioned automatically. Auto-SSL via Let's Encrypt." },
-            { icon: Lock, title: "Audit log + RBAC", body: "Every action logged. Owner / Admin / Developer / Viewer roles." },
-            { icon: Cpu, title: "Per-app resource limits", body: "Dial vCPU, RAM, and storage; pay only what you use via credits." },
-            { icon: Bell, title: "Custom cron tasks", body: "Schedule background jobs without spinning up new infra." },
-          ].map((c) => (
+          {/* Six capability cards, each with its own micro-illustration */}
+          {SMALL_FEATURES.map((c) => (
             <motion.div
-              key={c.title}
+              key={c.id}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4 }}
-              className="border border-zinc-800 bg-zinc-950/30 p-5 hover:border-cyan-500/40 transition-colors"
+              className="border border-zinc-800 bg-zinc-950/30 p-5 hover:border-cyan-500/40 transition-colors flex flex-col"
+              data-testid={`feature-small-${c.id}`}
             >
-              <c.icon className="h-5 w-5 text-cyan-400 mb-3" />
-              <div className="font-display text-base font-semibold text-white">{c.title}</div>
-              <div className="mt-1.5 text-xs text-zinc-400 leading-relaxed">{c.body}</div>
+              <div className="flex items-center gap-2 mb-2">
+                <c.icon className="h-4 w-4 text-cyan-400" />
+                <div className="font-display text-base font-semibold text-white">{c.title}</div>
+              </div>
+              <div className="text-xs text-zinc-400 leading-relaxed mb-3">{c.body}</div>
+              <div className="mt-auto">{c.illu}</div>
             </motion.div>
           ))}
         </div>
@@ -569,6 +566,138 @@ function Features() {
     </Section>
   );
 }
+
+/* ─── Small-feature illustrations ─── */
+
+function IlluPRPreviews() {
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-3 font-mono text-[10px]">
+      <svg viewBox="0 0 200 52" className="w-full h-10">
+        <line x1="10" y1="32" x2="190" y2="32" stroke="#3f3f46" strokeWidth="1" />
+        {[30, 60, 90, 120, 150, 180].map((x) => (
+          <circle key={x} cx={x} cy="32" r="3" fill="#3f3f46" />
+        ))}
+        <path d="M90 32 Q105 18 120 12" stroke={CYAN} strokeWidth="1.5" fill="none" />
+        <circle cx="120" cy="12" r="4" fill={CYAN} />
+        <text x="128" y="15" fill="#a1a1aa" fontSize="9" fontFamily="JetBrains Mono">pr-42</text>
+        <text x="6" y="48" fill="#52525b" fontSize="8" fontFamily="JetBrains Mono">main</text>
+      </svg>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-zinc-500">pr-42-preview.dh.app</span>
+        <span className="text-emerald-400">live</span>
+      </div>
+    </div>
+  );
+}
+
+function IlluDatabases() {
+  const rows = [
+    { name: "postgres", port: "5432", state: "attached", color: "text-emerald-400" },
+    { name: "redis",    port: "6379", state: "attached", color: "text-emerald-400" },
+    { name: "mysql",    port: "3306", state: "ready",    color: "text-cyan-400" },
+  ];
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
+      {rows.map((r) => (
+        <div key={r.name} className="flex items-center gap-2">
+          <Database className="h-3 w-3 text-zinc-500" />
+          <span className="text-zinc-300">{r.name}</span>
+          <span className="text-zinc-600">:{r.port}</span>
+          <span className={`ml-auto ${r.color}`}>● {r.state}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IlluDomains() {
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
+      <div className="flex items-center gap-1.5 text-zinc-200">
+        <Globe className="h-3 w-3 text-cyan-400" />
+        <span>yourapp.com</span>
+        <Lock className="h-3 w-3 ml-auto text-emerald-400" />
+      </div>
+      <div className="text-zinc-500">A      <span className="text-zinc-300">76.76.21.21</span></div>
+      <div className="text-zinc-500">CNAME  <span className="text-zinc-300">*.yourapp.com → cdn</span></div>
+      <div className="text-zinc-500">MX     <span className="text-zinc-300">10 mx.yourapp.com</span></div>
+    </div>
+  );
+}
+
+function IlluAudit() {
+  const rows = [
+    { t: "14:32", who: "martijn",  what: "deploy v1.4.2",       k: "text-emerald-400" },
+    { t: "14:28", who: "ci/auto",  what: "resource ↑ 0.5→1.0",  k: "text-cyan-400" },
+    { t: "14:21", who: "admin",    what: "invited @bob",        k: "text-zinc-300" },
+  ];
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="text-zinc-600">{r.t}</span>
+          <span className="text-zinc-500">{r.who}</span>
+          <span className={`ml-auto truncate ${r.k}`}>{r.what}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IlluResources() {
+  const bars = [
+    { l: "vCPU", v: 25, max: "0.5 / 2.0" },
+    { l: "RAM",  v: 75, max: "768 / 1024 MB" },
+    { l: "Disk", v: 15, max: "1.2 / 8.0 GB" },
+  ];
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1.5">
+      {bars.map((b) => (
+        <div key={b.l} className="flex items-center gap-2">
+          <span className="text-zinc-500 w-9 shrink-0">{b.l}</span>
+          <div className="flex-1 h-1.5 bg-zinc-900 overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              whileInView={{ width: `${b.v}%` }}
+              viewport={{ once: true }}
+              transition={{ duration: 1.1, ease: "easeOut" }}
+              className="h-full bg-cyan-400"
+            />
+          </div>
+          <span className="text-zinc-500 w-24 text-right shrink-0">{b.max}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IlluCron() {
+  const rows = [
+    { expr: "0 */6 * * *", name: "send_digest_email", state: "✓ 04:00" },
+    { expr: "@daily",      name: "cleanup_uploads",   state: "✓ 00:00" },
+    { expr: "*/15 * * *",  name: "refresh_cache",     state: "✓ 09:45" },
+  ];
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
+      {rows.map((r, i) => (
+        <div key={i} className="grid grid-cols-[auto_1fr_auto] gap-2 items-center">
+          <span className="text-cyan-400">{r.expr}</span>
+          <span className="text-zinc-300 truncate">{r.name}</span>
+          <span className="text-emerald-400">{r.state}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const SMALL_FEATURES = [
+  { id: "pr-previews",   icon: GitBranch, title: "PR previews",            body: "Every pull request gets its own URL + container, killed on merge.",        illu: <IlluPRPreviews /> },
+  { id: "databases",     icon: Database,  title: "Managed databases",       body: "Postgres · MySQL · Redis attached to apps with zero-touch creds.",         illu: <IlluDatabases /> },
+  { id: "domains",       icon: Globe,     title: "Custom domains + DNS",    body: "Cloudflare DNS provisioned automatically. Auto-SSL via Let's Encrypt.",    illu: <IlluDomains /> },
+  { id: "audit",         icon: Lock,      title: "Audit log + RBAC",        body: "Every action logged. Owner / Admin / Developer / Viewer roles.",         illu: <IlluAudit /> },
+  { id: "resources",     icon: Cpu,       title: "Per-app resource limits", body: "Dial vCPU, RAM, and storage; pay only what you use via credits.",         illu: <IlluResources /> },
+  { id: "cron",          icon: Bell,      title: "Custom cron tasks",       body: "Schedule background jobs without spinning up new infra.",                  illu: <IlluCron /> },
+];
 
 /* ───────────────────────── Comparison table ───────────────────────── */
 
@@ -651,6 +780,23 @@ function Compare() {
 /* ───────────────────────── Green energy spotlight ───────────────────────── */
 
 function GreenEnergy() {
+  // Live-counting tree counter — climbs from 0 to current on viewport
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+  const TARGET_TREES = 1247; // climbs daily — wire to /api/sustainability later
+  const [trees, setTrees] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    const start = performance.now();
+    const dur = 1800;
+    const tick = (t) => {
+      const p = Math.min(1, (t - start) / dur);
+      setTrees(Math.round(TARGET_TREES * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [inView]);
+
   return (
     <Section id="green" className="relative py-32 overflow-hidden">
       <div className="absolute inset-0 -z-10">
@@ -685,55 +831,110 @@ function GreenEnergy() {
         />
       ))}
 
-      <Container className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
-        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger}>
-          <motion.div variants={fadeUp}><Overline color="text-emerald-400">Sustainability · USP</Overline></motion.div>
-          <motion.h2
-            variants={fadeUp}
-            className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-none"
-          >
-            100% wind & solar<br />
-            <span className="text-emerald-400">powered.</span>
-          </motion.h2>
-          <motion.p variants={fadeUp} className="mt-5 text-base sm:text-lg text-zinc-300 max-w-xl">
-            Every deploy on DeployHub runs in EU datacenters powered by renewable energy. No carbon offsets,
-            no greenwashing — your apps tick along on real wind and solar, with verifiable energy contracts.
-          </motion.p>
-          <motion.div variants={fadeUp} className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { k: "100%", v: "renewable" },
-              { k: "0g", v: "CO₂ per deploy" },
-              { k: "EU", v: "datacenters only" },
-              { k: "ISO", v: "14001 partners" },
-            ].map((s) => (
-              <div key={s.v} className="border border-emerald-500/30 bg-black/40 p-4 text-center">
-                <div className="font-display text-2xl text-emerald-400 font-bold">{s.k}</div>
-                <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 mt-1">{s.v}</div>
-              </div>
-            ))}
-          </motion.div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
-          whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="relative flex items-center justify-center"
-        >
-          <div className="relative h-72 w-72 border border-emerald-500/30 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 flex items-center justify-center"
+      <Container>
+        <div ref={ref} className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger}>
+            <motion.div variants={fadeUp}><Overline color="text-emerald-400">Sustainability · USP</Overline></motion.div>
+            <motion.h2
+              variants={fadeUp}
+              className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-none"
             >
-              <Wind className="h-32 w-32 text-emerald-400/40" strokeWidth={1} />
+              <span className="text-emerald-400">70%+</span> green energy.<br />
+              Climbing every day.
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mt-5 text-base sm:text-lg text-zinc-300 max-w-xl">
+              Our EU datacenters already run on over 70% renewable wind & solar today —
+              and we invest every quarter to push that further. No carbon-offset accounting tricks,
+              just real renewable contracts and full transparency on the journey to 100%.
+            </motion.p>
+            <motion.div variants={fadeUp} className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { k: "70%+", v: "renewable today" },
+                { k: "↑", v: "climbing daily" },
+                { k: "EU", v: "datacenters only" },
+                { k: "ISO", v: "14001 partners" },
+              ].map((s) => (
+                <div key={s.v} className="border border-emerald-500/30 bg-black/40 p-4 text-center">
+                  <div className="font-display text-2xl text-emerald-400 font-bold">{s.k}</div>
+                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 mt-1">{s.v}</div>
+                </div>
+              ))}
             </motion.div>
-            <div className="relative text-center">
-              <Leaf className="h-10 w-10 text-emerald-400 mx-auto" />
-              <div className="mt-4 font-display text-3xl font-bold text-emerald-400">Carbon</div>
-              <div className="mt-1 font-display text-3xl font-bold text-white">Neutral</div>
-              <div className="mt-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400">by default</div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
+            whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="relative flex items-center justify-center"
+          >
+            <div className="relative h-72 w-72 border border-emerald-500/30 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                <Wind className="h-32 w-32 text-emerald-400/40" strokeWidth={1} />
+              </motion.div>
+              <div className="relative text-center">
+                <Leaf className="h-10 w-10 text-emerald-400 mx-auto" />
+                <div className="mt-4 font-display text-3xl font-bold text-emerald-400">Carbon</div>
+                <div className="mt-1 font-display text-3xl font-bold text-white">Conscious</div>
+                <div className="mt-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400">by default</div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Team Trees partnership */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="mt-16 relative border border-emerald-500/30 bg-gradient-to-r from-emerald-950/40 via-black/70 to-black/40 p-8 lg:p-10 overflow-hidden"
+          data-testid="team-trees-block"
+        >
+          {/* Animated trees grove background */}
+          <svg className="absolute right-6 bottom-0 opacity-20 pointer-events-none" width="320" height="160" viewBox="0 0 320 160" aria-hidden>
+            {[20, 75, 130, 185, 240, 295].map((x, i) => (
+              <g key={i} transform={`translate(${x},${120 - (i % 2) * 14})`}>
+                <path d="M0 0 L-14 30 L-7 30 L-18 56 L18 56 L7 30 L14 30 Z" fill="#10b981" />
+                <rect x="-3" y="56" width="6" height="14" fill="#064e3b" />
+              </g>
+            ))}
+          </svg>
+
+          <div className="relative grid lg:grid-cols-[auto_1fr_auto] gap-6 items-center">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="h-14 w-14 border-2 border-emerald-400 bg-emerald-500/10 flex items-center justify-center">
+                  <Leaf className="h-7 w-7 text-emerald-400" />
+                </div>
+                <motion.span
+                  animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(16,185,129,0.7)]"
+                />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-emerald-400">Partner · Team Trees</div>
+                <div className="font-display text-lg font-bold text-white leading-tight">1 deploy = 1 tree.</div>
+              </div>
+            </div>
+
+            <p className="text-sm sm:text-base text-zinc-300 max-w-xl">
+              Every single app you deploy through DeployHub plants <span className="text-emerald-400 font-semibold">one extra tree</span> through our partnership with{" "}
+              <a href="https://teamtrees.org" target="_blank" rel="noreferrer" className="underline text-emerald-400 hover:text-emerald-300" data-testid="team-trees-link">teamtrees.org</a>. Real trees, real coordinates, real impact — verified by the Arbor Day Foundation.
+            </p>
+
+            <div className="flex flex-col items-end text-right">
+              <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-400 mb-1">trees planted</div>
+              <div className="font-display text-4xl font-bold text-emerald-400 tabular-nums" data-testid="team-trees-count">
+                {trees.toLocaleString()}
+              </div>
+              <div className="text-[10px] font-mono text-zinc-500 mt-1">and counting</div>
             </div>
           </div>
         </motion.div>
