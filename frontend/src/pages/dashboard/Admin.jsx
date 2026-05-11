@@ -493,24 +493,28 @@ function HeatmapsIntegrationSection() {
   return (
     <Section
       title="Heatmaps & session recordings"
-      description="One platform-wide recording engine — auto-injected on every Pro+ app. Customers get heatmaps without any setup on their side."
+      description="Native heatmap + replay engine is in development. This admin setting reserves your platform's recording project so the moment we ship, all Pro+ apps light up automatically — no migration."
     >
+      <div className="bg-brand/10 border border-brand/30 px-4 py-3 mb-4 inline-flex items-center gap-2 text-xs font-mono" data-testid="heatmaps-coming-soon-badge">
+        <span className="h-1.5 w-1.5 bg-brand rounded-full animate-pulse" />
+        <span className="text-brand uppercase tracking-[0.3em]">coming soon · admin only</span>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono mb-4">
         <div>
           <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
           {ok ? (
-            <StatusPill ok={true} label="active · auto-injected" />
+            <StatusPill ok={true} label="reserved · not yet live" />
           ) : (
             <StatusPill ok={false} label="not configured" />
           )}
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">scope</div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">scope (on launch)</div>
           <div className="text-zinc-300">All Pro + Agency apps</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">cost</div>
-          <div className="text-zinc-300">Free · unlimited</div>
+          <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">visible to customers</div>
+          <div className="text-zinc-300">No (waitlist UI only)</div>
         </div>
       </div>
 

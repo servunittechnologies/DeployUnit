@@ -14,7 +14,7 @@ import { toast } from "sonner";
 const SUB_TABS = [
   { id: "visitors", label: "Visitors", icon: Users },
   { id: "speed", label: "Speed Insights", icon: Zap, gated: "pagespeed" },
-  { id: "heatmaps", label: "Heatmaps", icon: Activity, gated: "heatmaps" },
+  { id: "heatmaps", label: "Heatmaps", icon: Activity, gated: "heatmaps", soon: true },
   { id: "setup", label: "Setup", icon: Terminal },
 ];
 
@@ -394,77 +394,69 @@ function SpeedPane({ appId, features }) {
 }
 
 // ─────────────────────── Heatmaps ───────────────────────
-function HeatmapsPane({ features, config }) {
+// "Coming soon" placeholder. We keep collecting session/click signal in the
+// background (snippet auto-injects whenever the platform admin enabled it)
+// so when the in-house visual heatmap + session-replay engine ships we'll
+// already have historical data to backfill. No external (Clarity) link is
+// ever shown to end users.
+function HeatmapsPane({ features }) {
   if (!features?.heatmaps) return <PlanLockNotice requiredPlan="Pro" label="Heatmaps" />;
-
-  const active = !!config?.heatmaps_active;
-  const platformReady = !!config?.platform_clarity_configured;
 
   return (
     <div className="space-y-6" data-testid="analytics-heatmaps">
-      <div className="border border-white/[0.06] p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Activity className="h-4 w-4 text-brand" />
-              <div className="font-display text-lg">Heatmaps & session recordings</div>
-              {active && (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.25em] bg-signal-success/10 text-signal-success border border-signal-success/30">
-                  <span className="h-1.5 w-1.5 bg-signal-success rounded-full animate-pulse" /> active
-                </span>
-              )}
-            </div>
-            <div className="text-sm text-zinc-400 max-w-2xl">
-              See exactly where visitors click, how far they scroll, and replay real session recordings.
-              Recordings are anonymous, GDPR-friendly, and start the moment your tracker is live — no setup required from your side.
-            </div>
+      <div className="relative overflow-hidden border border-white/[0.06] p-10">
+        {/* subtle animated grid bg */}
+        <div
+          className="absolute inset-0 opacity-[0.05] pointer-events-none"
+          style={{
+            backgroundImage: "linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+          }}
+        />
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand/10 blur-3xl pointer-events-none" />
+
+        <div className="relative">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] bg-brand/10 text-brand border border-brand/30 mb-5">
+            <Sparkles className="h-3 w-3" /> coming soon
+          </div>
+          <h3 className="font-display text-3xl tracking-tight mb-3">
+            Heatmaps & session recordings
+          </h3>
+          <p className="text-zinc-400 max-w-xl mb-6">
+            See exactly where visitors click, how far they scroll, and replay anonymized real-user sessions —
+            built natively into DeployHub. No third-party login, no extra setup, all data stays on your platform.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mb-8">
+            <ComingSoonCard icon={Activity} title="Click heatmaps" body="Pinpoint where users click most on every page." />
+            <ComingSoonCard icon={Eye} title="Session replays" body="Watch real visitor journeys, frame by frame." />
+            <ComingSoonCard icon={Zap} title="Rage & dead clicks" body="Catch friction signals before users churn." />
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              disabled
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand/20 text-brand text-sm font-medium cursor-not-allowed opacity-70"
+              data-testid="heatmaps-waitlist-btn"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> You're on the waitlist
+            </button>
+            <span className="text-[11px] font-mono text-zinc-500">
+              shipping next · all Pro & Agency apps unlock automatically
+            </span>
           </div>
         </div>
-
-        {!platformReady ? (
-          <div className="mt-6 bg-signal-queued/10 border border-signal-queued/30 p-4 text-sm" data-testid="heatmaps-not-configured">
-            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-1">
-              ⚠ heatmaps not yet enabled on this platform
-            </div>
-            <div className="text-zinc-400">
-              The platform administrator hasn't completed the one-time setup yet. Reach out — once they enable it,
-              heatmaps light up automatically on every Pro+ app, including this one.
-            </div>
-          </div>
-        ) : !active ? (
-          <div className="mt-6 bg-elevated/40 border border-white/[0.06] p-4 text-sm" data-testid="heatmaps-not-active">
-            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">// status</div>
-            <div className="text-zinc-400">
-              Heatmaps are enabled platform-wide but this app's tracker hasn't reported yet. Visit the Setup tab,
-              copy the snippet, paste it into your <code className="bg-black/40 px-1.5">&lt;head&gt;</code> and redeploy.
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <KPI label="Status" value="Recording" hint="auto-injected via DeployHub" />
-              <KPI label="Privacy" value="Anonymized" hint="IPs masked · GDPR friendly" />
-              <KPI label="Retention" value="30 days" hint="rolling window" />
-            </div>
-            {config?.clarity_deeplink && (
-              <div className="mt-6">
-                <a
-                  href={config.clarity_deeplink}
-                  target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90"
-                  data-testid="heatmaps-open-dashboard"
-                >
-                  Open recordings dashboard ↗
-                </a>
-                <div className="mt-2 text-[11px] font-mono text-zinc-500">
-                  Pre-filtered to this app's host. Access is managed by your platform administrator —
-                  reach out if you'd like a viewer login.
-                </div>
-              </div>
-            )}
-          </>
-        )}
       </div>
+    </div>
+  );
+}
+
+function ComingSoonCard({ icon: Icon, title, body }) {
+  return (
+    <div className="border border-white/[0.06] p-4 bg-elevated/30">
+      <Icon className="h-4 w-4 text-brand mb-2" />
+      <div className="text-sm font-medium mb-1">{title}</div>
+      <div className="text-xs text-zinc-500 leading-relaxed">{body}</div>
     </div>
   );
 }
@@ -577,6 +569,11 @@ export default function AppWebAnalyticsTab({ appId }) {
             >
               <t.icon className="h-3.5 w-3.5" /> {t.label}
               {locked && <Lock className="h-3 w-3 text-zinc-500" />}
+              {t.soon && !locked && (
+                <span className="ml-1 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] bg-brand/15 text-brand border border-brand/30 leading-none">
+                  soon
+                </span>
+              )}
             </button>
           );
         })}

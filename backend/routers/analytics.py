@@ -27,6 +27,12 @@ from services.plans import get_plan
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analytics"])
 
+# Feature flag — flip to True the moment we ship the native heatmap +
+# session-replay engine. Until then we don't inject Clarity (or any other
+# third-party recording tag) on customer sites, and the customer-facing
+# Heatmaps tab shows a "coming soon" placeholder.
+HEATMAPS_FEATURE_LIVE = False
+
 
 # ────────────────── Public tracker script ──────────────────
 TRACKER_JS = r"""(function(){
@@ -175,18 +181,22 @@ async def get_app_analytics_config(app_id: str, request: Request):
     site_id = await analytics_svc.ensure_site_id(app_id)
     cfg = await analytics_svc.get_config(app_id)
     fe = _public_base()
-    # Only attach Clarity tag to the snippet if the plan unlocks heatmaps
-    # AND the platform admin configured a Clarity project. White-label: we
-    # never call it "Clarity" in customer-facing strings — only the script
-    # URL leaks the host name (clarity.ms) which is unavoidable.
+    # Heatmaps are not yet shipped — see HEATMAPS_FEATURE_LIVE comment at
+    # top of this file. We only auto-inject the recording tag once the
+    # native engine is live, the platform admin enabled it, and the plan
+    # unlocks the feature. Until then: clean first-party snippet only.
     feats = _features(plan)
-    inject_clarity = bool(cfg.get("clarity_project_id") and feats.get("heatmaps"))
+    inject_clarity = bool(
+        HEATMAPS_FEATURE_LIVE
+        and cfg.get("clarity_project_id")
+        and feats.get("heatmaps")
+    )
     snippet = (f'<script defer data-site="{site_id}" '
                f'data-endpoint="{fe}/api/analytics/collect"'
                + (f' data-clarity="{cfg["clarity_project_id"]}"' if inject_clarity else "")
                + f' src="{fe}/api/analytics/tracker.js"></script>')
-    # Pre-filtered Clarity deeplink scoped to this app's primary host —
-    # useful for the platform admin (or anyone with Clarity access).
+    # Pre-filtered deeplink scoped to this app's primary host — only useful
+    # while the recording integration is live; suppressed otherwise.
     clarity_deeplink = None
     if inject_clarity and app.get("primary_url"):
         from urllib.parse import urlparse, quote
@@ -199,6 +209,7 @@ async def get_app_analytics_config(app_id: str, request: Request):
     return {
         "site_id": site_id,
         "heatmaps_active": inject_clarity,
+        "heatmaps_coming_soon": not HEATMAPS_FEATURE_LIVE,
         "platform_clarity_configured": cfg.get("platform_clarity_configured", False),
         "clarity_deeplink": clarity_deeplink,
         "auto_inject_enabled": cfg.get("auto_inject_enabled", False),

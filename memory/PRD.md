@@ -185,7 +185,15 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
   - **Tests**: 14/14 new Iter8 backend assertions green. Full suite 77/78. Report at `/app/test_reports/iteration_8.json`.
 
-- **2026-05-11 — Heatmaps: zero-setup voor klanten (platform-wide Clarity)**
+  - **2026-05-11 — Heatmaps: hold + coming-soon white-label**
+  - **Pivot**: Customer-facing Heatmaps is now a "coming soon" feature, fully white-label, zero third-party leaks. Native engine (rrweb session-replay + canvas click heatmap on auto-captured page screenshots) is on the roadmap as the next big web-analytics ship.
+  - **Backend**: new `HEATMAPS_FEATURE_LIVE = False` flag in `routers/analytics.py`. While `False`: `data-clarity` is NOT injected into customer snippets, no `clarity_deeplink` is emitted, customer's HTML stays 100% first-party. Flipping to `True` re-enables the auto-injection without further code changes.
+  - **Customer UI**: `HeatmapsPane` replaced with a polished "coming soon" splash — grid backdrop, brand-glow blob, 3 feature cards (Click heatmaps · Session replays · Rage & dead clicks), disabled waitlist button "You're on the waitlist · shipping next · all Pro & Agency apps unlock automatically". Sub-tab navigation also shows a `soon` badge.
+  - **Admin UI**: Clarity project-id field still works but now labelled "Reserved · admin only · coming soon"; status pill switches from `not configured` → `reserved · not yet live`. Clear note "Visible to customers: No (waitlist UI only)".
+  - **Verified**: GET `/api/apps/{id}/web-analytics/config` returns `heatmaps_active=false, heatmaps_coming_soon=true, clarity_deeplink=null`, snippet contains no `data-clarity` attribute.
+
+
+- **2026-05-11 — Heatmaps: platform-wide Clarity infra (superseded by hold above)**
   - **What**: Platform admin enters **one** Microsoft Clarity project id in Admin → Integrations → "Heatmaps & session recordings". From that moment on, the Clarity recording tag auto-injects on every Pro+ app, completely white-label, without the customer touching a single setting.
   - **Plan availability widened**: Heatmaps now unlock at **Pro** (previously Agency-only) — no per-customer cost since Clarity is free + unlimited and shares one platform project.
   - **Backend**: `platform_settings.clarity_project_id` added to `PlatformSettingsUpdate` (no encryption needed — public id). `services/analytics.get_config` now pulls the platform-level id instead of per-app. `app_analytics_config.clarity_project_id` is no longer surfaced or settable from the customer-facing PUT.
