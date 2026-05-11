@@ -1,75 +1,158 @@
 {
+  "project_name": "DeployHub",
+  "app_type": "marketing_site",
   "theme": "dark",
-  "archetype": "7 (Electric & Neon)",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) + Retro-Futurism/Terminal variant",
+  "design_philosophy": {
+    "core_principles": [
+      "Hacker-cool aesthetic with enterprise-grade polish",
+      "Information density over decorative fluff",
+      "Motion-heavy but performant (data-viz animations, scroll reveals)",
+      "Strict dark mode with stark cyan accents"
+    ],
+    "surface_strategy": "Grid Borders & Retro-Futurism (visible skeleton, sharp edges, no rounded corners, terminal-inspired inputs and text elements)"
+  },
   "colors": {
-    "background": "#050505",
-    "surface": "#0a0a0a",
-    "surface_glass": "rgba(10, 10, 10, 0.6)",
-    "primary": "#00E5FF",
-    "primary_hover": "#33EBFF",
-    "accent_success": "#39FF14",
-    "text_primary": "#FFFFFF",
-    "text_secondary": "#A1A1AA",
-    "border": "rgba(255, 255, 255, 0.1)",
-    "border_glow": "rgba(0, 229, 255, 0.5)"
+    "background": {
+      "base": "#050505",
+      "surface": "#09090B",
+      "surface_elevated": "#18181B",
+      "glass": "bg-black/60 backdrop-blur-xl"
+    },
+    "text": {
+      "primary": "#FAFAFA",
+      "secondary": "#A1A1AA",
+      "muted": "#52525B",
+      "accent": "#06B6D4"
+    },
+    "border": {
+      "default": "#27272A",
+      "hover": "#3F3F46",
+      "glow": "rgba(6, 182, 212, 0.4)"
+    },
+    "brand": {
+      "primary": "#06B6D4",
+      "primary_hover": "#0891B2",
+      "green_usp": "#10B981"
+    }
   },
   "typography": {
-    "headings": {
-      "font_family": "'Outfit', sans-serif",
-      "scale": "h1: text-5xl lg:text-7xl font-black tracking-tighter, h2: text-3xl lg:text-4xl font-bold tracking-tight"
+    "heading_font": {
+      "family": "Outfit",
+      "weights": ["400", "700"],
+      "usage_rules": "Display sans for all major headers. Tight tracking (tracking-tighter) for everything over 32px."
     },
-    "body": {
-      "font_family": "'IBM Plex Sans', sans-serif",
-      "scale": "text-base leading-relaxed text-zinc-400"
+    "body_font": {
+      "family": "Inter",
+      "weights": ["400", "500"],
+      "usage_rules": "Clean legibility for small explanatory text."
     },
-    "mono": {
-      "font_family": "'JetBrains Mono', monospace",
-      "scale": "text-sm tracking-tight"
+    "mono_font": {
+      "family": "JetBrains Mono",
+      "weights": ["400"],
+      "usage_rules": "Use heavily for tech accents, labels, metric numbers, overlines, and terminal UI elements. Uppercase with tracking-widest for overlines."
+    },
+    "hierarchy": {
+      "h1": "text-5xl md:text-6xl font-bold tracking-tighter leading-none text-white",
+      "h2": "text-3xl md:text-4xl font-bold tracking-tight text-white",
+      "h3": "text-xl md:text-2xl font-semibold tracking-tight text-white",
+      "overline": "text-xs font-mono uppercase tracking-[0.2em] text-cyan-400",
+      "body": "text-base text-zinc-400 leading-relaxed",
+      "mono_data": "text-sm font-mono text-zinc-300"
     }
   },
   "spacing_and_layout": {
-    "strategy": "Control Room / Bento Grid",
-    "padding": "Generous on sections (py-24 to py-32), dense inside bento cards (p-6 to p-8)",
-    "borders": "1px sharp borders border-white/10. No massive border-radius. Use rounded-md or rounded-none."
+    "container": "max-w-7xl mx-auto px-6 lg:px-8",
+    "section_gap": "py-24 md:py-32",
+    "border_radius": "rounded-none",
+    "grid_system": "MODE A: 'Tetris' Grid for feature showcases. Asymmetric layouts with gap-8 to gap-12. Avoid simple symmetric columns."
   },
-  "surface_styles": {
-    "nav": "Crystal glass: backdrop-blur-2xl bg-black/50 border-b border-white/10. Must be sticky.",
-    "cards": "Solid #0a0a0a with 1px border. Hover state should subtly glow with cyan box-shadow.",
-    "buttons": "Primary: bg-[#00E5FF] text-black font-bold hover:shadow-[0_0_20px_rgba(0,229,255,0.4)]. Secondary: bg-transparent border-white/20 hover:border-[#00E5FF] hover:text-[#00E5FF]."
+  "motion_and_interactions": {
+    "libraries_required": ["framer-motion", "lucide-react", "recharts"],
+    "global_scroll": "Lenis smooth scrolling recommended for premium momentum feel.",
+    "hover_states": "Interactive elements should have sharp transitions, e.g., 1px cyan border glow on hover, or mono text revealing via scramble effect.",
+    "reveal_pattern": "Staggered fade-up (y: 20, opacity: 0 -> 1) on scroll for all major text blocks and grid items."
   },
-  "animations": {
-    "css_additions_index_css": "@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } } @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); } } @keyframes matrix-scan { 0% { background-position: 0% -100%; } 100% { background-position: 0% 200%; } }",
-    "framer_motion_usage": "MANDATORY. Install framer-motion if not present. Use staggered reveals (`staggerChildren: 0.1`). Elements fade in and slide up (`y: 20, opacity: 0 -> y: 0, opacity: 1`).",
-    "hero_specific": "Typewriter effect for the H1 or tagline. Simulated terminal window. Floating 3D-like cards with `onMouseMove` lighting effect."
+  "component_guidelines": {
+    "buttons": {
+      "primary": "bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-none px-6 py-3 transition-colors flex items-center gap-2",
+      "outline": "border border-zinc-700 hover:border-cyan-500 text-white bg-transparent rounded-none px-6 py-3 transition-all flex items-center gap-2 font-mono text-sm uppercase tracking-wider"
+    },
+    "cards": {
+      "base": "bg-zinc-950/50 border border-zinc-800 rounded-none p-8 relative overflow-hidden",
+      "hover_effect": "The 'Tracing Beam' - On hover, introduce a subtle cyan gradient background shift or a border color transition to cyan-500/50."
+    }
   },
-  "image_urls": [
+  "page_sections": [
     {
-      "url": "https://images.unsplash.com/photo-1764258560295-21e74c3d0d15?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhcmslMjBnbG93aW5nJTIwdGVjaCUyMGxpbmVzfGVufDB8fHx8MTc3ODA5NjU3MXww&ixlib=rb-4.1.0&q=85",
-      "category": "hero_background",
-      "description": "Abstract neon tech lines. Use with mix-blend-screen, opacity-20, absolute inset-0 z-0 to create a futuristic data grid vibe."
+      "name": "Navigation",
+      "spec": "Sticky top (z-50) with backdrop-blur-xl bg-black/60. Sharp bottom border (border-b border-zinc-800). Left: DeployHub Logo (mono font, cyan accent). Right: Log in, 'Deploy Now' primary button."
+    },
+    {
+      "name": "Hero",
+      "spec": "Massive top padding (pt-40 pb-24). Central alignment. H1: 'Deploy anything. Faster. Greener.' (Outfit, text-6xl+). Subtitle: 'The all-in-one PaaS built for agencies and modern developers. Zero configuration, 100% white-label, EU-hosted.' Visual: A split terminal window and ConstellationCanvas background. Terminal shows a simulated build log (useTypewriter hook) deploying an app. Two CTAs: Primary 'Start deploying', Secondary 'View pricing'. "
+    },
+    {
+      "name": "How It Works (Process Flow)",
+      "spec": "Grid layout. 3 Steps: 1. Connect GitHub, 2. Auto-Detect Stack (Nixpacks), 3. Live URL + Metrics. Use horizontal connecting lines with glowing animated SVG dashes (simulating data transfer). Each step features a mono overline and a small looping UI animation."
+    },
+    {
+      "name": "Features Showcase (The Real Deal)",
+      "spec": "Bento Grid (Tetris layout). Card 1 (Large): 'Live Container Metrics' - display a Recharts line graph drawing itself on scroll. Card 2 (Medium): 'Google PageSpeed Insights' - Circular gauge spinning up to 99 on render. Card 3 (Medium): 'Cookieless Analytics' - minimalist bar chart or visitor dot map. Card 4: 'Multi-tenant Workspaces' - UI mockup of agency dashboard switcher. Use images from the API to texture the backgrounds behind data."
+    },
+    {
+      "name": "Comparison Table",
+      "spec": "Section titled 'Why DeployHub?'. A sharp, border-collapse table comparing DeployHub, Vercel, Render, and DIY (Coolify). Rows: 'Data Residency', 'Monitoring Included', 'White-label', 'Green Energy', 'Agency Pricing'. DeployHub column has a cyan-950 background with a cyan border. Use Lucide check (cyan) and x (zinc-600) icons."
+    },
+    {
+      "name": "Green Energy USP (Spotlight)",
+      "spec": "Dramatic dark section. Background image: 'wind turbine night' (overlay bg-black/80). Massive green-cyan typography: '100% Wind & Solar Powered'. Subtext: 'Your apps run in Climate-Neutral EU datacenters by default.' Add floating leaf or wind particles using Framer Motion or simple CSS animations."
+    },
+    {
+      "name": "Roadmap Teaser",
+      "spec": "Horizontal scrolling or simple grid of 'Coming Soon' features (Database branching, Native heatmaps, AI Co-pilot, White-label PDF reports). Style as locked terminal files (opacity-50, dashed borders)."
+    },
+    {
+      "name": "Social Proof Ticker & CTA",
+      "spec": "React-fast-marquee showing stats: '1.2M DEPLOYS / 99.99% UPTIME / 47ms AVG LATENCY'. Followed by a massive, centered CTA section: 'Stop managing infrastructure. Start building.' Primary button."
+    },
+    {
+      "name": "Footer",
+      "spec": "Dark minimal footer. Include an 'EU Hosted & GDPR Ready' badge and a 'Green Energy' badge. 4-column layout for links. border-t border-zinc-800."
     }
   ],
-  "component_instructions": {
-    "Landing.jsx": "Focus on high-impact hero: an animated terminal that types 'Ship Next.js & Node in two clicks', wrapped in a glowing cyan border. Below hero, build a 'Control Room' Bento grid for features (Deployments, Monitoring, GitHub integration). Use framer-motion for scroll reveals. Make it feel like a futuristic IDE.",
-    "Pricing.jsx": "3 cards (Hobby, Pro, Agency). The Pro/Agency cards must have an animated gradient border (tracing beam effect). Display Mollie integration seamlessly. Deep void backgrounds.",
-    "Auth (Login.jsx / Register.jsx)": "Split screen layout. Left side: immersive abstract texture or CSS particle field. Right side: minimalistic form (Shadcn UI). GitHub OAuth button with premium hover effect. Focus states on inputs must be cyan ring.",
-    "Checkout": "Clean inline billing. Neon accents for success states.",
-    "Dashboard": "Preserve functionality but inject the new CSS variables (cyan focus, JetBrains Mono for data). Tight density, sharp 1px borders."
+  "media": {
+    "images": {
+      "green_energy_bg": {
+        "url": "https://images.unsplash.com/photo-1558725148-e95a6523628c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwyfHx3aW5kJTIwdHVyYmluZSUyMG5pZ2h0fGVufDB8fHx8MTc3ODUzMzY3MXww&ixlib=rb-4.1.0&q=85",
+        "description": "Silhouette of a wind turbine at night. Use as a heavily darkened background overlay for the Green Energy USP section.",
+        "category": "background"
+      },
+      "server_abstract": {
+        "url": "https://images.unsplash.com/flagged/photo-1579274216947-86eaa4b00475?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwxfHxkYXRhJTIwY2VudGVyJTIwc2VydmVyc3xlbnwwfHx8fDE3Nzg1MzM2NzF8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract server wires. Use inside feature cards as a subtle background texture (opacity 10-20%).",
+        "category": "texture"
+      },
+      "eu_map_abstract": {
+        "url": "https://images.unsplash.com/photo-1589262804704-c5aa9e6def89?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxldXJvcGUlMjBtYXB8ZW58MHx8fHwxNzc4NTMzNjcxfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract map texture. Use in the Data Residency / Privacy section.",
+        "category": "texture"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "rules": "Use stroke-width 1.5. No fill colors unless specifically emphasizing a primary state. For tech features, use icons like Terminal, Activity, Zap, Shield, Server, Globe."
+    }
   },
   "testing": {
-    "data_testids": [
-      "nav-pricing",
-      "nav-signin",
-      "nav-signup",
-      "hero-cta-start",
-      "hero-cta-pricing",
-      "plan-hobby",
-      "plan-pro",
-      "plan-agency",
-      "plan-cta-hobby",
-      "plan-cta-pro",
-      "plan-cta-agency"
-    ],
-    "rules": "All interactive elements MUST include these exact data-testids. Apply kebab-case for any new interactive elements."
-  }
+    "data_testid_rules": "All interactive elements (buttons, links, roadmap cards) must have a kebab-case data-testid attribute based on role (e.g., 'hero-deploy-btn', 'nav-login-link')."
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the JSON structure and CSS variable mappings provided.",
+    "Do NOT use rounded corners; the aesthetic is strict 'rounded-none' for a terminal/brutalist feel.",
+    "Implement Framer Motion for scroll reveals, staggered bento cards, and the mock-UI graphs.",
+    "Do NOT use real video files (.mp4). Simulate the 'How it works' and feature demos using CSS keyframes, SVG paths, or Recharts data-viz components wrapped in Framer Motion.",
+    "Make sure the 'Green Energy' section stands out emotionally, pairing the wind turbine image with an emerald/cyan overlay.",
+    "Build the comparison table without Shadcn 'Card' wrappers; use semantic HTML table elements or CSS Grid with explicit border utilities to maintain the brutalist skeleton look."
+  ]
 }
