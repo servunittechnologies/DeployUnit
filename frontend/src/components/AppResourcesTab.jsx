@@ -78,7 +78,7 @@ export default function AppResourcesTab({ appId }) {
 
         {/* Current snapshot */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
-          <ResourceTile icon={Cpu}        label="CPU"     value={`${eff.cpu_vcpu.toFixed(2)} vCPU`}    hint={`plan default: ${def.cpu_vcpu} · addon: +${data.addons.cpu_vcpu}`} />
+          <ResourceTile icon={Cpu}        label="CPU"     value={`${eff.cpu_vcpu.toFixed(2)} vCPU`}    hint={`plan default: ${def.cpu_vcpu} vCPU · addon: +${data.addons.cpu_vcpu} vCPU`} />
           <ResourceTile icon={MemoryStick} label="Memory" value={`${eff.memory_mb} MB`}                 hint={`plan default: ${def.memory_mb} MB · addon: +${data.addons.memory_mb}`} />
           <ResourceTile icon={HardDrive}   label="Storage" value={fmtStorage(eff.storage_mb)}           hint={`plan default: ${fmtStorage(def.storage_mb)} · addon: +${fmtStorage(data.addons.storage_mb)}`} />
         </div>

@@ -72,6 +72,16 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Resources + Credit-billed Addons + DB↔App Connections (Iter13, 14/14 backend GREEN, 24/24 iter11 regression)**
+  - **DB → App attach**: meerdere databases per app met user-editable env-var naam (`DATABASE_URL` default, A-Z0-9_ ge-clamped). Bij attach pusht DeployHub de `connection_string` direct als env-var naar de build engine via `coolify.update_env`. Detach zet env-var leeg op de volgende deploy.
+  - **Per-app resource limieten (HARD enforced)**: CPU/memory worden bij elke deploy via `coolify.update_application({limits_cpus, limits_memory, limits_memory_swap})` op de container gezet. Plan defaults (Free=0.25 vCPU/256MB/1GB, Pro=0.5/512MB/5GB, Agency=1/1GB/20GB) zijn alle admin-editable.
+  - **Credit-based addons**: per app slidersaurus voor +vCPU/+MB RAM/+GB storage. Pricing in admin (100cr/0.5vCPU, 50cr/512MB, 25cr/5GB per maand). Bij upgrade pro-rated credit-charge, bij downgrade pro-rated refund. **Verificatie**: upgrade 150cr → onmiddellijke downgrade gaf 145cr refund (29 dagen ongebruikt).
+  - **Monthly billing tick**: nieuwe `services.resources.charge_due_addons` hourly scheduler — apps met `monthly_resource_cost > 0` en `resource_addons_charged_at` ≥30 dagen oud krijgen de credit-charge. Bij ontoereikende credits: **auto-downgrade naar plan defaults + notification met `kind=resource_downgrade`**.
+  - **Plan downgrade refund**: `services.resources.refund_plan_downgrade` berekent pro-rata ongebruikt deel van OLD plan price → terug naar credit wallet (1 credit ≈ €0.10). Geintegreerd in `routers/account.py::plan_checkout` voor free/hobby downgrades.
+  - **Admin Resources & Limits tab** in `/app/admin`: editable plan-default tabel + 3 addon-pricing cards met €-equivalents + Save/Revert. `GET /api/admin/resource-defaults` levert built-in baseline voor revert.
+  - **Bonus fix admin credits adjust**: `routers/admin_users.py::adjust_credits` schreef naar legacy `workspaces.credits_balance` — nu via `grant_credits`/`consume_credits` op `users.credits_balance` met correcte transaction log.
+  - **API endpoints**: GET/PUT `/apps/{id}/resources`, GET `/apps/{id}/connections`, POST `/apps/{id}/connections`, DELETE `/apps/{id}/connections/{conn_id}`, GET/PUT `/admin/resource-config`, GET `/admin/resource-defaults`.
+
 - **2026-05-11 — Logs UX overhaul + auto-heal voor verloren build-engine apps**
   - **ServUnit hersteld**: app stond op stale `coolify_app_uuid` (uitgewist op de build engine). Nieuwe `/api/apps/{id}/reinstall` endpoint maakt een verse Coolify-app aan met de opgeslagen `repo_url` + `branch`. Auto-heal in `redeploy()`: pre-flight `coolify.app_exists()` check, valt automatisch terug op het create-app pad als de UUID dood is.
   - **Heldere foutmeldingen**: pre-flight in `_coolify_deploy` detecteert private GitHub repos zonder OAuth-token en faalt FAST met "This is a private GitHub repo. Connect GitHub on your Account page…" — geen opaque Coolify "No such container" stacktrace meer.

@@ -239,7 +239,15 @@ async def admin_set_resource_config(payload: ResourceConfigIn, request: Request)
     plan_defaults = None
     if payload.plan_defaults is not None:
         plan_defaults = {k: v.model_dump() for k, v in payload.plan_defaults.items()}
-    pricing = payload.pricing if payload.pricing is not None else None
+    pricing = None
+    if payload.pricing is not None:
+        # Coerce credit-cost fields to int so the admin UI doesn't render
+        # decimals on integer credit amounts ('100.0 cr/mo' looks dumb).
+        pricing = {}
+        int_keys = {"cpu_credits_per_unit", "memory_credits_per_unit",
+                    "storage_credits_per_unit", "memory_unit_mb", "storage_unit_mb"}
+        for k, v in payload.pricing.items():
+            pricing[k] = int(v) if k in int_keys else float(v)
     out = await save_resource_config(plan_defaults=plan_defaults, pricing=pricing)
     audit_log(action="admin.resource_config_update", actor=user,
               resource_type="platform", resource_id="settings",
