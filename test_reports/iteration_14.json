@@ -1,0 +1,42 @@
+{
+  "summary": "Iter14: Full E2E validation of Support Ticket System (backend + frontend). 19/19 backend tests pass (user CRUD, RBAC, admin filters/stats/PATCH, status transitions, 409 on closed reply, regression sanity). Playwright UI flow verified: user creates ticket with min-10-char validation, replies, sees thread; admin tab renders 4 KPIs + status/priority/q filters, opens thread in admin mode with user_email/user_name visible, posts ★ Support reply, edits status+priority -> Save persists (toast 'Updated.' + RESOLVED/LOW pills). One minor UX bug: user's tickets list does not auto-refresh on return from thread (stale data until manual reload).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/admin/tickets/{id}", "issue": "Invalid status returns 422 (Pydantic Literal validator) instead of the 400 stated in the spec. Functionally correct; test accepts both."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Tickets (default page)", "issue": "After navigating back from /app/tickets/:id to /app/tickets, the list is NOT refetched (useEffect has empty deps and the component is not remounted by react-router). Newly created tickets only appear after a hard page reload. Fix: add `useEffect(() => { if (!id) load(); }, [id])` or call load() in the back handler.", "selector": "[data-testid=tickets-list]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tickets.py",
+    "/app/test_reports/pytest/pytest_iter14.xml"
+  ],
+  "action_items": [
+    "Fix user Tickets list stale-data after returning from thread (add reload trigger keyed off route param id).",
+    "(Optional) Surface invalid-status validation as 400 (manual check before Pydantic Literal) to match the spec wording, or update spec wording to 'invalid status -> 4xx'."
+  ],
+  "critical_code_review_comments": [
+    "routers/tickets.py: `admin_add_message` simply delegates to `add_message` without re-verifying admin role — `add_message` does call `get_current_user` + `_ensure_access` which permits admins on any ticket, so functionally correct, but the implicit reuse means a future change to `add_message` could silently break the admin endpoint. Add an explicit `_require_admin(request)` guard at the top of `admin_add_message`.",
+    "routers/tickets.py line 186-187: If a user replies on a 'resolved' or 'closed' ticket, status flips back to 'awaiting_support'. But line 167 already blocks closed tickets with 409, so the `or 'closed'` branch is dead code. Minor cleanup.",
+    "Tickets.jsx `closeTicket` uses `window.confirm` — not consistent with the rest of the app's modal/toast UX. Consider using the existing ConfirmDialog component.",
+    "Tickets.jsx default component uses `useEffect(() => load(), [])` — see UI bug above. Should also reload when the URL :id param transitions back to undefined.",
+    "services/emails.send_ticket_* runs in BackgroundTasks but does not catch exceptions — if MailerSend client throws, FastAPI logs at WARNING but request response is already returned; verify the email service swallows network errors so background tasks don't crash the worker (current behaviour appears fine — status='not_configured' is logged, no exception)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tickets.py (new — 19 tests)",
+    "/app/test_reports/pytest/pytest_iter14.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "95% — core flows green; minor list-refresh bug after navigation"},
+  "test_credentials": "admin@deployhub.dev/admin123; demo@deployhub.dev/demo1234. (NOTE: martijn@servunit.com has role=admin per iter13 context, so cannot be used as 'other non-admin user' — test_tickets.py registers a fresh TEST_other_<rand>@example.com user for the 403-on-other-user case.)",
+  "seed_data_creation": "Test suite creates one TEST_subject_<rand> ticket per run that ends in 'closed' state; one TEST_other_<rand>@example.com user is registered. UI test creates one additional TEST_UI subject ticket ending in 'resolved' state. These accumulate on each run — admin may want a cleanup script.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_tickets.py -v. BASE_URL is auto-read from /app/frontend/.env if REACT_APP_BACKEND_URL isn't in environment. The TicketThread component is shared by user (/app/tickets/:id) and admin (Admin tab > Support tickets) — admin mode adds user_email/user_name header line + a 'Manage' sidebar with editable status/priority dropdowns (testids: ticket-admin-edit, ticket-admin-status, ticket-admin-priority, ticket-admin-save). Background-task emails are no-ops (MailerSend not configured) — don't assert on email delivery, only on HTTP responses + DB state.",
+  "rca_of_the_issue": "List-stale-after-back bug RCA: Tickets.jsx is a single component handling both /app/tickets and /app/tickets/:id via `useParams().id`. react-router-dom v6 does NOT remount on param change for the same route component, so the `useEffect(() => load(), [])` runs only once on first mount. When user navigates from /app/tickets/:id back to /app/tickets, the component re-renders the list branch but never refetches. Reproduction: login as demo, /app/tickets, click 'New ticket', submit valid form (auto-nav to thread), click 'back to tickets' — the new ticket is missing from the list. Fix: change to `useEffect(() => { if (!id) load(); }, [id])`."
+}

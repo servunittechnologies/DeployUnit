@@ -180,6 +180,101 @@ _NOTIFICATION_PALETTE = {
 }
 
 
+# ─────────────────────── 4. Support tickets ───────────────────────
+def _ticket_card_html(*, ticket: dict, message_body: str, who: str) -> str:
+    """Shared inner card for ticket emails."""
+    base = _frontend_url() or "https://deployhub.app"
+    safe_body = (message_body or "").replace("\n", "<br>")
+    return f"""
+      <h1>{who} on ticket #{ticket['id'][:8]}</h1>
+      <p style="color:#999; font-size:13px;">Subject: <span style="color:#fff;">{ticket.get('subject','')}</span></p>
+      <div class="alert-amber" style="background:#0d0d0d; padding:14px; border-left:3px solid #00d9ff;">
+        <p style="margin:0; white-space:pre-wrap;">{safe_body}</p>
+      </div>
+      <p><a class="btn" href="{base}/app/tickets/{ticket['id']}">Open ticket →</a></p>
+      <p class="meta">Status: <span class="accent">{ticket.get('status','open')}</span>
+        · Priority: <span class="accent">{ticket.get('priority','normal')}</span>
+        · Category: <span class="accent">{ticket.get('category','other')}</span></p>
+      <p class="meta">Reply to this email or open the ticket in the dashboard to continue the thread.</p>
+    """
+
+
+async def send_ticket_created(*, ticket: dict, message_body: str,
+                              admin_recipients: list[str]) -> dict:
+    """Sent to platform admins when a user opens a new ticket."""
+    if not admin_recipients:
+        return {"ok": False, "status": "no_admins"}
+    subject = f"[Ticket #{ticket['id'][:8]}] New: {ticket.get('subject','(no subject)')[:120]}"
+    inner = _ticket_card_html(
+        ticket=ticket, message_body=message_body,
+        who=f"New ticket from {ticket.get('user_name') or ticket.get('user_email') or 'a user'}",
+    )
+    html = _shell(subject, inner)
+    text = (f"New ticket #{ticket['id'][:8]} from "
+            f"{ticket.get('user_name') or ticket.get('user_email')}\n\n"
+            f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
+            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/admin")
+    last_res = {"ok": False}
+    for adm in admin_recipients:
+        last_res = await mailersend.send(
+            to_email=adm, subject=subject, html=html, text=text,
+            tags=["ticket", "new"],
+        )
+        await _log_email(user_id=None, workspace_id=None, to=adm,
+                         subject=subject, event_type="ticket_created", result=last_res)
+    return last_res
+
+
+async def send_ticket_reply_to_user(*, ticket: dict, message_body: str) -> dict:
+    """Sent to the ticket owner when an admin posts a reply."""
+    to_email = ticket.get("user_email")
+    if not to_email:
+        return {"ok": False, "status": "bad_user"}
+    subject = f"[Ticket #{ticket['id'][:8]}] Reply: {ticket.get('subject','(no subject)')[:120]}"
+    inner = _ticket_card_html(
+        ticket=ticket, message_body=message_body,
+        who="Support replied to your ticket",
+    )
+    html = _shell(subject, inner)
+    text = (f"Support replied on ticket #{ticket['id'][:8]}.\n\n"
+            f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
+            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/tickets/{ticket['id']}")
+    res = await mailersend.send(
+        to_email=to_email, to_name=ticket.get("user_name"),
+        subject=subject, html=html, text=text,
+        tags=["ticket", "admin_reply"],
+    )
+    await _log_email(user_id=ticket.get("user_id"), workspace_id=None,
+                     to=to_email, subject=subject,
+                     event_type="ticket_admin_reply", result=res)
+    return res
+
+
+async def send_ticket_reply_to_admins(*, ticket: dict, message_body: str,
+                                      admin_recipients: list[str]) -> dict:
+    """Sent to platform admins when the ticket owner posts a reply."""
+    if not admin_recipients:
+        return {"ok": False, "status": "no_admins"}
+    subject = f"[Ticket #{ticket['id'][:8]}] User reply: {ticket.get('subject','(no subject)')[:120]}"
+    inner = _ticket_card_html(
+        ticket=ticket, message_body=message_body,
+        who=f"{ticket.get('user_name') or ticket.get('user_email') or 'User'} replied",
+    )
+    html = _shell(subject, inner)
+    text = (f"User reply on ticket #{ticket['id'][:8]}.\n\n"
+            f"Subject: {ticket.get('subject')}\n\n{message_body}\n\n"
+            f"Open: {(_frontend_url() or 'https://deployhub.app')}/app/admin")
+    last_res = {"ok": False}
+    for adm in admin_recipients:
+        last_res = await mailersend.send(
+            to_email=adm, subject=subject, html=html, text=text,
+            tags=["ticket", "user_reply"],
+        )
+        await _log_email(user_id=None, workspace_id=None, to=adm,
+                         subject=subject, event_type="ticket_user_reply", result=last_res)
+    return last_res
+
+
 async def send_notification(*, user: dict, workspace_id: Optional[str], event_type: str,
                             title: str, body: str, extras: Optional[dict] = None) -> dict:
     """Notification alert email. Called by services/notifications_sms.py when

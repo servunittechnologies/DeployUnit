@@ -28,6 +28,7 @@ import Fleet from "./pages/dashboard/Fleet";
 import AuditLog from "./pages/dashboard/AuditLog";
 import Databases from "./pages/dashboard/Databases";
 import Roadmap from "./pages/dashboard/Roadmap";
+import Tickets from "./pages/dashboard/Tickets";
 import Status from "./pages/Status";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -84,6 +85,8 @@ function App() {
                 <Route path="audit" element={<AuditLog />} />
                 <Route path="databases" element={<Databases />} />
                 <Route path="roadmap" element={<Roadmap />} />
+                <Route path="tickets" element={<Tickets />} />
+                <Route path="tickets/:id" element={<Tickets />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

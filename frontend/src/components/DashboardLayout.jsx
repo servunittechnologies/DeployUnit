@@ -7,7 +7,7 @@ import Logo from "./Logo";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, Settings, LogOut,
   Plus, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
-  ShieldCheck, Layers, Database, FileClock, Coins, Sparkles,
+  ShieldCheck, Layers, Database, FileClock, Coins, Sparkles, LifeBuoy,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
   { to: "/app/alerts", label: "Alerts", icon: BellRing },
   { to: "/app/audit", label: "Audit log", icon: FileClock },
+  { to: "/app/tickets", label: "Support", icon: LifeBuoy },
   { to: "/app/roadmap", label: "Roadmap", icon: Sparkles, badge: "soon" },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];

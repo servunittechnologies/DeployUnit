@@ -26,11 +26,16 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Literal
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
 from db import get_db
 from auth_utils import get_current_user
+from services.emails import (
+    send_ticket_created,
+    send_ticket_reply_to_user,
+    send_ticket_reply_to_admins,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["tickets"])
@@ -47,6 +52,13 @@ def _now() -> str:
 def _strip(t: dict) -> dict:
     t.pop("_id", None)
     return t
+
+
+async def _admin_emails() -> list[str]:
+    """Return the email addresses of every active platform admin."""
+    cur = get_db().users.find({"role": "admin"}, {"_id": 0, "email": 1})
+    rows = await cur.to_list(50)
+    return [r["email"] for r in rows if r.get("email")]
 
 
 # ────────────────── Models ──────────────────
@@ -70,7 +82,7 @@ class TicketUpdate(BaseModel):
 
 # ────────────────── User endpoints ──────────────────
 @router.post("/tickets")
-async def create_ticket(payload: TicketCreate, request: Request):
+async def create_ticket(payload: TicketCreate, request: Request, background: BackgroundTasks):
     user = await get_current_user(request)
     if payload.category not in CATEGORIES:
         raise HTTPException(status_code=400, detail="Unknown category")
@@ -107,6 +119,15 @@ async def create_ticket(payload: TicketCreate, request: Request):
     }
     await db.tickets.insert_one(ticket)
     await db.ticket_messages.insert_one(msg)
+    # Notify admins via email — fire-and-forget
+    admins = await _admin_emails()
+    if admins:
+        background.add_task(
+            send_ticket_created,
+            ticket=_strip(dict(ticket)),
+            message_body=payload.message.strip(),
+            admin_recipients=admins,
+        )
     return _strip(ticket)
 
 
@@ -140,7 +161,7 @@ async def ticket_detail(ticket_id: str, request: Request):
 
 
 @router.post("/tickets/{ticket_id}/messages")
-async def add_message(ticket_id: str, payload: TicketMessageIn, request: Request):
+async def add_message(ticket_id: str, payload: TicketMessageIn, request: Request, background: BackgroundTasks):
     user = await get_current_user(request)
     ticket = await _ensure_access(ticket_id, user)
     if ticket["status"] == "closed":
@@ -175,6 +196,22 @@ async def add_message(ticket_id: str, payload: TicketMessageIn, request: Request
         }, "$inc": {"message_count": 1}},
     )
     msg.pop("_id", None)
+    # Send email notification — fire-and-forget
+    fresh = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if fresh:
+        body_text = payload.body.strip()
+        if role == "admin":
+            background.add_task(send_ticket_reply_to_user, ticket=fresh, message_body=body_text)
+        else:
+            admins = await _admin_emails()
+            # Don't email the author back to themselves if the author is an admin replying as user
+            recipients = [a for a in admins if a != fresh.get("user_email")]
+            if recipients:
+                background.add_task(
+                    send_ticket_reply_to_admins,
+                    ticket=fresh, message_body=body_text,
+                    admin_recipients=recipients,
+                )
     return msg
 
 
@@ -257,8 +294,8 @@ async def admin_ticket_detail(ticket_id: str, request: Request):
 
 
 @router.post("/admin/tickets/{ticket_id}/messages")
-async def admin_add_message(ticket_id: str, payload: TicketMessageIn, request: Request):
-    return await add_message(ticket_id, payload, request)
+async def admin_add_message(ticket_id: str, payload: TicketMessageIn, request: Request, background: BackgroundTasks):
+    return await add_message(ticket_id, payload, request, background)
 
 
 @router.patch("/admin/tickets/{ticket_id}")

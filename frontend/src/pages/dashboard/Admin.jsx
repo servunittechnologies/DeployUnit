@@ -3,9 +3,10 @@ import { api } from "../../lib/api";
 import {
   ShieldCheck, Database, Globe, CheckCircle2, XCircle, AlertCircle,
   Loader2, Save, Copy, RefreshCw, Key, Users, Banknote, Github,
-  Coins, Star, Cpu,
+  Coins, Star, Cpu, LifeBuoy, ArrowLeft, Filter, Search as SearchIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { TicketThread, StatusPill as TicketStatusPill } from "./Tickets";
 
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
@@ -14,6 +15,7 @@ const TABS = [
   { id: "platform", label: "Platform Domain", icon: Globe },
   { id: "vat", label: "VAT / VIES", icon: Banknote },
   { id: "users", label: "Users", icon: Users },
+  { id: "tickets", label: "Support tickets", icon: LifeBuoy },
 ];
 
 function StatusPill({ ok, label }) {
@@ -1389,6 +1391,152 @@ function UserDetailPanel({ userId, onBack }) {
   );
 }
 
+/* ─────────────────────────── Tickets ─────────────────────────── */
+function TicketsAdminTab() {
+  const [stats, setStats] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState({ status: "", priority: "", q: "" });
+  const [selected, setSelected] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (filter.status) params.status = filter.status;
+      if (filter.priority) params.priority = filter.priority;
+      if (filter.q) params.q = filter.q;
+      const [list, st] = await Promise.all([
+        api.get("/admin/tickets", { params }),
+        api.get("/admin/tickets/stats"),
+      ]);
+      setRows(list.data.tickets || []);
+      setStats(st.data || {});
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to load tickets");
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (selected) {
+    return (
+      <div data-testid="admin-tickets-thread-wrap">
+        <TicketThread
+          ticketId={selected}
+          isAdmin
+          onBack={() => { setSelected(null); load(); }}
+        />
+      </div>
+    );
+  }
+
+  const KPI = ({ label, value, tone = "zinc" }) => (
+    <div className="border border-white/[0.06] bg-[#0a0a0a] p-4">
+      <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-500">{label}</div>
+      <div className={`mt-2 font-display text-2xl tabular-nums ${
+        tone === "brand" ? "text-brand" :
+        tone === "warn" ? "text-yellow-400" :
+        tone === "good" ? "text-emerald-400" : "text-white"}`}
+      >{value ?? "—"}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5" data-testid="admin-tickets-tab">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KPI label="Needs attention" value={stats?.needs_attention ?? 0} tone="brand" />
+        <KPI label="Open" value={stats?.open ?? 0} tone="warn" />
+        <KPI label="Awaiting user" value={stats?.awaiting_user ?? 0} />
+        <KPI label="Resolved (total)" value={stats?.resolved ?? 0} tone="good" />
+      </div>
+
+      <div className="border border-white/[0.06] bg-[#0a0a0a]">
+        <div className="p-4 border-b border-white/[0.06] flex flex-wrap items-center gap-2">
+          <Filter className="h-4 w-4 text-zinc-500" />
+          <select
+            value={filter.status}
+            onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value }))}
+            className="bg-black border border-white/10 px-2 py-1.5 text-xs font-mono focus:border-brand outline-none"
+            data-testid="admin-tickets-filter-status"
+          >
+            <option value="">All statuses</option>
+            <option value="open">Open</option>
+            <option value="awaiting_support">Awaiting support</option>
+            <option value="awaiting_user">Awaiting user</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <select
+            value={filter.priority}
+            onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value }))}
+            className="bg-black border border-white/10 px-2 py-1.5 text-xs font-mono focus:border-brand outline-none"
+            data-testid="admin-tickets-filter-priority"
+          >
+            <option value="">All priorities</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <div className="flex items-center gap-1.5 bg-black border border-white/10 px-2 py-1.5 ml-auto min-w-[220px]">
+            <SearchIcon className="h-3.5 w-3.5 text-zinc-500" />
+            <input
+              value={filter.q}
+              onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))}
+              placeholder="subject or user…"
+              className="bg-transparent outline-none text-xs font-mono flex-1"
+              data-testid="admin-tickets-filter-q"
+            />
+          </div>
+          <button onClick={load} className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-brand" data-testid="admin-tickets-refresh">
+            <RefreshCw className="h-3.5 w-3.5" /> reload
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-zinc-500"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+        ) : rows.length === 0 ? (
+          <div className="p-10 text-center text-zinc-500 text-sm" data-testid="admin-tickets-empty">No tickets match the filters.</div>
+        ) : (
+          <div className="divide-y divide-white/[0.04]">
+            {rows.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSelected(t.id)}
+                className="w-full text-left p-4 hover:bg-white/[0.02] transition-colors grid grid-cols-[1fr_auto] gap-4 items-center"
+                data-testid={`admin-ticket-row-${t.id}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-500">
+                    <TicketStatusPill s={t.status} />
+                    <span>{t.category}</span>
+                    <span className={
+                      t.priority === "urgent" ? "text-red-400" :
+                      t.priority === "high" ? "text-yellow-400" :
+                      t.priority === "low" ? "text-zinc-500" : "text-zinc-300"
+                    }>{t.priority}</span>
+                  </div>
+                  <div className="mt-1.5 font-display text-base font-semibold truncate">{t.subject}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5 font-mono">
+                    {t.user_name || t.user_email} · {t.message_count} msg · #{t.id.slice(0, 8)}
+                  </div>
+                </div>
+                <div className="text-[10px] font-mono text-zinc-500 text-right shrink-0">
+                  last {new Date(t.last_msg_at).toLocaleString()}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 /* ─────────────────────────── Admin shell ─────────────────────────── */
 export default function Admin() {
   const [tab, setTab] = useState("integrations");
@@ -1424,6 +1572,7 @@ export default function Admin() {
       {tab === "platform" && <PlatformTab />}
       {tab === "vat" && <VatTab />}
       {tab === "users" && <UsersTab />}
+      {tab === "tickets" && <TicketsAdminTab />}
     </div>
   );
 }
