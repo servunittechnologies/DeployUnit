@@ -55,6 +55,7 @@ from routers import (
     roadmap as roadmap_router,
     status as status_router,
     contact as contact_router,
+    tickets as tickets_router,
 )
 
 
@@ -150,6 +151,7 @@ api_router.include_router(analytics_router.router)
 api_router.include_router(roadmap_router.router)
 api_router.include_router(status_router.router)
 api_router.include_router(contact_router.router)
+api_router.include_router(tickets_router.router)
 
 app.include_router(api_router)
 
