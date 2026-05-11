@@ -11,6 +11,7 @@ from db import get_db
 from auth_utils import get_current_user, require_workspace_member
 from clients.coolify import coolify
 from services.log_parser import parse_log_lines, extract_failure_summary
+from services.whitelabel import sanitize, sanitize_lines
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["deployments"])
@@ -38,8 +39,10 @@ def _parse_coolify_logs(raw) -> list[str]:
 
 
 def _annotate(d: dict) -> dict:
-    """Attach parsed logs + failure_summary to a deployment dict."""
-    raw_logs = d.get("logs") or []
+    """Attach parsed logs + failure_summary to a deployment dict. Sanitises
+    all log content so the build-engine brand never leaks to the UI."""
+    raw_logs = sanitize_lines(d.get("logs") or [])
+    d["logs"] = raw_logs  # overwrite with sanitised version
     parsed = parse_log_lines(raw_logs)
     d["parsed_logs"] = parsed
     d["log_counts"] = {
@@ -51,7 +54,9 @@ def _annotate(d: dict) -> dict:
         "deploy": sum(1 for x in parsed if x["severity"] == "deploy"),
     }
     if d.get("status") == "failed" and not d.get("failure_summary"):
-        d["failure_summary"] = extract_failure_summary(raw_logs)
+        d["failure_summary"] = sanitize(extract_failure_summary(raw_logs) or "")
+    elif d.get("failure_summary"):
+        d["failure_summary"] = sanitize(d["failure_summary"])
     return d
 
 
@@ -88,13 +93,14 @@ async def get_deployment_logs(deployment_id: str, request: Request):
     if not d:
         raise HTTPException(status_code=404, detail="Deployment not found")
     await require_workspace_member(d["workspace_id"], user)
-    raw_logs = d.get("logs", [])
+    raw_logs = sanitize_lines(d.get("logs", []))
     parsed = parse_log_lines(raw_logs)
+    fs = d.get("failure_summary") or (extract_failure_summary(raw_logs) if d.get("status") == "failed" else None)
     return {
         "logs": raw_logs,
         "parsed_logs": parsed,
         "status": d["status"],
-        "failure_summary": d.get("failure_summary") or (extract_failure_summary(raw_logs) if d.get("status") == "failed" else None),
+        "failure_summary": sanitize(fs) if fs else None,
     }
 
 
@@ -182,8 +188,8 @@ async def stream_deployment(deployment_id: str, request: Request):
 
     async def gen():
         sent = 0
-        # First flush whatever we already have, parsed
-        cur_logs = d.get("logs") or []
+        # First flush whatever we already have, parsed (sanitised)
+        cur_logs = sanitize_lines(d.get("logs") or [])
         for parsed in parse_log_lines(cur_logs):
             yield f"event: line\ndata: {json.dumps(parsed)}\n\n"
             sent += 1
@@ -198,9 +204,10 @@ async def stream_deployment(deployment_id: str, request: Request):
                 status, log_lines = await _refresh_coolify_logs(deployment_id)
             except Exception as e:
                 logger.warning("stream refresh failed: %s", e)
-                yield f"event: error\ndata: {json.dumps({'error': str(e)[:200]})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'error': sanitize(str(e)[:200])})}\n\n"
                 continue
 
+            log_lines = sanitize_lines(log_lines or [])
             # Emit only new lines
             if log_lines and len(log_lines) > sent:
                 for parsed in parse_log_lines(log_lines[sent:]):
@@ -210,7 +217,7 @@ async def stream_deployment(deployment_id: str, request: Request):
             if status and status != last_status:
                 last_status = status
                 snap = await db.deployments.find_one({"id": deployment_id}, {"_id": 0})
-                fail_summary = snap.get("failure_summary") if snap else None
+                fail_summary = sanitize((snap or {}).get("failure_summary") or "")
                 yield f"event: status\ndata: {json.dumps({'status': status, 'failure_summary': fail_summary})}\n\n"
 
             if last_status in ("live", "failed", "canceled"):

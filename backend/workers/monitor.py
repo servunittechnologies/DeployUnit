@@ -14,6 +14,7 @@ import httpx
 from db import get_db
 from clients.coolify import coolify
 from services.log_parser import extract_failure_summary
+from services.whitelabel import sanitize, sanitize_lines
 
 logger = logging.getLogger(__name__)
 
@@ -321,13 +322,13 @@ async def sync_deployments():
             "finished_at": _now_iso() if new_status != "building" else None,
         }
         if cool_log_lines:
-            deploy_update["logs"] = cool_log_lines
+            deploy_update["logs"] = sanitize_lines(cool_log_lines)
         if cool_deploy_uuid:
             deploy_update["coolify_deployment_uuid"] = cool_deploy_uuid
         if new_status == "failed":
             summary = extract_failure_summary(cool_log_lines)
             if summary:
-                deploy_update["failure_summary"] = summary
+                deploy_update["failure_summary"] = sanitize(summary)
 
         await db.deployments.update_many(
             {"app_id": a["id"], "status": {"$in": ["queued", "building"]}},
@@ -398,8 +399,9 @@ async def sync_deployments():
         log_lines = _flatten_logs(full.get("logs"))
         if not log_lines:
             continue
+        log_lines = sanitize_lines(log_lines)
         update = {"logs": log_lines, "coolify_deployment_uuid": cool_uuid}
         summary = extract_failure_summary(log_lines)
         if summary:
-            update["failure_summary"] = summary
+            update["failure_summary"] = sanitize(summary)
         await db.deployments.update_one({"id": entry["id"]}, {"$set": update})

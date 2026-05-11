@@ -28,6 +28,7 @@ from services.deploy_keys import (
     remove_github_deploy_key,
 )
 from services.log_parser import parse_log_lines, extract_failure_summary
+from services.whitelabel import sanitize, sanitize_lines
 from services.subdomains import provision_subdomain, release_subdomain
 from services.github_webhooks import (
     generate_secret as wh_generate_secret,
@@ -811,8 +812,8 @@ async def get_console_logs(app_id: str, request: Request, lines: int = 200):
             "lines": [],
         }
     if err:
-        return {"available": False, "reason": "fetch_failed", "message": err, "lines": []}
-    return {"available": True, "lines": log_lines, "count": len(log_lines)}
+        return {"available": False, "reason": "fetch_failed", "message": sanitize(err), "lines": []}
+    return {"available": True, "lines": sanitize_lines(log_lines), "count": len(log_lines)}
 
 
 @router.post("/apps/{app_id}/restart")

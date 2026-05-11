@@ -886,7 +886,7 @@ function WebhookSection({ appId }) {
 
 /* ─────────────────────── Cron Jobs section ─────────────────────── */
 function CronJobsSection({ appId }) {
-  const [data, setData] = useState({ jobs: [], supports_coolify_sync: false });
+  const [data, setData] = useState({ jobs: [], supports_build_engine_sync: false });
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null = closed, "new" = creating, {id} = editing existing
   const [form, setForm] = useState({ name: "", command: "", schedule: "0 3 * * *", enabled: true });
@@ -940,7 +940,7 @@ function CronJobsSection({ appId }) {
             <h2 className="font-display text-xl">Scheduled jobs</h2>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
-            Run commands on a schedule inside your app's container. {data.supports_coolify_sync ? "Synced with build engine." : "Will sync to build engine on next deploy."}
+            Run commands on a schedule inside your app's container. {data.supports_build_engine_sync ? "Synced with build engine." : "Will sync to build engine on next deploy."}
           </p>
         </div>
         {editing === null && (
@@ -1255,7 +1255,7 @@ function MoveAppSection({ app }) {
     const tgt = candidates.find((c) => c.id === target);
     if (!tgt) return;
     if (!tgt.has_room) { toast.error("Destination workspace is at its plan limit"); return; }
-    if (!window.confirm(`Move "${app.name}" to "${tgt.name}"?\n\nDeployments, domains, cron jobs and PR previews will follow.\nIf this app is paired with a staging/production peer in the source workspace, the link will be broken.\n\nThe Coolify build resource itself stays in place — only ownership in DeployHub moves.`)) return;
+    if (!window.confirm(`Move "${app.name}" to "${tgt.name}"?\n\nDeployments, domains, cron jobs and PR previews will follow.\nIf this app is paired with a staging/production peer in the source workspace, the link will be broken.\n\nThe build-engine resource itself stays in place — only ownership in DeployHub moves.`)) return;
     setBusy(true);
     try {
       const r = await api.post(`/apps/${app.id}/move`, { target_workspace_id: target });

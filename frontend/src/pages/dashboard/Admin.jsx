@@ -81,17 +81,17 @@ function IntegrationsTab() {
       </div>
 
       <Section
-        title="Coolify (deployment engine)"
+        title="Build engine"
         description="Where all your apps are built & hosted."
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono">
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
-            {data.coolify.configured ? (
-              data.coolify?.health?.ok ? (
+            {data.build_engine?.configured ? (
+              data.build_engine?.health?.ok ? (
                 <StatusPill ok={true} label="connected" />
               ) : (
-                <span className="inline-flex items-center gap-1.5 text-signal-queued text-xs font-mono" data-testid="admin-coolify-unreachable">
+                <span className="inline-flex items-center gap-1.5 text-signal-queued text-xs font-mono" data-testid="admin-build-engine-unreachable">
                   <AlertCircle className="h-3.5 w-3.5" /> configured, unreachable from backend
                 </span>
               )
@@ -101,18 +101,18 @@ function IntegrationsTab() {
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">endpoint</div>
-            <div className="text-zinc-300 truncate" data-testid="admin-coolify-url">{data.coolify.base_url || "—"}</div>
+            <div className="text-zinc-300 truncate" data-testid="admin-build-engine-url">{data.build_engine?.base_url || "—"}</div>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">version</div>
-            <div className="text-zinc-300">{data.coolify?.health?.version || "—"}</div>
+            <div className="text-zinc-300">{data.build_engine?.health?.version || "—"}</div>
           </div>
         </div>
-        {data.coolify.configured && !data.coolify?.health?.ok && (
+        {data.build_engine?.configured && !data.build_engine?.health?.ok && (
           <div className="mt-3 text-[11px] font-mono text-zinc-500 leading-relaxed">
-            Credentials are saved, but DeployHub's backend couldn't reach <span className="text-zinc-300">{data.coolify.base_url}</span> right now.
+            Credentials are saved, but DeployHub's backend couldn't reach <span className="text-zinc-300">{data.build_engine.base_url}</span> right now.
             Check firewall rules, server uptime, or network routing. Deployments will queue until reachable.
-            {data.coolify?.health?.error && <span className="text-signal-failed"> · {data.coolify.health.error}</span>}
+            {data.build_engine?.health?.error && <span className="text-signal-failed"> · {data.build_engine.health.error}</span>}
           </div>
         )}
       </Section>
@@ -587,7 +587,7 @@ function PlatformTab() {
               data-testid="admin-cf-token"
             />
           </Field>
-          <Field label="Deploy target IP (A record)" hint="Your Coolify server IP">
+          <Field label="Deploy target IP (A record)" hint="Your build engine server IP">
             <Input
               value={form.default_subdomain_target_ip}
               onChange={(e) => setForm({ ...form, default_subdomain_target_ip: e.target.value })}

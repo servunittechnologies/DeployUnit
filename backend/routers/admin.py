@@ -94,7 +94,8 @@ async def integrations(request: Request):
     from clients.mailersend import configured as ms_ok
     ms = {"configured": await ms_ok()}
     return {
-        "coolify": cool,
+        "build_engine": cool,
+        "coolify": cool,  # legacy alias for older clients — DEPRECATED
         "mollie": moll,
         "github_oauth": gh,
         "twilio": tw,

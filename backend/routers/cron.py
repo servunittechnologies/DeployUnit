@@ -61,7 +61,7 @@ async def list_cron(app_id: str, request: Request):
     user = await get_current_user(request)
     app = await _resolve_app(app_id, user, roles=None)
     jobs = await get_db().cron_jobs.find({"app_id": app_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return {"jobs": jobs, "app_id": app_id, "supports_coolify_sync": bool(app.get("coolify_app_uuid"))}
+    return {"jobs": jobs, "app_id": app_id, "supports_build_engine_sync": bool(app.get("coolify_app_uuid"))}
 
 
 @router.post("/apps/{app_id}/cron")
