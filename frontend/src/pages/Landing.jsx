@@ -1,797 +1,930 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
+import { motion, useInView, useReducedMotion } from "framer-motion";
 import {
-  ArrowRight, ChevronRight, Sparkles, ShieldCheck, Activity, Globe, Zap,
-  GitBranch, Github, Terminal, Cpu, Gauge, Rocket, Lock, Waves,
+  ArrowRight, ArrowUpRight, Check, X as XIcon, Sparkles, Activity,
+  Globe, Zap, GitBranch, Github, Terminal, Cpu, Gauge, Rocket, Lock,
+  Leaf, Wind, Layers, BarChart3, Bell, Code2, FileText, Mail, Bot,
+  Database, ShieldCheck, Server, MapPin, Workflow, ChevronRight, Eye,
 } from "lucide-react";
+import {
+  ResponsiveContainer, AreaChart, Area, LineChart, Line,
+  CartesianGrid, XAxis, YAxis, Tooltip as RTooltip, Bar, BarChart,
+} from "recharts";
 import Logo from "../components/Logo";
 import ConstellationCanvas from "../components/ConstellationCanvas";
 import useTypewriter from "../hooks/useTypewriter";
-import useScrambleText from "../hooks/useScrambleText";
-import useSpotlight from "../hooks/useSpotlight";
 
-const TECH = [
-  "Next.js 14", "Node 20", "Bun", "PNPM", "TypeScript", "Tailwind", "Prisma",
-  "Postgres", "Redis", "Edge Functions", "Nginx", "Docker", "Nixpacks", "sslip.io",
-];
+/* ───────────────────────── Shared atoms ───────────────────────── */
+
+const CYAN = "#06B6D4";
+const GREEN = "#10B981";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0 },
 };
+const stagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+};
 
-function Section({ children, className = "", id }) {
+function Overline({ children, color = "text-cyan-400" }) {
   return (
-    <section id={id} className={`relative ${className}`}>
-      {children}
-    </section>
-  );
-}
-
-function SectionLabel({ children }) {
-  return (
-    <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] text-brand">
-      <span className="h-px w-6 bg-brand/60" />
+    <div className={`inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] ${color}`}>
+      <span className={`h-px w-6 ${color === "text-cyan-400" ? "bg-cyan-500/60" : "bg-emerald-500/60"}`} />
       {children}
     </div>
   );
 }
 
-/* ---------- Hero: typewriter + constellation + live deploy HUD ---------- */
+function Section({ id, className = "", children }) {
+  return (
+    <section id={id} className={`relative ${className}`}>{children}</section>
+  );
+}
+
+function Container({ className = "", children }) {
+  return (
+    <div className={`relative max-w-7xl mx-auto px-6 lg:px-8 ${className}`}>{children}</div>
+  );
+}
+
+function PrimaryBtn({ to, href, children, testId, className = "" }) {
+  const Comp = to ? Link : "a";
+  const props = to ? { to } : { href };
+  return (
+    <Comp
+      {...props}
+      data-testid={testId}
+      className={`group inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-6 py-3 transition-colors ${className}`}
+    >
+      {children}
+      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+    </Comp>
+  );
+}
+
+function OutlineBtn({ to, href, children, testId, className = "" }) {
+  const Comp = to ? Link : "a";
+  const props = to ? { to } : { href };
+  return (
+    <Comp
+      {...props}
+      data-testid={testId}
+      className={`inline-flex items-center gap-2 border border-zinc-700 hover:border-cyan-500 text-white px-6 py-3 transition-colors font-mono text-sm uppercase tracking-wider ${className}`}
+    >
+      {children}
+    </Comp>
+  );
+}
+
+/* ───────────────────────── Top nav ───────────────────────── */
+
+function Nav() {
+  return (
+    <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-zinc-800">
+      <Container className="flex items-center justify-between h-16">
+        <Link to="/" className="flex items-center gap-2.5" data-testid="nav-home">
+          <Logo className="h-7 w-auto" />
+        </Link>
+        <nav className="hidden md:flex items-center gap-6 text-sm">
+          <a href="#features" className="text-zinc-300 hover:text-white" data-testid="nav-features">Features</a>
+          <a href="#compare" className="text-zinc-300 hover:text-white" data-testid="nav-compare">Compare</a>
+          <a href="#green" className="text-zinc-300 hover:text-white" data-testid="nav-green">Green</a>
+          <Link to="/pricing" className="text-zinc-300 hover:text-white" data-testid="nav-pricing">Pricing</Link>
+          <Link to="/login" className="text-zinc-300 hover:text-white" data-testid="nav-login">Log in</Link>
+        </nav>
+        <PrimaryBtn to="/register" testId="nav-cta" className="text-sm px-4 py-2">Deploy now</PrimaryBtn>
+      </Container>
+    </header>
+  );
+}
+
+/* ───────────────────────── Hero ───────────────────────── */
 
 function HeroTerminal() {
-  const lines = useMemo(
-    () => [
-      { t: "$ deployhub deploy --repo novabrew/web", delay: 200 },
-      { t: "→ Detected framework: Next.js 14 (app router)", delay: 220 },
-      { t: "→ Build pack: nixpacks", delay: 200 },
-      { t: "→ Allocating container on region eu-west", delay: 240 },
-      { t: "→ Domain assigned: novabrew.app", delay: 200 },
-      { t: "→ SSL: issued · HTTP/3 · Brotli", delay: 200 },
-      { t: "✓ Live in 47s", delay: 260 },
-    ],
-    []
-  );
+  const lines = useMemo(() => [
+    { t: "$ deployhub deploy --repo servunit/web", c: "text-zinc-300" },
+    { t: "→ Connected: GitHub (oauth · push verified)", c: "text-zinc-500" },
+    { t: "→ Detected: Next.js 14 · App Router", c: "text-zinc-500" },
+    { t: "→ Buildpack: nixpacks · region eu-west", c: "text-zinc-500" },
+    { t: "→ Container up · 384 MB · 0.5 vCPU", c: "text-zinc-500" },
+    { t: "→ Domain assigned: servunit.app · TLS issued", c: "text-emerald-400" },
+    { t: "→ Live URL: https://servunit.app  ⏱  41 s", c: "text-cyan-400" },
+    { t: "✓ Deploy succeeded · 100% green energy", c: "text-emerald-400" },
+  ], []);
 
-  const [visible, setVisible] = useState(0);
+  const [idx, setIdx] = useState(0);
+  const reduce = useReducedMotion();
   useEffect(() => {
-    if (visible >= lines.length) return;
-    const d = lines[visible].delay;
-    const t = setTimeout(() => setVisible((v) => v + 1), d);
+    if (reduce) { setIdx(lines.length); return; }
+    if (idx >= lines.length) return;
+    const t = setTimeout(() => setIdx((i) => i + 1), 480);
     return () => clearTimeout(t);
-  }, [visible, lines]);
-
-  // Replay periodically so the hero keeps feeling alive
-  useEffect(() => {
-    if (visible < lines.length) return;
-    const t = setTimeout(() => setVisible(0), 7000);
-    return () => clearTimeout(t);
-  }, [visible, lines]);
+  }, [idx, lines.length, reduce]);
 
   return (
-    <div className="terminal w-full max-w-[480px]">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-black/70">
-        <span className="h-2 w-2 rounded-full bg-signal-failed/70" />
-        <span className="h-2 w-2 rounded-full bg-signal-queued/70" />
-        <span className="h-2 w-2 rounded-full bg-signal-live/70 pulse-glow" />
-        <span className="ml-2 text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-          ~/novabrew · zsh
-        </span>
+    <div className="relative border border-zinc-800 bg-black/80 backdrop-blur-sm font-mono text-xs sm:text-sm shadow-[0_0_40px_-15px_rgba(6,182,212,0.45)]">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-800 bg-zinc-950/80">
+        <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+        <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
+        <span className="ml-3 text-[10px] uppercase tracking-[0.3em] text-zinc-500">~/deployhub</span>
       </div>
-      <div className="p-4 text-[12px] leading-6 min-h-[220px]">
-        {lines.slice(0, visible).map((l, i) => {
-          const isCmd = l.t.startsWith("$");
-          const isOk = l.t.startsWith("✓");
-          const cls = isCmd
-            ? "text-zinc-300"
-            : isOk
-              ? "text-signal-live"
-              : "text-zinc-400";
-          return (
-            <motion.div
-              key={`${visible}-${i}`}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              className={cls}
-            >
-              {l.t}
-            </motion.div>
-          );
-        })}
-        {visible < lines.length && (
-          <div className="text-brand caret" aria-hidden="true" />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LiveDeployHUD() {
-  // Animated chart values
-  const pts = useMemo(
-    () => [42, 40, 44, 32, 34, 22, 26, 14, 18, 10, 12, 8, 6],
-    []
-  );
-  const uptime = useScrambleText("99.99%", { durationMs: 900, replayKey: 0 });
-
-  return (
-    <div className="relative border border-white/10 p-4 bg-elevated/40 backdrop-blur-md w-full max-w-[480px] ml-auto">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono inline-flex items-center gap-2">
-          <Waves className="h-3 w-3 text-brand" /> response latency — p50
-        </div>
-        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-live scramble">
-          {uptime}
-        </div>
-      </div>
-      <svg viewBox="0 0 260 60" className="w-full h-14">
-        <defs>
-          <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(0,229,255,0.6)" />
-            <stop offset="100%" stopColor="rgba(0,229,255,0)" />
-          </linearGradient>
-        </defs>
-        <polyline
-          fill="url(#g1)"
-          stroke="none"
-          points={`0,60 ${pts.map((v, i) => `${(i / (pts.length - 1)) * 260},${v}`).join(" ")} 260,60`}
-        />
-        <polyline
-          fill="none"
-          stroke="#00E5FF"
-          strokeWidth="1.6"
-          points={pts.map((v, i) => `${(i / (pts.length - 1)) * 260},${v}`).join(" ")}
-        />
-        {pts.map((v, i) => (
-          <circle
+      <div className="p-4 sm:p-5 space-y-1 min-h-[260px]">
+        {lines.slice(0, idx + 1).map((l, i) => (
+          <motion.div
             key={i}
-            cx={(i / (pts.length - 1)) * 260}
-            cy={v}
-            r={1.8}
-            fill="#00E5FF"
-            opacity={i === pts.length - 1 ? 1 : 0.4}
-          />
-        ))}
-      </svg>
-      <div className="mt-3 grid grid-cols-3 gap-px bg-white/[0.06]">
-        {[
-          ["requests", "4.2M"],
-          ["errors", "0.01%"],
-          ["deploys", "38"],
-        ].map(([k, v]) => (
-          <div key={k} className="bg-background px-2 py-2">
-            <div className="text-[9px] uppercase tracking-[0.3em] font-mono text-zinc-500">{k}</div>
-            <div className="font-display text-sm mt-0.5">{v}</div>
-          </div>
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.25 }}
+            className={l.c}
+          >
+            {l.t}
+            {i === idx && idx < lines.length - 1 && <span className="ml-1 inline-block w-1.5 h-3 bg-cyan-400 animate-pulse align-middle" />}
+          </motion.div>
         ))}
       </div>
     </div>
   );
 }
 
-function OrbitalOrnament() {
+function Hero() {
   return (
-    <div className="pointer-events-none absolute -top-24 -right-32 h-[560px] w-[560px] opacity-60">
-      <div className="absolute inset-0 animate-spin-slow">
-        <div className="absolute inset-0 rounded-full border border-brand/20" />
-        <div className="absolute inset-8 rounded-full border border-brand/15" />
-        <div className="absolute inset-20 rounded-full border border-brand/10" />
+    <Section className="relative pt-32 pb-24 lg:pt-40 lg:pb-32 overflow-hidden">
+      <div className="absolute inset-0 -z-10">
+        <ConstellationCanvas density={60} />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
       </div>
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-brand pulse-glow" />
-    </div>
+      <Container className="grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center">
+        <motion.div initial="hidden" animate="show" variants={stagger}>
+          <motion.div variants={fadeUp} className="mb-5"><Overline>The European agency PaaS</Overline></motion.div>
+          <motion.h1
+            variants={fadeUp}
+            className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95] text-white"
+          >
+            Deploy anything.<br />
+            <span className="text-cyan-400">Faster.</span> <span className="text-emerald-400">Greener.</span>
+          </motion.h1>
+          <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
+            The all-in-one PaaS built for agencies and modern teams.
+            Push to Git → live URL, container metrics, analytics and
+            uptime alerts — on 100% renewable EU infrastructure.
+            Zero config, full white-label.
+          </motion.p>
+          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
+            <PrimaryBtn to="/register" testId="hero-cta-primary">Start deploying</PrimaryBtn>
+            <OutlineBtn to="/pricing" testId="hero-cta-secondary">See pricing</OutlineBtn>
+          </motion.div>
+          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-[0.3em] text-zinc-500">
+            <span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> EU-hosted</span>
+            <span className="inline-flex items-center gap-1.5"><Leaf className="h-3 w-3 text-emerald-400" /> green energy</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3 w-3" /> GDPR ready</span>
+            <span className="inline-flex items-center gap-1.5"><Eye className="h-3 w-3" /> 100% white-label</span>
+          </motion.div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
+          <HeroTerminal />
+        </motion.div>
+      </Container>
+    </Section>
   );
 }
 
-/* ---------- Bento grid feature cards with mouse-tracked spotlight ---------- */
+/* ───────────────────────── Logo strip ───────────────────────── */
 
-function BentoCard({ icon: Icon, label, title, body, className = "", children, testId }) {
-  const onMove = useSpotlight();
+function LogoStrip() {
+  const items = ["Next.js 14", "Node 20", "Bun", "TypeScript", "Postgres", "Redis", "Docker", "Tailwind", "Prisma", "Nixpacks"];
+  return (
+    <Section className="py-10 border-y border-zinc-900 bg-zinc-950/40">
+      <Container>
+        <div className="text-center text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-500 mb-5">
+          Auto-detects every modern stack
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-xs font-mono text-zinc-500">
+          {items.map((s) => (
+            <span key={s} className="hover:text-cyan-400 transition-colors">{s}</span>
+          ))}
+        </div>
+      </Container>
+    </Section>
+  );
+}
+
+/* ───────────────────────── How it works ───────────────────────── */
+
+function StepCard({ n, title, body, icon: Icon, anim }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-100px" });
   return (
     <motion.div
-      onMouseMove={onMove}
+      ref={ref}
+      initial="hidden"
+      animate={inView ? "show" : "hidden"}
       variants={fadeUp}
-      className={`spotlight group border border-white/[0.08] bg-[#0a0a0a] p-6 md:p-7 overflow-hidden ${className}`}
-      data-testid={testId}
+      transition={{ duration: 0.5 }}
+      className="relative border border-zinc-800 bg-zinc-950/40 p-7"
+      data-testid={`how-step-${n}`}
     >
-      <div className="flex items-center gap-2 mb-4 text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500">
-        <Icon className="h-3.5 w-3.5 text-brand" />
-        {label}
+      <div className="flex items-start justify-between mb-5">
+        <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500">step / 0{n}</div>
+        <Icon className="h-5 w-5 text-cyan-400" />
       </div>
-      <h3 className="font-display text-xl md:text-2xl tracking-tight">{title}</h3>
-      <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{body}</p>
-      {children}
+      <h3 className="font-display text-2xl font-bold tracking-tight text-white mb-2">{title}</h3>
+      <p className="text-sm text-zinc-400 leading-relaxed">{body}</p>
+      <div className="mt-5">{anim}</div>
     </motion.div>
   );
 }
 
-function DeployBentoVisual() {
+function StepAnimGithub() {
   return (
-    <div className="mt-5 font-mono text-[11px] leading-[1.6]">
-      {[
-        ["[CLONE]", "git fetch origin main", "text-brand"],
-        ["[BUILD]", "yarn install · 1.4k modules", "text-brand"],
-        ["[NIXPACKS]", "next build · compiled in 18s", "text-brand"],
-        ["[DEPLOY]", "container live on eu-west-1", "text-signal-live"],
-      ].map(([tag, msg, color], i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, x: -4 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ delay: 0.08 * i }}
-          className="flex gap-2"
-        >
-          <span className={color}>{tag}</span>
-          <span className="text-zinc-400">{msg}</span>
-        </motion.div>
-      ))}
+    <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 border border-zinc-800 bg-black/50 px-3 py-2">
+      <Github className="h-3.5 w-3.5 text-zinc-300" />
+      <span>servunit/web</span>
+      <span className="ml-auto text-emerald-400">main · synced</span>
     </div>
   );
 }
-
-function MonitoringBentoVisual() {
-  const bars = useMemo(
-    () =>
-      Array.from({ length: 32 }, (_, i) =>
-        0.4 + 0.6 * Math.abs(Math.sin(i * 0.9) + Math.cos(i * 0.3) * 0.4)
-      ),
-    []
-  );
+function StepAnimDetect() {
   return (
-    <div className="mt-5 flex items-end gap-[3px] h-14">
-      {bars.map((b, i) => (
+    <div className="flex flex-wrap gap-1.5">
+      {["nextjs", "node", "postgres", "redis", "tailwind"].map((t, i) => (
         <motion.span
-          key={i}
-          initial={{ scaleY: 0, opacity: 0.3 }}
-          whileInView={{ scaleY: b, opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.015, duration: 0.5 }}
-          style={{ transformOrigin: "bottom" }}
-          className="flex-1 bg-brand/70"
-        />
-      ))}
-    </div>
-  );
-}
-
-function GitBranchVisual() {
-  return (
-    <div className="mt-5 relative h-24 font-mono text-[11px]">
-      <svg viewBox="0 0 280 90" className="absolute inset-0 w-full h-full text-brand/70">
-        <path d="M10,70 L80,70 Q100,70 100,50 L100,28 Q100,18 110,18 L260,18" fill="none" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M100,50 L100,70 Q100,82 112,82 L260,82" fill="none" stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 3" />
-        <circle cx="80" cy="70" r="3.5" fill="#00E5FF" />
-        <circle cx="150" cy="18" r="3.5" fill="#00E5FF" />
-        <circle cx="220" cy="18" r="3.5" fill="#00E5FF" />
-        <circle cx="180" cy="82" r="3.5" fill="#A1A1AA" />
-      </svg>
-      <div className="absolute top-[2px] left-[155px] text-[10px] text-brand">main</div>
-      <div className="absolute bottom-[-2px] left-[120px] text-[10px] text-zinc-500">staging</div>
-    </div>
-  );
-}
-
-/* ---------- Rotating stats strip ---------- */
-
-function StatStrip() {
-  const stats = [
-    ["p50 response", "42ms"],
-    ["avg deploy", "47s"],
-    ["platform uptime", "99.99%"],
-    ["active regions", "6"],
-  ];
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border-y border-white/[0.06]">
-      {stats.map(([k, v], i) => (
-        <motion.div
-          key={k}
-          initial={{ opacity: 0, y: 16 }}
+          key={t}
+          initial={{ opacity: 0, y: 6 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ delay: i * 0.08 }}
-          className="bg-background px-6 py-5 relative overflow-hidden"
+          transition={{ delay: 0.1 * i }}
+          className="text-[10px] font-mono px-2 py-0.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30"
         >
-          <div className="sweep-bg absolute inset-x-0 top-0 h-px opacity-60" />
-          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono">{k}</div>
-          <div className="font-display text-3xl tracking-tighter mt-1">{v}</div>
+          {t}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+function StepAnimMetrics() {
+  const data = useMemo(
+    () => Array.from({ length: 20 }, (_, i) => ({ x: i, cpu: 22 + 18 * Math.sin(i / 2) + (i % 4) * 4 })),
+    [],
+  );
+  return (
+    <div style={{ width: "100%", height: 60 }}>
+      <ResponsiveContainer>
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id="cpufill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CYAN} stopOpacity={0.55} />
+              <stop offset="100%" stopColor={CYAN} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Area type="monotone" dataKey="cpu" stroke={CYAN} strokeWidth={1.5} fill="url(#cpufill)" />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <Section id="how" className="py-24 lg:py-32">
+      <Container>
+        <div className="mb-12 text-center">
+          <Overline>How it works</Overline>
+          <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">
+            From commit to live URL in 41 seconds.
+          </h2>
+          <p className="mt-3 text-zinc-400 max-w-2xl mx-auto">
+            No Dockerfile to write, no nginx to configure. Connect a repo, we handle the rest.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-5 relative">
+          <StepCard n={1} title="Connect GitHub" body="OAuth in one click. We read public & private repos with a single permission scope." icon={Github} anim={<StepAnimGithub />} />
+          <StepCard n={2} title="Auto-detect stack" body="Nixpacks reads your package.json, requirements.txt, or Dockerfile and builds the right image." icon={Workflow} anim={<StepAnimDetect />} />
+          <StepCard n={3} title="Ship + observe" body="Live URL, TLS, custom domain, real-time container metrics and alerts — all from day zero." icon={Activity} anim={<StepAnimMetrics />} />
+        </div>
+      </Container>
+    </Section>
+  );
+}
+
+/* ───────────────────────── Features bento ───────────────────────── */
+
+function MetricsGraphMock() {
+  const data = useMemo(
+    () => Array.from({ length: 30 }, (_, i) => ({
+      t: i, cpu: 30 + Math.sin(i / 3) * 18 + (i % 5) * 2,
+      mem: 55 + Math.cos(i / 4) * 12 + Math.sin(i / 6) * 6,
+    })),
+    [],
+  );
+  return (
+    <div style={{ width: "100%", height: 160 }}>
+      <ResponsiveContainer>
+        <LineChart data={data}>
+          <CartesianGrid stroke="#1f1f23" vertical={false} />
+          <XAxis dataKey="t" hide />
+          <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} />
+          <RTooltip
+            contentStyle={{ background: "#0a0a0a", border: "1px solid #27272a", fontSize: 11, fontFamily: "JetBrains Mono" }}
+            cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }}
+          />
+          <Line type="monotone" dataKey="cpu" name="CPU %" stroke={CYAN} dot={false} strokeWidth={2} animationDuration={1800} />
+          <Line type="monotone" dataKey="mem" name="MEM %" stroke={GREEN} dot={false} strokeWidth={2} animationDuration={1800} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function PageSpeedGauge() {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+  const [score, setScore] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    const target = 98;
+    let f = 0;
+    const id = setInterval(() => { f += 2; setScore(Math.min(target, f)); if (f >= target) clearInterval(id); }, 22);
+    return () => clearInterval(id);
+  }, [inView]);
+  const r = 56;
+  const c = 2 * Math.PI * r;
+  return (
+    <div ref={ref} className="flex items-center gap-5">
+      <svg width={130} height={130} viewBox="0 0 130 130">
+        <circle cx={65} cy={65} r={r} stroke="#1f1f23" strokeWidth={8} fill="none" />
+        <circle
+          cx={65} cy={65} r={r}
+          stroke={CYAN} strokeWidth={8} fill="none"
+          strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)}
+          strokeLinecap="round" transform="rotate(-90 65 65)"
+          style={{ transition: "stroke-dashoffset 1s ease-out" }}
+        />
+        <text x="65" y="72" textAnchor="middle" className="fill-cyan-400 font-mono" fontSize="28">{score}</text>
+      </svg>
+      <div className="text-xs font-mono text-zinc-400 space-y-1">
+        <div className="flex justify-between gap-3"><span>LCP</span><span className="text-emerald-400">1.2s</span></div>
+        <div className="flex justify-between gap-3"><span>FCP</span><span className="text-emerald-400">0.8s</span></div>
+        <div className="flex justify-between gap-3"><span>CLS</span><span className="text-emerald-400">0.02</span></div>
+        <div className="flex justify-between gap-3"><span>TBT</span><span className="text-cyan-400">120ms</span></div>
+      </div>
+    </div>
+  );
+}
+
+function VisitorMapMock() {
+  const dots = useMemo(() => [
+    { x: 18, y: 35 }, { x: 22, y: 45 }, { x: 28, y: 38 }, { x: 25, y: 50 },
+    { x: 40, y: 30 }, { x: 45, y: 42 }, { x: 50, y: 38 }, { x: 60, y: 50 },
+    { x: 68, y: 45 }, { x: 78, y: 55 }, { x: 75, y: 38 }, { x: 32, y: 60 },
+    { x: 55, y: 65 }, { x: 30, y: 28 }, { x: 65, y: 28 },
+  ], []);
+  return (
+    <div className="relative h-[160px] border border-zinc-800 bg-zinc-950/60 overflow-hidden">
+      <div
+        className="absolute inset-0 opacity-[0.07]"
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)", backgroundSize: "16px 16px" }}
+      />
+      {dots.map((d, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0, scale: 0 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.06, duration: 0.35 }}
+          className="absolute h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_2px_rgba(6,182,212,0.6)]"
+          style={{ left: `${d.x}%`, top: `${d.y}%` }}
+        />
+      ))}
+      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-400">
+        <span className="text-cyan-400">847</span> visitors · <span className="text-emerald-400">14 countries</span>
+      </div>
+    </div>
+  );
+}
+
+function AlertsMock() {
+  const items = [
+    { ch: "slack", msg: "✓ /api/login healthy · 99.99% 24h", t: "12:04", k: "ok" },
+    { ch: "discord", msg: "↗ CPU 78% on web-01 · scaled", t: "12:08", k: "warn" },
+    { ch: "sms", msg: "→ Deploy succeeded · v1.4.2", t: "12:11", k: "ok" },
+  ];
+  return (
+    <div className="space-y-2">
+      {items.map((it, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, x: -10 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.15 * i }}
+          className="flex items-center gap-3 border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs font-mono"
+        >
+          <span className={`uppercase text-[9px] tracking-[0.25em] px-1.5 py-0.5 border ${it.k === "warn" ? "text-yellow-400 border-yellow-500/40" : "text-emerald-400 border-emerald-500/30"}`}>{it.ch}</span>
+          <span className="text-zinc-300 flex-1 truncate">{it.msg}</span>
+          <span className="text-zinc-600">{it.t}</span>
         </motion.div>
       ))}
     </div>
   );
 }
 
-/* ---------- Interactive "deploy" playground with parallax tilt ---------- */
-
-function DeployPlayground() {
-  const ref = useRef(null);
-  const [rot, setRot] = useState({ x: 0, y: 0 });
-  const reduce = useReducedMotion();
-
-  const onMove = (e) => {
-    if (reduce) return;
-    const r = ref.current.getBoundingClientRect();
-    const mx = (e.clientX - r.left) / r.width;
-    const my = (e.clientY - r.top) / r.height;
-    setRot({ x: (0.5 - my) * 8, y: (mx - 0.5) * 10 });
-  };
-  const onLeave = () => setRot({ x: 0, y: 0 });
-
+function WorkspaceSwitcherMock() {
+  const ws = ["Beyond Meassure", "ServUnit", "Stella Labs", "OakRoot"];
   return (
-    <div
-      ref={ref}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      style={{ perspective: "1600px" }}
-      className="relative"
-    >
-      <motion.div
-        style={{
-          transform: `rotateX(${rot.x}deg) rotateY(${rot.y}deg)`,
-          transformStyle: "preserve-3d",
-          transition: "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
-        className="border border-white/10 bg-[#0a0a0a] overflow-hidden"
-      >
-        {/* app tab bar */}
-        <div className="flex items-stretch border-b border-white/[0.06]">
-          <div className="px-4 py-3 border-r border-white/[0.06] bg-white/[0.02] text-[11px] font-mono text-brand">
-            novabrew-web
-          </div>
-          <div className="px-4 py-3 border-r border-white/[0.06] text-[11px] font-mono text-zinc-500">
-            novabrew-api
-          </div>
-          <div className="px-4 py-3 border-r border-white/[0.06] text-[11px] font-mono text-zinc-500">
-            novabrew-admin
-          </div>
-          <div className="ml-auto px-4 py-3 text-[10px] uppercase tracking-[0.3em] font-mono text-signal-live inline-flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-ping-soft" />
-            live
-          </div>
-        </div>
-        <div className="grid grid-cols-12">
-          {/* left — deploy history */}
-          <div className="col-span-5 border-r border-white/[0.06] p-5 space-y-3">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono">deploys</div>
-            {[
-              ["deploy/42", "main@a8f3c", "42s", "live"],
-              ["deploy/41", "main@e2a17", "48s", "live"],
-              ["deploy/40", "feat/ui", "—",    "failed"],
-            ].map(([id, msg, t, state]) => (
-              <div key={id} className="flex items-center justify-between font-mono text-[11px]">
-                <div className="flex items-center gap-3">
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    state === "live" ? "bg-signal-live"
-                    : state === "failed" ? "bg-signal-failed"
-                    : "bg-signal-queued"
-                  }`} />
-                  <span className="text-zinc-300">{id}</span>
-                  <span className="text-zinc-500">{msg}</span>
-                </div>
-                <span className="text-zinc-500">{t}</span>
-              </div>
-            ))}
-          </div>
-          {/* right — live preview mock */}
-          <div className="col-span-7 relative bg-black/40 min-h-[220px]">
-            <div className="absolute inset-0 bg-grid-fine opacity-40" />
-            <div className="absolute inset-6 border border-white/10 bg-elevated/50 backdrop-blur-sm p-5 flex flex-col">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-brand font-mono">novabrew.app</div>
-              <div className="font-display text-2xl tracking-tight mt-1">Single-origin espresso, shipped.</div>
-              <div className="mt-auto h-9 w-28 bg-brand flex items-center justify-center text-brand-fg text-xs font-medium">
-                Shop now →
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+    <div className="border border-zinc-800 bg-zinc-950/50">
+      <div className="px-3 py-2 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">workspaces</div>
+      <div className="divide-y divide-zinc-900">
+        {ws.map((w, i) => (
+          <motion.div
+            key={w}
+            initial={{ opacity: 0, x: -8 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.1 }}
+            className="flex items-center justify-between px-3 py-2 text-xs font-mono"
+          >
+            <span className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 rounded-full ${i === 0 ? "bg-cyan-400" : "bg-zinc-700"}`} />
+              <span className={i === 0 ? "text-cyan-300" : "text-zinc-400"}>{w}</span>
+            </span>
+            <span className="text-zinc-600">{4 + i * 2} apps</span>
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }
 
-/* ---------- Main Landing ---------- */
-
-export default function Landing() {
-  const scrollRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: scrollRef, offset: ["start start", "end end"] });
-  const bgShift = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
-
-  const { output: heroLead } = useTypewriter(
-    "Production-grade hosting for Next.js & Node. Without the Vercel bill.",
-    { cps: 40, startDelayMs: 250 }
+function BentoCard({ span = "lg:col-span-1 lg:row-span-1", overline, title, body, children, testId }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5 }}
+      whileHover={{ borderColor: "rgba(6,182,212,0.5)" }}
+      className={`relative border border-zinc-800 bg-zinc-950/40 p-6 lg:p-8 overflow-hidden flex flex-col ${span}`}
+      data-testid={testId}
+    >
+      <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-cyan-500/[0.04] blur-3xl pointer-events-none" />
+      <div className="relative">
+        <Overline>{overline}</Overline>
+        <h3 className="mt-3 font-display text-xl md:text-2xl font-semibold tracking-tight text-white">{title}</h3>
+        <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{body}</p>
+      </div>
+      <div className="relative mt-5 flex-1">{children}</div>
+    </motion.div>
   );
+}
+
+function Features() {
+  return (
+    <Section id="features" className="py-24 lg:py-32 bg-zinc-950/30">
+      <Container>
+        <div className="mb-12 max-w-3xl">
+          <Overline>What ships today</Overline>
+          <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">
+            Real features. Real data. <span className="text-cyan-400">Built in.</span>
+          </h2>
+          <p className="mt-3 text-zinc-400 text-base sm:text-lg">
+            Every dashboard you'd otherwise stitch together (Datadog · Plausible · Cloudflare · Sentry) — already inside.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 auto-rows-[minmax(280px,auto)]">
+          <BentoCard
+            span="lg:col-span-2"
+            overline="Live container metrics"
+            title="Watch CPU, RAM, network and disk in real time."
+            body="A first-party agent on your VPS pushes Docker stats every tick. Drawn as silky 60fps charts in your dashboard — auto-mapped to apps."
+            testId="feature-metrics"
+          >
+            <MetricsGraphMock />
+          </BentoCard>
+
+          <BentoCard
+            overline="Google PageSpeed"
+            title="Lighthouse audits on autopilot."
+            body="Daily mobile + desktop scores. Core Web Vitals trend. Manual re-runs in one click."
+            testId="feature-pagespeed"
+          >
+            <PageSpeedGauge />
+          </BentoCard>
+
+          <BentoCard
+            overline="Cookieless analytics"
+            title="Privacy-first pageview tracker."
+            body="1 KB script, sendBeacon, anonymized visitor hash that rotates daily. No banners. No cookies. GDPR by default."
+            testId="feature-analytics"
+          >
+            <VisitorMapMock />
+          </BentoCard>
+
+          <BentoCard
+            overline="Alerts everywhere"
+            title="Uptime + deploys → Slack · Discord · SMS · WhatsApp."
+            body="Wire every signal to the channel you actually watch. Credit-billed only when SMS or WhatsApp fire."
+            testId="feature-alerts"
+          >
+            <AlertsMock />
+          </BentoCard>
+
+          <BentoCard
+            overline="Agency multi-tenant"
+            title="Workspaces per customer, in seconds."
+            body="Switch between your customers' fleets without losing context. Per-workspace billing, members, and audit logs."
+            testId="feature-workspaces"
+          >
+            <WorkspaceSwitcherMock />
+          </BentoCard>
+
+          {/* Three small icon-led capability tiles */}
+          {[
+            { icon: GitBranch, title: "PR previews", body: "Every pull request gets its own URL + container, killed on merge." },
+            { icon: Database, title: "Managed databases", body: "Postgres · MySQL · Redis attached to apps with zero-touch creds." },
+            { icon: Globe, title: "Custom domains + DNS", body: "Cloudflare DNS provisioned automatically. Auto-SSL via Let's Encrypt." },
+            { icon: Lock, title: "Audit log + RBAC", body: "Every action logged. Owner / Admin / Developer / Viewer roles." },
+            { icon: Cpu, title: "Per-app resource limits", body: "Dial vCPU, RAM, and storage; pay only what you use via credits." },
+            { icon: Bell, title: "Custom cron tasks", body: "Schedule background jobs without spinning up new infra." },
+          ].map((c) => (
+            <motion.div
+              key={c.title}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4 }}
+              className="border border-zinc-800 bg-zinc-950/30 p-5 hover:border-cyan-500/40 transition-colors"
+            >
+              <c.icon className="h-5 w-5 text-cyan-400 mb-3" />
+              <div className="font-display text-base font-semibold text-white">{c.title}</div>
+              <div className="mt-1.5 text-xs text-zinc-400 leading-relaxed">{c.body}</div>
+            </motion.div>
+          ))}
+        </div>
+      </Container>
+    </Section>
+  );
+}
+
+/* ───────────────────────── Comparison table ───────────────────────── */
+
+function Compare() {
+  const rows = [
+    { f: "EU data residency",         dh: true, vc: false, rd: "partial", coolify: "self-host" },
+    { f: "Included container metrics", dh: true, vc: false, rd: "partial", coolify: false },
+    { f: "Built-in web analytics",     dh: true, vc: false, rd: false,     coolify: false },
+    { f: "100% white-label",           dh: true, vc: false, rd: false,     coolify: "DIY" },
+    { f: "Agency multi-tenant",        dh: true, vc: false, rd: false,     coolify: false },
+    { f: "Green energy by default",    dh: true, vc: false, rd: false,     coolify: "self-host" },
+    { f: "Credit-based pricing",       dh: true, vc: false, rd: false,     coolify: false },
+    { f: "Push-to-deploy from GitHub", dh: true, vc: true,  rd: true,      coolify: "DIY" },
+    { f: "PR previews",                dh: true, vc: true,  rd: true,      coolify: false },
+    { f: "Managed support",            dh: true, vc: true,  rd: true,      coolify: false },
+  ];
+
+  function Cell({ v }) {
+    if (v === true) return <Check className="h-4 w-4 text-cyan-400 mx-auto" />;
+    if (v === false) return <XIcon className="h-4 w-4 text-zinc-700 mx-auto" />;
+    return <span className="block text-center text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-500">{v}</span>;
+  }
 
   return (
-    <div ref={scrollRef} className="min-h-screen bg-background text-foreground relative overflow-x-clip">
-      {/* global aurora background layer */}
-      <motion.div className="fixed inset-0 -z-10 pointer-events-none" style={{ y: bgShift }}>
-        <div className="aurora-blob" style={{ top: "-10%", left: "-10%", height: 520, width: 520, background: "radial-gradient(circle, #00E5FF 0%, transparent 60%)", animation: "aurora-1 22s ease-in-out infinite" }} />
-        <div className="aurora-blob" style={{ top: "25%", right: "-10%", height: 620, width: 620, background: "radial-gradient(circle, #6B4BFF 0%, transparent 55%)", animation: "aurora-2 28s ease-in-out infinite" }} />
-        <div className="aurora-blob" style={{ bottom: "-15%", left: "25%", height: 560, width: 560, background: "radial-gradient(circle, #00E5FF 0%, transparent 60%)", animation: "aurora-1 34s ease-in-out infinite reverse" }} />
-      </motion.div>
-
-      {/* nav */}
-      <header className="glass fixed top-0 inset-x-0 z-40">
-        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
-          <Logo />
-          <nav className="hidden md:flex items-center gap-7 text-sm text-zinc-400">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
-            <a href="#bento" className="hover:text-white transition-colors">Platform</a>
-            <Link to="/pricing" className="hover:text-white transition-colors" data-testid="nav-pricing">Pricing</Link>
-            <a href="#agency" className="hover:text-white transition-colors">Agencies</a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link to="/login" className="px-3 py-1.5 text-sm border border-white/15 hover:border-brand/70 hover:text-brand transition-colors" data-testid="nav-signin">
-              Sign in
-            </Link>
-            <Link to="/register" className="magnetic-btn px-3 py-1.5 text-sm bg-brand text-brand-fg font-medium hover:bg-brand/90 transition-colors shadow-[0_0_20px_rgba(0,229,255,0.25)]" data-testid="nav-signup">
-              Start free
-            </Link>
-          </div>
+    <Section id="compare" className="py-24 lg:py-32">
+      <Container>
+        <div className="mb-12 max-w-2xl">
+          <Overline>Compare</Overline>
+          <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">
+            Why teams switch to DeployHub.
+          </h2>
+          <p className="mt-3 text-zinc-400">
+            Apples-to-apples against the platforms you already know.
+          </p>
         </div>
-      </header>
 
-      {/* HERO */}
-      <Section className="pt-40 pb-28 overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-grid opacity-40" />
-        <ConstellationCanvas className="absolute inset-0 -z-10 w-full h-full pointer-events-none opacity-90" density={75} />
-        <OrbitalOrnament />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="border border-zinc-800 overflow-x-auto"
+          data-testid="compare-table"
+        >
+          <table className="w-full text-sm min-w-[640px]">
+            <thead>
+              <tr className="border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
+                <th className="text-left p-4 font-normal">Capability</th>
+                <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployHub</th>
+                <th className="p-4 font-normal">Vercel</th>
+                <th className="p-4 font-normal">Render</th>
+                <th className="p-4 font-normal">Coolify (DIY)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <motion.tr
+                  key={r.f}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.03 }}
+                  className="border-b border-zinc-900 last:border-b-0 hover:bg-zinc-950/50"
+                >
+                  <td className="p-4 text-zinc-300">{r.f}</td>
+                  <td className="p-4 bg-cyan-950/20 border-x border-cyan-500/20"><Cell v={r.dh} /></td>
+                  <td className="p-4"><Cell v={r.vc} /></td>
+                  <td className="p-4"><Cell v={r.rd} /></td>
+                  <td className="p-4"><Cell v={r.coolify} /></td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </motion.div>
+      </Container>
+    </Section>
+  );
+}
 
-        <div className="max-w-[1400px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative">
-          <div className="lg:col-span-7">
-            <motion.div
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 mb-6 px-3 py-1 border border-brand/30 bg-brand/5 text-brand text-xs font-mono uppercase tracking-[0.3em]"
-            >
-              <Sparkles className="h-3 w-3" /> v1.0 — public beta · EU-first
-            </motion.div>
+/* ───────────────────────── Green energy spotlight ───────────────────────── */
 
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9 }}
-              className="font-display text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tighter leading-[0.95]"
-            >
-              Ship Next.js & Node{" "}<br />
-              <span className="relative inline-block">
-                <span className="relative z-10 text-brand holo">in two clicks.</span>
-                <span className="absolute inset-x-0 bottom-1 h-3 bg-brand/20 -z-0 blur-md" />
-              </span>
-            </motion.h1>
-
-            <p className="mt-7 max-w-xl text-zinc-400 text-base leading-relaxed min-h-[52px]">
-              {heroLead}
-            </p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.6 }}
-              className="mt-9 flex flex-wrap items-center gap-3"
-            >
-              <Link to="/register" className="group magnetic-btn inline-flex items-center gap-2 px-6 py-3 bg-brand text-brand-fg font-medium hover:bg-brand/90 transition shadow-[0_0_28px_rgba(0,229,255,0.45)]" data-testid="hero-cta-start">
-                Deploy your first app
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link to="/pricing" className="inline-flex items-center gap-2 px-6 py-3 border border-white/15 hover:border-brand/70 hover:text-brand transition-colors text-sm" data-testid="hero-cta-pricing">
-                See pricing <ChevronRight className="h-4 w-4" />
-              </Link>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
-              className="mt-12 flex flex-wrap items-center gap-x-7 gap-y-2 text-xs font-mono text-zinc-500"
-            >
-              <span className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-signal-live animate-ping-soft" /> 99.99% uptime SLA
-              </span>
-              <span>Auto-SSL · HTTP/3</span>
-              <span>EU + US regions</span>
-              <span>White-label for agencies</span>
-            </motion.div>
-          </div>
-
-          <div className="lg:col-span-5 lg:-ml-6 flex flex-col gap-4 relative">
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.8 }} className="animate-float">
-              <HeroTerminal />
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.8 }}>
-              <LiveDeployHUD />
-            </motion.div>
-          </div>
-        </div>
-      </Section>
-
-      {/* STAT STRIP */}
-      <StatStrip />
-
-      {/* TECH MARQUEE */}
-      <div className="border-y border-white/[0.06] py-4 overflow-hidden">
-        <div className="flex gap-10 whitespace-nowrap animate-[shimmer_32s_linear_infinite]">
-          {[...TECH, ...TECH].map((t, i) => (
-            <span key={i} className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-500">
-              {t} <span className="text-brand/60 ml-2">/</span>
-            </span>
-          ))}
-        </div>
+function GreenEnergy() {
+  return (
+    <Section id="green" className="relative py-32 overflow-hidden">
+      <div className="absolute inset-0 -z-10">
+        <img
+          src="https://images.unsplash.com/photo-1558725148-e95a6523628c?crop=entropy&cs=srgb&fm=jpg&q=85&w=2400"
+          alt=""
+          className="w-full h-full object-cover opacity-30"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/40 to-black/70 mix-blend-overlay" />
       </div>
 
-      {/* BENTO PLATFORM GRID */}
-      <Section id="bento" className="max-w-[1400px] mx-auto px-6 py-28">
-        <motion.div
-          initial="hidden" whileInView="show" viewport={{ once: true, margin: "-120px" }}
-          variants={{ show: { transition: { staggerChildren: 0.1 } } }}
-        >
-          <motion.div variants={fadeUp} className="max-w-3xl mb-10">
-            <SectionLabel>// control room</SectionLabel>
-            <h2 className="mt-4 font-display text-4xl lg:text-5xl tracking-tighter font-semibold">
-              Every primitive you need to run<br />
-              <span className="text-brand">a production fleet.</span>
-            </h2>
+      {/* Floating particles */}
+      {[...Array(14)].map((_, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0, y: 30 }}
+          animate={{
+            opacity: [0, 0.6, 0],
+            y: [-20, -180],
+            x: [0, (i % 2 ? 30 : -25)],
+          }}
+          transition={{
+            duration: 6 + (i % 4),
+            delay: i * 0.4,
+            repeat: Infinity,
+            ease: "easeOut",
+          }}
+          className="absolute h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(16,185,129,0.55)]"
+          style={{ left: `${5 + i * 6}%`, bottom: "20%" }}
+        />
+      ))}
+
+      <Container className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger}>
+          <motion.div variants={fadeUp}><Overline color="text-emerald-400">Sustainability · USP</Overline></motion.div>
+          <motion.h2
+            variants={fadeUp}
+            className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-none"
+          >
+            100% wind & solar<br />
+            <span className="text-emerald-400">powered.</span>
+          </motion.h2>
+          <motion.p variants={fadeUp} className="mt-5 text-base sm:text-lg text-zinc-300 max-w-xl">
+            Every deploy on DeployHub runs in EU datacenters powered by renewable energy. No carbon offsets,
+            no greenwashing — your apps tick along on real wind and solar, with verifiable energy contracts.
+          </motion.p>
+          <motion.div variants={fadeUp} className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { k: "100%", v: "renewable" },
+              { k: "0g", v: "CO₂ per deploy" },
+              { k: "EU", v: "datacenters only" },
+              { k: "ISO", v: "14001 partners" },
+            ].map((s) => (
+              <div key={s.v} className="border border-emerald-500/30 bg-black/40 p-4 text-center">
+                <div className="font-display text-2xl text-emerald-400 font-bold">{s.k}</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 mt-1">{s.v}</div>
+              </div>
+            ))}
           </motion.div>
+        </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-4">
-            <BentoCard
-              testId="bento-deploy"
-              className="md:col-span-3 lg:col-span-7"
-              icon={Rocket}
-              label="deployments"
-              title="Two-click deploys from any branch."
-              body="Connect GitHub, pick a repo, hit Deploy. We auto-detect Next.js & Node, build with Nixpacks, and expose it behind a domain you pick."
+        <motion.div
+          initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
+          whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="relative flex items-center justify-center"
+        >
+          <div className="relative h-72 w-72 border border-emerald-500/30 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+              className="absolute inset-0 flex items-center justify-center"
             >
-              <DeployBentoVisual />
-            </BentoCard>
-
-            <BentoCard
-              testId="bento-monitor"
-              className="md:col-span-3 lg:col-span-5"
-              icon={Gauge}
-              label="monitoring"
-              title="Realtime uptime + latency."
-              body="Per-app probes every 60s. Alerts fire the moment a service drifts."
-            >
-              <MonitoringBentoVisual />
-            </BentoCard>
-
-            <BentoCard
-              testId="bento-branches"
-              className="md:col-span-3 lg:col-span-5"
-              icon={GitBranch}
-              label="branching"
-              title="Protected branches · rollback in 1 click."
-              body="Production apps enforce an allow-list of branches. Every deploy is pinnable — roll back in seconds."
-            >
-              <GitBranchVisual />
-            </BentoCard>
-
-            <BentoCard
-              testId="bento-domains"
-              className="md:col-span-3 lg:col-span-4"
-              icon={Globe}
-              label="domains"
-              title="Hands-free SSL."
-              body="Buy domains inside the dashboard. Auto-provisioned Let's Encrypt. Zero DNS hand-holding."
-            />
-
-            <BentoCard
-              testId="bento-security"
-              className="md:col-span-3 lg:col-span-3"
-              icon={Lock}
-              label="security"
-              title="Env vars, encrypted."
-              body="Fernet-sealed at rest. Redacted in logs. Rotated on demand."
-            />
-
-            <BentoCard
-              testId="bento-agency"
-              className="md:col-span-3 lg:col-span-6"
-              icon={Cpu}
-              label="workspaces"
-              title="Solo · Team · Agency."
-              body="Multi-workspace tenancy with roles (Owner / Admin / Dev / Billing / Viewer). Bill per workspace, invoice per client."
-            />
-
-            <BentoCard
-              testId="bento-github"
-              className="md:col-span-3 lg:col-span-6"
-              icon={Github}
-              label="github"
-              title="GitHub-native from day zero."
-              body="OAuth-linked repo lists, auto-detect default branch, commit picker on every redeploy."
-            />
+              <Wind className="h-32 w-32 text-emerald-400/40" strokeWidth={1} />
+            </motion.div>
+            <div className="relative text-center">
+              <Leaf className="h-10 w-10 text-emerald-400 mx-auto" />
+              <div className="mt-4 font-display text-3xl font-bold text-emerald-400">Carbon</div>
+              <div className="mt-1 font-display text-3xl font-bold text-white">Neutral</div>
+              <div className="mt-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400">by default</div>
+            </div>
           </div>
         </motion.div>
-      </Section>
+      </Container>
+    </Section>
+  );
+}
 
-      {/* LIVE DASHBOARD PREVIEW */}
-      <Section className="relative py-28 border-t border-white/[0.06] overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-grid-fine opacity-30" />
-        <div className="max-w-[1400px] mx-auto px-6 grid lg:grid-cols-12 gap-14 items-center">
-          <motion.div
-            initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-120px" }} transition={{ duration: 0.8 }}
-            className="lg:col-span-5"
-          >
-            <SectionLabel>// the cockpit</SectionLabel>
-            <h2 className="mt-4 font-display text-4xl lg:text-5xl tracking-tighter font-semibold">
-              One dashboard. Every deployment. <span className="text-brand">Zero noise.</span>
-            </h2>
-            <p className="mt-5 text-zinc-400 max-w-lg leading-relaxed">
-              Live SSE log streams with severity filters, instant rollbacks, per-branch deploys, env var encryption,
-              domain management, uptime probes — all wired into a single terminal-first control surface.
-            </p>
+/* ───────────────────────── Roadmap teaser ───────────────────────── */
 
-            <ul className="mt-8 space-y-4">
-              {[
-                ["Severity-tagged logs", "Filter by error · warning · build · deploy · info"],
-                ["Branch-aware deploys", "Commit picker. Branch switcher. Rollback any deployment."],
-                ["EU-native billing", "EU VAT + reverse-charge. PDF invoices. Audit-ready."],
-              ].map(([t, b], i) => (
-                <motion.li
-                  key={t}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.1 * i }}
-                  className="flex gap-4"
-                >
-                  <span className="mt-2 h-px w-6 bg-brand/50" />
-                  <div>
-                    <div className="font-display text-lg">{t}</div>
-                    <div className="text-sm text-zinc-400">{b}</div>
-                  </div>
-                </motion.li>
-              ))}
-            </ul>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-120px" }} transition={{ duration: 0.9 }}
-            className="lg:col-span-7"
-          >
-            <DeployPlayground />
-          </motion.div>
+function Roadmap() {
+  const items = [
+    { icon: Activity, title: "Native heatmaps & session replays", cat: "Analytics" },
+    { icon: GitBranch, title: "Database branching",               cat: "DX" },
+    { icon: Bot,      title: "AI Code Co-pilot",                  cat: "DX" },
+    { icon: Sparkles, title: "Visual deploy diffs",               cat: "DX" },
+    { icon: FileText, title: "White-label client reports",        cat: "Business" },
+    { icon: Code2,    title: "Developers API",                    cat: "DX" },
+    { icon: Mail,     title: "Mailserver hosting",                cat: "Infra" },
+    { icon: Globe,    title: "DNS Manager",                       cat: "Infra" },
+  ];
+  return (
+    <Section className="py-24 lg:py-32 bg-zinc-950/30">
+      <Container>
+        <div className="flex items-end justify-between flex-wrap gap-4 mb-10">
+          <div>
+            <Overline>What's next</Overline>
+            <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">Shipping next.</h2>
+            <p className="mt-3 text-zinc-400 max-w-xl">8 features in active development. Join the waitlist to be the first to know.</p>
+          </div>
+          <OutlineBtn to="/login" testId="roadmap-view-all" className="text-xs">View full roadmap →</OutlineBtn>
         </div>
-      </Section>
-
-      {/* FLOW */}
-      <Section id="features" className="max-w-[1400px] mx-auto px-6 py-28 border-t border-white/[0.06]">
-        <SectionLabel>// flow</SectionLabel>
-        <h2 className="mt-4 font-display text-4xl lg:text-5xl tracking-tighter font-semibold max-w-2xl">
-          From repo to live in under a minute.
-        </h2>
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-4 gap-px bg-white/[0.06]">
-          {[
-            [Github, "Connect GitHub", "Authorize once. We list every repo you can deploy."],
-            [Zap, "Pick a plan", "Hobby is free. Pro & Agency come with Mollie-backed billing."],
-            [Terminal, "Hit deploy", "We provision, build, expose, issue SSL — in a single flow."],
-            [Activity, "Monitor & scale", "Realtime checks. Alerts. Logs. Redeploy in one click."],
-          ].map(([Icon, t, b], i) => (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {items.map((it, i) => (
             <motion.div
-              key={t}
-              initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ delay: 0.08 * i, duration: 0.6 }}
-              className="bg-background p-8 relative group hover:bg-white/[0.02] transition-colors"
+              key={it.title}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.05 }}
+              className="border border-dashed border-zinc-800 p-5 hover:border-cyan-500/40 hover:bg-zinc-950/40 transition-colors"
+              data-testid={`roadmap-tile-${i}`}
             >
-              <div className="absolute top-0 left-0 h-px w-0 bg-brand group-hover:w-full transition-all duration-500" />
-              <div className="text-[10px] font-mono text-brand tracking-[0.3em]">0{i + 1}</div>
-              <Icon className="h-5 w-5 mt-6 text-brand/80" />
-              <div className="font-display text-xl tracking-tight mt-4">{t}</div>
-              <div className="mt-2 text-sm text-zinc-400 leading-relaxed">{b}</div>
+              <div className="flex items-center justify-between mb-3">
+                <it.icon className="h-4 w-4 text-cyan-400/80" />
+                <span className="text-[9px] font-mono uppercase tracking-[0.3em] text-zinc-600">soon</span>
+              </div>
+              <div className="font-display text-sm font-semibold text-zinc-200 leading-snug">{it.title}</div>
+              <div className="mt-1 text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-600">{it.cat}</div>
             </motion.div>
           ))}
         </div>
-      </Section>
+      </Container>
+    </Section>
+  );
+}
 
-      {/* AGENCY */}
-      <Section id="agency" className="border-t border-white/[0.06] py-28 relative overflow-hidden">
-        <div className="max-w-[1400px] mx-auto px-6 grid lg:grid-cols-12 gap-14 items-center">
-          <motion.div
-            initial={{ opacity: 0 }} whileInView={{ opacity: 1 }}
-            viewport={{ once: true }} className="lg:col-span-6 order-2 lg:order-1"
-          >
-            <div className="relative border border-white/10 bg-[#0a0a0a] p-8 overflow-hidden">
-              <div className="absolute inset-0 bg-grid opacity-20" />
-              <div className="relative text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-5">
-                studio.agency / workspaces
-              </div>
-              <div className="space-y-2 relative">
-                {[
-                  ["NovaBrew", "12 apps · €79/mo", "live"],
-                  ["Pulse Finance", "4 apps · €29/mo", "live"],
-                  ["Acme Health", "8 apps · €79/mo", "live"],
-                  ["Kindle Labs", "3 apps · —", "queued"],
-                ].map(([name, meta, state], i) => (
-                  <motion.div
-                    key={name}
-                    initial={{ opacity: 0, x: -8 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.1 * i }}
-                    className="flex items-center justify-between border border-white/[0.06] bg-elevated/40 px-4 py-3 font-mono text-[12px]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={`h-1.5 w-1.5 rounded-full ${state === "live" ? "bg-signal-live" : "bg-signal-queued"}`} />
-                      <span className="text-zinc-200">{name}</span>
-                    </div>
-                    <span className="text-zinc-500">{meta}</span>
-                  </motion.div>
-                ))}
-              </div>
+/* ───────────────────────── Stats marquee ───────────────────────── */
+
+function StatsTicker() {
+  const stats = [
+    "1.2M deploys / month",
+    "99.99% platform uptime",
+    "47ms median response",
+    "0g CO₂ per build",
+    "EU eu-west · eu-central · eu-north",
+    "14-day money back",
+    "From €9/mo · all-inclusive",
+    "Used by 240+ agencies",
+  ];
+  const doubled = [...stats, ...stats];
+  return (
+    <Section className="py-10 border-y border-zinc-900 overflow-hidden bg-black">
+      <div className="relative">
+        <motion.div
+          className="flex gap-12 whitespace-nowrap will-change-transform"
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ duration: 35, repeat: Infinity, ease: "linear" }}
+        >
+          {doubled.map((s, i) => (
+            <div key={i} className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[0.3em] text-zinc-500">
+              <Sparkles className="h-3 w-3 text-cyan-500" />
+              {s}
             </div>
-          </motion.div>
+          ))}
+        </motion.div>
+        <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-black to-transparent" />
+        <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-black to-transparent" />
+      </div>
+    </Section>
+  );
+}
 
-          <div className="lg:col-span-6 order-1 lg:order-2">
-            <SectionLabel>// for agencies</SectionLabel>
-            <h2 className="mt-4 font-display text-4xl lg:text-5xl tracking-tighter font-semibold">
-              One platform.<br />
-              <span className="text-brand">Every client.</span>
-            </h2>
-            <p className="mt-5 text-zinc-400 max-w-lg leading-relaxed">
-              Group apps by client project, invite team members with granular roles, and let billing flow through
-              your white-labeled dashboard. Your clients never see the seams.
-            </p>
-            <div className="mt-8 grid grid-cols-2 gap-px bg-white/[0.06]">
-              {[
-                ["Workspaces", "Solo or Agency"],
-                ["Roles", "Owner / Admin / Dev / Billing / Viewer"],
-                ["Projects", "Group apps per client"],
-                ["Branding", "White-label invoices"],
-              ].map(([t, b], i) => (
-                <motion.div
-                  key={t}
-                  initial={{ opacity: 0, y: 14 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.08 * i }}
-                  className="bg-background p-5"
-                >
-                  <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-mono">{t}</div>
-                  <div className="text-sm mt-1">{b}</div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Section>
+/* ───────────────────────── Final CTA ───────────────────────── */
 
-      {/* FINAL CTA */}
-      <Section className="border-t border-white/[0.06] py-28 relative overflow-hidden">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-grid-fine opacity-30" />
-          <div className="absolute -inset-20 opacity-40" style={{ background: "radial-gradient(700px circle at 50% 50%, rgba(0,229,255,0.18), transparent 60%)" }} />
-        </div>
-        <div className="max-w-[1400px] mx-auto px-6 text-center">
+function FinalCTA() {
+  return (
+    <Section className="relative py-32 overflow-hidden">
+      <div className="absolute inset-0 -z-10">
+        <ConstellationCanvas density={40} />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/80 to-black" />
+      </div>
+      <Container className="text-center">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger}>
+          <motion.div variants={fadeUp}><Overline>Ready when you are</Overline></motion.div>
           <motion.h2
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="font-display text-4xl lg:text-6xl tracking-tighter font-semibold"
+            variants={fadeUp}
+            className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-tight max-w-3xl mx-auto"
           >
-            The boring part of hosting,<br />
-            made <span className="text-brand holo">brilliantly fast.</span>
+            Stop managing infrastructure. <span className="text-cyan-400">Start building.</span>
           </motion.h2>
-          <div className="mt-10 flex justify-center gap-3">
-            <Link to="/register" className="magnetic-btn inline-flex items-center gap-2 px-7 py-3.5 bg-brand text-brand-fg font-medium hover:bg-brand/90 transition shadow-[0_0_32px_rgba(0,229,255,0.45)]">
-              Start free <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link to="/pricing" className="inline-flex items-center gap-2 px-7 py-3.5 border border-white/15 hover:border-brand/70 hover:text-brand transition-colors">
-              Compare plans
-            </Link>
-          </div>
-          <div className="mt-12 flex justify-center items-center gap-6 text-xs font-mono text-zinc-500">
-            <span className="inline-flex items-center gap-2">
-              <ShieldCheck className="h-3 w-3" /> GDPR · EU data residency
-            </span>
-            <span>No credit card for Hobby tier</span>
-          </div>
-        </div>
-      </Section>
+          <motion.p variants={fadeUp} className="mt-5 text-zinc-400 max-w-xl mx-auto">
+            14 days free. No credit card. Deploy your first app in 41 seconds.
+          </motion.p>
+          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3 justify-center">
+            <PrimaryBtn to="/register" testId="cta-final-primary">Create free account</PrimaryBtn>
+            <OutlineBtn to="/pricing" testId="cta-final-secondary">View pricing</OutlineBtn>
+          </motion.div>
+        </motion.div>
+      </Container>
+    </Section>
+  );
+}
 
-      <footer className="border-t border-white/[0.06] py-10">
-        <div className="max-w-[1400px] mx-auto px-6 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-zinc-500">
-          <Logo small />
-          <div>© {new Date().getFullYear()} DeployHub · Hosting for Next.js & Node</div>
+/* ───────────────────────── Footer ───────────────────────── */
+
+function Footer() {
+  return (
+    <footer className="border-t border-zinc-900 bg-black py-12">
+      <Container>
+        <div className="grid md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-8">
+          <div>
+            <Logo className="h-7 w-auto mb-4" />
+            <p className="text-xs text-zinc-500 max-w-xs leading-relaxed">
+              The EU-hosted, green-powered, agency-friendly PaaS. Build, ship, monitor and grow — all in one platform.
+            </p>
+            <div className="mt-5 flex gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-emerald-500/30 text-emerald-400">
+                <Leaf className="h-3 w-3" /> 100% green
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border border-cyan-500/30 text-cyan-400">
+                <ShieldCheck className="h-3 w-3" /> GDPR
+              </span>
+            </div>
+          </div>
+          {[
+            { h: "Product", links: [["Features", "#features"], ["Compare", "#compare"], ["Pricing", "/pricing"], ["Roadmap", "/login"]] },
+            { h: "Resources", links: [["Docs", "#"], ["Status", "#"], ["Blog", "#"], ["Changelog", "#"]] },
+            { h: "Company", links: [["About", "#"], ["Sustainability", "#green"], ["Privacy", "#"], ["Contact", "mailto:hello@deployhub.app"]] },
+          ].map((c) => (
+            <div key={c.h}>
+              <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-500 mb-3">{c.h}</div>
+              <ul className="space-y-2 text-sm text-zinc-400">
+                {c.links.map(([label, href]) => (
+                  <li key={label}>
+                    {href.startsWith("/") ? (
+                      <Link to={href} className="hover:text-cyan-400">{label}</Link>
+                    ) : (
+                      <a href={href} className="hover:text-cyan-400">{label}</a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-      </footer>
+        <div className="mt-10 pt-6 border-t border-zinc-900 flex items-center justify-between flex-wrap gap-3 text-[11px] font-mono text-zinc-600">
+          <span>© {new Date().getFullYear()} DeployHub. Crafted in the EU.</span>
+          <span>Built on wind & solar · Operated under GDPR · Hosted in eu-west, eu-central, eu-north.</span>
+        </div>
+      </Container>
+    </footer>
+  );
+}
+
+/* ───────────────────────── Page ───────────────────────── */
+
+export default function Landing() {
+  return (
+    <div className="bg-black text-white min-h-screen">
+      <Nav />
+      <Hero />
+      <LogoStrip />
+      <HowItWorks />
+      <Features />
+      <Compare />
+      <GreenEnergy />
+      <Roadmap />
+      <StatsTicker />
+      <FinalCTA />
+      <Footer />
     </div>
   );
 }
