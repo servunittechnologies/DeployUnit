@@ -3,13 +3,14 @@ import { api } from "../../lib/api";
 import {
   ShieldCheck, Database, Globe, CheckCircle2, XCircle, AlertCircle,
   Loader2, Save, Copy, RefreshCw, Key, Users, Banknote, Github,
-  Coins, Star,
+  Coins, Star, Cpu,
 } from "lucide-react";
 import { toast } from "sonner";
 
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
   { id: "plans", label: "Plans & Pricing", icon: Coins },
+  { id: "resources", label: "Resources & Limits", icon: Cpu },
   { id: "platform", label: "Platform Domain", icon: Globe },
   { id: "vat", label: "VAT / VIES", icon: Banknote },
   { id: "users", label: "Users", icon: Users },
@@ -363,6 +364,121 @@ function PlansTab() {
     </div>
   );
 }
+
+/* ─────────────────────── Resources & Limits ─────────────────────── */
+function ResourcesTab() {
+  const [cfg, setCfg] = useState(null);
+  const [defaults, setDefaults] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([
+        api.get("/admin/resource-config"),
+        api.get("/admin/resource-defaults"),
+      ]);
+      setCfg(a.data);
+      setDefaults(b.data);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading || !cfg) return <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+
+  const updatePlanDefault = (planId, key, value) => {
+    setCfg({
+      ...cfg,
+      plan_defaults: {
+        ...cfg.plan_defaults,
+        [planId]: { ...cfg.plan_defaults[planId], [key]: Number(value) },
+      },
+    });
+  };
+  const updatePricing = (key, value) => {
+    setCfg({ ...cfg, pricing: { ...cfg.pricing, [key]: Number(value) } });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put("/admin/resource-config", {
+        plan_defaults: cfg.plan_defaults,
+        pricing: cfg.pricing,
+      });
+      toast.success("Resource config saved · applies to next deploy");
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+  const revert = async () => {
+    if (!window.confirm("Revert to built-in baseline values?")) return;
+    setCfg(defaults);
+  };
+
+  return (
+    <div className="space-y-8" data-testid="admin-resources">
+      <Section title="Plan defaults" description="Each app on this plan starts with these resources for free. CPU in vCPU, memory + storage in MB.">
+        <div className="border border-white/[0.06]">
+          <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-mono border-b border-white/[0.06]">
+            <div className="col-span-3">Plan</div>
+            <div className="col-span-3">CPU (vCPU)</div>
+            <div className="col-span-3">Memory (MB)</div>
+            <div className="col-span-3">Storage (MB)</div>
+          </div>
+          {Object.entries(cfg.plan_defaults).map(([planId, d]) => (
+            <div key={planId} className="grid grid-cols-12 px-4 py-3 items-center border-b border-white/[0.04] last:border-b-0">
+              <div className="col-span-3 font-display capitalize">{planId}</div>
+              <div className="col-span-3 pr-3">
+                <Input type="number" step="0.05" value={d.cpu_vcpu} onChange={(e) => updatePlanDefault(planId, "cpu_vcpu", e.target.value)} data-testid={`def-cpu-${planId}`} />
+              </div>
+              <div className="col-span-3 pr-3">
+                <Input type="number" step="64" value={d.memory_mb} onChange={(e) => updatePlanDefault(planId, "memory_mb", e.target.value)} data-testid={`def-mem-${planId}`} />
+              </div>
+              <div className="col-span-3">
+                <Input type="number" step="512" value={d.storage_mb} onChange={(e) => updatePlanDefault(planId, "storage_mb", e.target.value)} data-testid={`def-storage-${planId}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Addon pricing" description="Customers pay credits/month for resource upgrades on top of their plan default. Bigger unit sizes = simpler UX.">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-elevated/30 border border-white/[0.06] p-4 space-y-3">
+            <div className="text-sm font-display flex items-center gap-2"><Cpu className="h-4 w-4 text-brand" /> CPU</div>
+            <Field label="Unit size (vCPU)"><Input type="number" step="0.05" value={cfg.pricing.cpu_unit_vcpu} onChange={(e) => updatePricing("cpu_unit_vcpu", e.target.value)} data-testid="price-cpu-unit" /></Field>
+            <Field label="Credits per unit/month"><Input type="number" step="1" value={cfg.pricing.cpu_credits_per_unit} onChange={(e) => updatePricing("cpu_credits_per_unit", e.target.value)} data-testid="price-cpu-cost" /></Field>
+            <div className="text-[10px] font-mono text-zinc-500">≈ €{((cfg.pricing.cpu_credits_per_unit || 0) * 0.1).toFixed(2)} / +{cfg.pricing.cpu_unit_vcpu} vCPU / mo</div>
+          </div>
+          <div className="bg-elevated/30 border border-white/[0.06] p-4 space-y-3">
+            <div className="text-sm font-display flex items-center gap-2"><Database className="h-4 w-4 text-brand" /> Memory</div>
+            <Field label="Unit size (MB)"><Input type="number" step="64" value={cfg.pricing.memory_unit_mb} onChange={(e) => updatePricing("memory_unit_mb", e.target.value)} data-testid="price-mem-unit" /></Field>
+            <Field label="Credits per unit/month"><Input type="number" step="1" value={cfg.pricing.memory_credits_per_unit} onChange={(e) => updatePricing("memory_credits_per_unit", e.target.value)} data-testid="price-mem-cost" /></Field>
+            <div className="text-[10px] font-mono text-zinc-500">≈ €{((cfg.pricing.memory_credits_per_unit || 0) * 0.1).toFixed(2)} / +{cfg.pricing.memory_unit_mb} MB / mo</div>
+          </div>
+          <div className="bg-elevated/30 border border-white/[0.06] p-4 space-y-3">
+            <div className="text-sm font-display flex items-center gap-2"><Database className="h-4 w-4 text-brand" /> Storage</div>
+            <Field label="Unit size (MB)"><Input type="number" step="512" value={cfg.pricing.storage_unit_mb} onChange={(e) => updatePricing("storage_unit_mb", e.target.value)} data-testid="price-storage-unit" /></Field>
+            <Field label="Credits per unit/month"><Input type="number" step="1" value={cfg.pricing.storage_credits_per_unit} onChange={(e) => updatePricing("storage_credits_per_unit", e.target.value)} data-testid="price-storage-cost" /></Field>
+            <div className="text-[10px] font-mono text-zinc-500">≈ €{((cfg.pricing.storage_credits_per_unit || 0) * 0.1).toFixed(2)} / +{(cfg.pricing.storage_unit_mb || 0) >= 1024 ? `${cfg.pricing.storage_unit_mb / 1024} GB` : `${cfg.pricing.storage_unit_mb} MB`} / mo</div>
+          </div>
+        </div>
+      </Section>
+
+      <div className="flex items-center justify-end gap-2">
+        <button onClick={revert} className="px-3 py-2 border border-white/15 text-zinc-300 hover:text-white text-sm font-mono uppercase tracking-wider" data-testid="resources-revert">
+          Revert defaults
+        </button>
+        <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-40" data-testid="resources-save">
+          <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 /* ─────────────────────── Platform Domain + Cloudflare ─────────────────────── */
 function PlatformTab() {
@@ -1175,6 +1291,7 @@ export default function Admin() {
 
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "plans" && <PlansTab />}
+      {tab === "resources" && <ResourcesTab />}
       {tab === "platform" && <PlatformTab />}
       {tab === "vat" && <VatTab />}
       {tab === "users" && <UsersTab />}

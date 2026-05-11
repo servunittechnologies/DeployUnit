@@ -8,6 +8,7 @@ import DeployModal from "../../components/DeployModal";
 import DeploymentStatus from "../../components/DeploymentStatus";
 import SitePreview from "../../components/SitePreview";
 import BuildErrorPanel from "../../components/BuildErrorPanel";
+import AppResourcesTab from "../../components/AppResourcesTab";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const TABS = ["overview", "deployments", "console", "domains", "env", "monitoring", "settings"];
+const TABS = ["overview", "deployments", "console", "domains", "env", "resources", "monitoring", "settings"];
 
 function timeAgo(iso) {
   if (!iso) return "—";
@@ -681,6 +682,10 @@ export default function AppDetail() {
         <div className="p-6 max-w-3xl">
           <EnvVarsEditor envVars={envVars} onSave={saveEnv} />
         </div>
+      )}
+
+      {tab === "resources" && (
+        <AppResourcesTab appId={id} />
       )}
 
       {tab === "monitoring" && (

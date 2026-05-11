@@ -388,6 +388,30 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         if deployment_id:
             await _append_log(deployment_id, f"[BUILD] pushed {len(app['env_vars'])} env vars to build engine")
 
+    # Push any attached database connection strings as env vars so the build
+    # sees them on first run.
+    attached = app.get("attached_databases") or []
+    if attached:
+        db_env = {}
+        for c in attached:
+            dbdoc = await db.databases.find_one({"id": c.get("db_id")}, {"_id": 0, "connection_string": 1})
+            if dbdoc and dbdoc.get("connection_string"):
+                db_env[c.get("env_var_name") or "DATABASE_URL"] = dbdoc["connection_string"]
+        if db_env:
+            await coolify.update_env(coolify_uuid, db_env)
+            if deployment_id:
+                await _append_log(deployment_id, f"[BUILD] injected {len(db_env)} database connection(s)")
+
+    # Apply the resource limits to the build engine BEFORE we ask it to
+    # deploy, so the very first run respects the plan/addon bundle.
+    try:
+        from services.resources import push_resources_to_build_engine
+        await push_resources_to_build_engine(app_id)
+        if deployment_id:
+            await _append_log(deployment_id, "[BUILD] applied resource limits (cpu/mem) to container")
+    except Exception as e:
+        logger.warning("resource push failed for %s: %s", app_id, e)
+
     # Step 2 — explicitly trigger the deploy with retries.
     if deployment_id:
         cool_dep_uuid = await _trigger_coolify_deploy_with_retry(

@@ -18,6 +18,7 @@ from seed import seed_initial_data
 from workers.monitor import run_monitor_tick, sync_deployments, deployment_watchdog
 from services.plans import seed_default_plans
 from services.credits import monthly_grant_tick
+from services.resources import charge_due_addons
 from services.account_migration import migrate_accounts, needs_migration
 
 from routers import (
@@ -44,6 +45,7 @@ from routers import (
     pr_previews as pr_previews_router,
     admin_users as admin_users_router,
     account as account_router,
+    resources as resources_router,
 )
 
 
@@ -74,6 +76,9 @@ async def lifespan(app: FastAPI):
     # Credit-wallet monthly grant — runs hourly so anniversary resets are
     # accurate to the hour without spamming the DB.
     scheduler.add_job(monthly_grant_tick, "interval", hours=1, id="credits_grant", replace_existing=True)
+    # Per-app resource addon charges — billed on the user's wallet at the
+    # 30-day anniversary of when the addon was first activated.
+    scheduler.add_job(charge_due_addons, "interval", hours=1, id="resource_billing", replace_existing=True)
     scheduler.start()
     logger.info("DeployHub backend started")
     yield
@@ -119,6 +124,7 @@ api_router.include_router(databases_router.router)
 api_router.include_router(pr_previews_router.router)
 api_router.include_router(admin_users_router.router)
 api_router.include_router(account_router.router)
+api_router.include_router(resources_router.router)
 
 app.include_router(api_router)
 

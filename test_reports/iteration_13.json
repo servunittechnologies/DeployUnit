@@ -1,0 +1,41 @@
+{
+  "summary": "Iter13: validated resource sizing + addon billing + DB attachments end-to-end. 14/15 new backend tests pass (1 cross-WS test skipped — demo workspace has no DBs). All 24 iter11 admin user-mgmt regression tests still pass. Frontend AppDetail Resources tab + DB connections UI verified visually (3 tiles, 3 sliders w/ pricing labels, live cost, save disabled when no change, env-var auto-uppercase + alnum filter confirmed: 'my-db url!' → 'MY_DB_URL_').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/admin/resource-config", "issue": "Accepts numeric pricing values but Pydantic schema uses Dict[str,float] which coerces ints like 100 → 100.0 in stored config — UI shows decimals (100.0 cr/0.5 vCPU). Cosmetic; tests still pass."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AppDetail > Resources", "issues": ["pricing labels render as '100 cr/mo per 0.5 vCPU' — matches spec. Tile shows 'plan default: 1' (no unit suffix on CPU) — minor: would benefit from 'vCPU' suffix for consistency"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_resources.py",
+    "/app/test_reports/pytest/iter13_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Add 'vCPU' suffix to the CPU plan-default label on the ResourceTile component for consistency with memory/storage units.",
+    "(Optional) Consider exposing PUT /api/admin/resource-config pricing as Dict[str, int] (or coerce on save) so the admin UI doesn't render '.0' decimals on integer credit amounts."
+  ],
+  "critical_code_review_comments": [
+    "services/resources.py refund_plan_downgrade looks at subscription.started_at — if a user upgrades+downgrades within the same period the original sub.started_at may not reflect the current period boundary; safer to use plan_changed_at on the workspace/account. Verify edge case for repeated plan flips.",
+    "routers/resources.py attach_database does not verify db status (e.g. attaches a 'creating' DB whose connection_string may not yet be valid). Consider rejecting non-'running' DBs.",
+    "_safe_db keeps the raw `connection_string` field in the response alongside connection_string_masked — UI shows masked, but API still leaks plaintext to any workspace member who calls /apps/{id}/connections. Recommend stripping `connection_string` from the response and only exposing it through an explicit reveal endpoint.",
+    "charge_due_addons relies on `services.credits.consume_credits` raising on insufficient funds. Confirm that path raises HTTPException(402) for the synchronous PUT (it does — verified) but for the scheduler, a generic exception is caught and auto-downgrade fires; consider narrowing to InsufficientCredits to avoid silently auto-downgrading on transient DB errors."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter13_resources.py (new)",
+    "/app/test_reports/pytest/iter13_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (14/14 active; 1 skipped for missing demo DB)", "frontend": "100% on validated flows (Resources tab + DB attach form + env-name input normalisation)"},
+  "test_credentials": "admin@deployhub.dev/admin123 ; martijn@servunit.com/servunit123 ; demo@deployhub.dev/demo1234 — all confirmed working.",
+  "seed_data_creation": "Temporarily created postgresql DB 'TEST_iter13_db' in ServUnit workspace to exercise attach/detach flow — deleted on teardown. Martijn credits topped up by +500/+1000 then drained then restored. Final state of martijn app: addons reset to {0,0,0} (monthly_cost_credits=0). No leftover artefacts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Demo workspace (Acme Studio) has 0 apps and 0 databases, so all DB-attach + cross-workspace tests use martijn/ServUnit and self-create a TEST_ DB. Note `/api/account` returns `{profile: {credits_balance: …}}` (NOT top-level). `/api/admin/users` returns `{users:[…], total, limit, offset}` and limit is capped at 200. The /api/admin/resource-config endpoint correctly 403s for non-admins (verified with demo user); martijn is actually an admin role despite being a workspace user — use demo for non-admin tests.",
+  "rca_of_the_issue": "N/A — no blocking bugs found. Initial test failures were all in the test harness (wrong response shape assumptions for /api/account, /api/admin/users limit cap, /api/account/credits/history vs /transactions). Once fixed, every feature from the iter13 spec verified end-to-end."
+}

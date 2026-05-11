@@ -217,43 +217,69 @@ async def delete_user(user_id: str, request: Request):
 
 # ─────────────────────── Credits ───────────────────────
 class CreditsIn(BaseModel):
-    workspace_id: str
+    workspace_id: Optional[str] = None  # legacy; ignored if absent
     delta: int = Field(description="positive to grant, negative to revoke")
     reason: Optional[str] = None
 
 
 @router.post("/admin/users/{user_id}/credits")
 async def adjust_credits(user_id: str, payload: CreditsIn, request: Request):
+    """Top up or deduct credits on a user's account-level wallet.
+    `workspace_id` is kept on the payload for backward compat with the old
+    admin UI but is logged only as context — the wallet itself is user-scoped now.
+    """
+    from services.credits import grant_credits, consume_credits
     actor = await _require_admin(request)
     db = get_db()
     u = await db.users.find_one({"id": user_id})
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    ws = await db.workspaces.find_one({"id": payload.workspace_id})
-    if not ws:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    if ws.get("owner_id") != user_id:
-        raise HTTPException(status_code=400, detail="Workspace is not owned by this user")
-    current = int(ws.get("credits_balance") or 0)
-    new_balance = max(0, current + payload.delta)
-    await db.workspaces.update_one(
-        {"id": payload.workspace_id},
-        {"$set": {"credits_balance": new_balance}},
-    )
-    # Write a transaction row so the user can see the adjustment in their wallet history.
-    await db.credit_transactions.insert_one({
-        "id": uuid.uuid4().hex,
-        "workspace_id": payload.workspace_id,
-        "delta": payload.delta,
-        "balance_after": new_balance,
-        "kind": "admin_adjustment",
-        "reason": payload.reason or "Manual admin adjustment",
-        "actor_email": actor.get("email"),
-        "created_at": _now_iso(),
-    })
+    ws_id = payload.workspace_id
+    if ws_id:
+        ws = await db.workspaces.find_one({"id": ws_id})
+        if not ws:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+    if payload.delta > 0:
+        result = await grant_credits(
+            user_id, payload.delta,
+            reason=payload.reason or f"admin top-up by {actor.get('email')}",
+            type_="admin",
+            ref_id=ws_id, ref_type="admin_adjustment",
+            user_id=actor["id"],
+        )
+        new_balance = result["balance"]
+    elif payload.delta < 0:
+        try:
+            result = await consume_credits(
+                user_id, abs(payload.delta),
+                reason=payload.reason or f"admin deduction by {actor.get('email')}",
+                ref_id=ws_id, ref_type="admin_adjustment",
+                user_id=actor["id"],
+            )
+            new_balance = result["balance"]
+        except HTTPException as e:
+            if e.status_code == 402:
+                # Allow forced deduction to 0 if insufficient
+                u2 = await db.users.find_one({"id": user_id}, {"_id": 0, "credits_balance": 1})
+                current = int((u2 or {}).get("credits_balance") or 0)
+                if current > 0:
+                    result = await consume_credits(
+                        user_id, current,
+                        reason=f"admin forced deduction (cap at 0) by {actor.get('email')}",
+                        ref_id=ws_id, ref_type="admin_adjustment",
+                        user_id=actor["id"],
+                    )
+                    new_balance = result["balance"]
+                else:
+                    new_balance = 0
+            else:
+                raise
+    else:
+        u2 = await db.users.find_one({"id": user_id}, {"_id": 0, "credits_balance": 1})
+        new_balance = int((u2 or {}).get("credits_balance") or 0)
     audit_log(action="admin.user.credits_adjust", actor=actor,
-              workspace_id=payload.workspace_id,
-              resource_type="workspace", resource_id=payload.workspace_id,
+              workspace_id=ws_id,
+              resource_type="user", resource_id=user_id,
               meta={"target_email": u.get("email"), "delta": payload.delta,
                     "new_balance": new_balance, "reason": payload.reason},
               request=request)

@@ -158,6 +158,11 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
 
     # Free / hobby — immediate switch (preserve the actual id chosen)
     if plan["id"] in ("free", "hobby"):
+        # Find the user's CURRENT plan so we can refund unused fraction
+        # of the OLD monthly fee back to credits.
+        from services.resources import refund_plan_downgrade
+        prev_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "plan": 1})
+        prev_plan_id = (prev_user or {}).get("plan") or "free"
         sub = await db.subscriptions.find_one({"user_id": user["id"]})
         if sub and sub.get("mollie_subscription_id") and sub.get("status") not in ("canceled",):
             try:
@@ -180,10 +185,20 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
             upsert=True,
         )
         await db.users.update_one({"id": user["id"]}, {"$set": {"plan": plan["id"]}})
+        refund_credits = 0
+        if prev_plan_id != plan["id"]:
+            try:
+                refund_credits = await refund_plan_downgrade(
+                    user["id"], from_plan_id=prev_plan_id, to_plan_id=plan["id"]
+                )
+            except Exception as e:
+                logger.warning("plan downgrade refund failed: %s", e)
         audit_log(action="account.plan_downgrade", actor=user,
                   resource_type="user", resource_id=user["id"],
-                  meta={"new_plan": plan["id"]}, request=request)
-        return {"plan": plan["id"], "status": "active", "checkout_url": None}
+                  meta={"new_plan": plan["id"], "from_plan": prev_plan_id,
+                        "refund_credits": refund_credits}, request=request)
+        return {"plan": plan["id"], "status": "active",
+                "checkout_url": None, "refund_credits": refund_credits}
 
     if not mollie.configured:
         raise HTTPException(status_code=503, detail="Payments not configured")
