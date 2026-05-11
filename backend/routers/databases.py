@@ -104,7 +104,14 @@ async def create_database(payload: DatabaseIn, workspace_id: str, request: Reque
             conn = res.get("internal_db_url") or res.get("internal_connection_url") or res.get("connection_url")
             if cool_uuid:
                 record["coolify_db_uuid"] = cool_uuid
-                record["status"] = "running"
+                # Coolify creates databases stopped — auto-start so the
+                # connection string is actually usable.
+                try:
+                    await coolify.start_database(cool_uuid)
+                    record["status"] = "running"
+                except Exception as e:
+                    logger.warning("coolify auto-start_database failed: %s", e)
+                    record["status"] = "stopped"
             if conn:
                 record["connection_string_enc"] = encrypt_token(conn)
     else:

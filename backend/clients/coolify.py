@@ -49,8 +49,18 @@ class CoolifyClient:
             return None
 
     async def health(self) -> dict:
-        ok = await self._request("GET", "/health")
-        return {"configured": self.configured, "ok": ok is not None}
+        """Coolify v4 exposes /api/health (no /v1 prefix). Use a direct call
+        instead of _request so we don't accidentally prepend /v1."""
+        if not self.configured:
+            return {"configured": False, "ok": False}
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as cli:
+                r = await cli.get(f"{self.base}/api/health")
+            ok = 200 <= r.status_code < 300
+            return {"configured": True, "ok": ok}
+        except Exception as e:
+            logger.warning("Coolify health failed: %s", e)
+            return {"configured": True, "ok": False, "error": str(e)[:120]}
 
     async def list_servers(self) -> list:
         data = await self._request("GET", "/servers")
@@ -227,15 +237,17 @@ class CoolifyClient:
     async def create_database(self, *, server_uuid: str, project_uuid: str, environment_name: str,
                               db_type: str, name: str, version: Optional[str] = None) -> Optional[dict]:
         """db_type in {postgresql, mysql, mariadb, mongodb, redis, keydb, dragonfly}. Coolify auto-generates
-        the connection string + credentials and returns the uuid for follow-up calls."""
+        the connection string + credentials and returns the uuid for follow-up calls.
+
+        Note: Coolify v4 (Nov 2025) rejects an explicit `version` field on this endpoint
+        — the image tag is chosen by Coolify based on `db_type`. We keep the param in
+        our signature for forward-compat but don't forward it."""
         body = {
             "server_uuid": server_uuid,
             "project_uuid": project_uuid,
             "environment_name": environment_name,
             "name": name,
         }
-        if version:
-            body["version"] = version
         return await self._request("POST", f"/databases/{db_type}", json=body)
 
     async def get_database(self, db_uuid: str) -> Optional[dict]:
