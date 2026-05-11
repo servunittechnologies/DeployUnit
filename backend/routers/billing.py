@@ -109,8 +109,18 @@ async def get_subscription(workspace_id: str, request: Request):
     sub = await db.subscriptions.find_one({"workspace_id": workspace_id}, {"_id": 0})
     ws = await db.workspaces.find_one({"id": workspace_id}, {"_id": 0})
     profile = await db.billing_profiles.find_one({"workspace_id": workspace_id}, {"_id": 0})
+    # Only show payments that actually moved money. Free-plan (€0) records and
+    # other historical zero-amount stubs leak through as "expired" otherwise,
+    # which confuses customers who think their free plan is somehow expiring.
     payments = await db.payments.find(
-        {"workspace_id": workspace_id}, {"_id": 0}
+        {
+            "workspace_id": workspace_id,
+            "$and": [
+                {"plan": {"$nin": ["free", "hobby"]}},
+                {"$or": [{"subtotal": {"$gt": 0}}, {"total": {"$gt": 0}}]},
+            ],
+        },
+        {"_id": 0},
     ).sort("created_at", -1).limit(12).to_list(12)
     return {
         "plan": (ws or {}).get("plan", "free"),

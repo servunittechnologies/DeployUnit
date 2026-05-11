@@ -50,7 +50,7 @@ export default function Billing() {
 
   const goCheckout = async (plan) => {
     if (!active) return;
-    if (!sub?.billing_profile && plan !== "hobby") {
+    if (!sub?.billing_profile && plan !== "hobby" && plan !== "free") {
       setEditingProfile(true);
       toast.error("Please fill in your billing profile first.");
       return;
@@ -71,7 +71,7 @@ export default function Billing() {
 
   const cancel = async () => {
     if (!active) return;
-    if (!window.confirm("Cancel your subscription? Your workspace drops back to the Hobby plan.")) return;
+    if (!window.confirm("Cancel your subscription? Your workspace drops back to the Free plan.")) return;
     try {
       await api.post("/billing/cancel", null, { params: { workspace_id: active.id } });
       toast.success("Subscription canceled.");
@@ -84,7 +84,8 @@ export default function Billing() {
   }
 
   const profile = sub.billing_profile;
-  const subStatus = sub.subscription?.status || (sub.plan === "hobby" ? "active" : "none");
+  const isFreePlan = sub.plan === "free" || sub.plan === "hobby";
+  const subStatus = sub.subscription?.status || (isFreePlan ? "active" : "none");
 
   return (
     <div className="px-6 py-6 space-y-10" data-testid="billing-page">
@@ -108,14 +109,14 @@ export default function Billing() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {sub.plan !== "hobby" && sub.subscription?.status === "active" && (
+            {!isFreePlan && sub.subscription?.status === "active" && (
               <button onClick={cancel} className="px-4 py-2 border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10 text-sm" data-testid="billing-cancel">
                 Cancel subscription
               </button>
             )}
           </div>
         </div>
-        {!profile && sub.plan === "hobby" && (
+        {!profile && isFreePlan && (
           <div className="mt-4 p-3 border border-signal-queued/30 bg-signal-queued/5 text-sm flex items-center gap-3">
             <AlertTriangle className="h-4 w-4 text-signal-queued" />
             Fill in your billing profile below before choosing a paid plan.
@@ -194,7 +195,7 @@ export default function Billing() {
                     className={`mt-5 w-full inline-flex items-center justify-center gap-2 py-2 text-sm font-medium ${p.highlight ? "bg-brand text-brand-fg hover:bg-brand/90" : "border border-white/15 hover:border-white/40"}`}
                     data-testid={`upgrade-${p.id}`}
                   >
-                    {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : p.id === "hobby" ? "Downgrade" : `Go ${p.name} · €${p.price}`}
+                    {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : (p.id === "hobby" || p.id === "free") ? "Downgrade" : `Go ${p.name} · €${p.price}`}
                   </button>
                 )}
               </div>

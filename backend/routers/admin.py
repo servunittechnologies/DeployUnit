@@ -53,8 +53,9 @@ async def get_platform_settings() -> dict:
 def _redact_settings(doc: dict) -> dict:
     """Redact secrets before handing the doc to the frontend."""
     out = dict(doc)
-    # Never leak the encrypted token — just tell the UI whether one is configured.
+    # Never leak the encrypted tokens — just tell the UI whether one is configured.
     out["cloudflare_api_token_set"] = bool(out.pop("cloudflare_api_token_enc", None))
+    out["twilio_auth_token_set"] = bool(out.pop("twilio_auth_token_enc", None))
     out.pop("_id", None)
     return out
 
@@ -85,10 +86,14 @@ async def integrations(request: Request):
             and (os.environ.get("GITHUB_CLIENT_SECRET") or os.environ.get("GITHUB_OAUTH_CLIENT_SECRET"))
         ),
     }
+    # Twilio status (creds in DB platform_settings, Fernet-encrypted)
+    from clients.twilio import configured as twilio_ok
+    tw = {"configured": await twilio_ok()}
     return {
         "coolify": cool,
         "mollie": moll,
         "github_oauth": gh,
+        "twilio": tw,
         "company_country": await effective_home_country(),
         "eu_vat_countries": len(EU_VAT_RATES),
     }
@@ -138,6 +143,14 @@ async def update_platform_settings(payload: PlatformSettingsUpdate, request: Req
             current["cloudflare_api_token_enc"] = encrypt_token(tok)
         else:
             current.pop("cloudflare_api_token_enc", None)
+
+    # Handle Twilio auth token: encrypt + persist; "" means "clear".
+    if "twilio_auth_token" in data:
+        tok = (data.pop("twilio_auth_token") or "").strip()
+        if tok:
+            current["twilio_auth_token_enc"] = encrypt_token(tok)
+        else:
+            current.pop("twilio_auth_token_enc", None)
 
     for k, v in data.items():
         if v is None or v == "":

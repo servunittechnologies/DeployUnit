@@ -36,8 +36,6 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState("developer");
   const [inviteError, setInviteError] = useState("");
 
-  const [integ, setInteg] = useState(null);
-
   // Notification preferences (Sprint 3 — Twilio SMS/WhatsApp + email)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [phoneE164, setPhoneE164] = useState("");
@@ -59,9 +57,6 @@ export default function Settings() {
   };
 
   useEffect(loadMembers, [active]);
-  useEffect(() => {
-    api.get("/integrations/health").then((r) => setInteg(r.data)).catch(() => setInteg(null));
-  }, []);
 
   // Load notification prefs once on mount
   useEffect(() => {
@@ -381,10 +376,10 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Integrations health */}
+      {/* Integrations — user-facing only (GitHub) */}
       <section className="border border-white/[0.06] p-6 space-y-3">
-        <h2 className="font-display text-xl">Integrations</h2>
-        <p className="text-xs text-zinc-500">Status of platform-level integrations.</p>
+        <h2 className="font-display text-xl">Connected accounts</h2>
+        <p className="text-xs text-zinc-500">Link your developer accounts to unlock automated deploys.</p>
 
         {/* GitHub OAuth — per-user */}
         <div className="bg-elevated/30 border border-white/[0.06] p-4 mt-2">
@@ -419,24 +414,6 @@ export default function Settings() {
               )}
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06]">
-          {[
-            ["coolify", "Coolify (deploy engine)"],
-            ["whmcs", "WHMCS (billing)"],
-            ["twilio", "Twilio (SMS / WhatsApp)"],
-          ].map(([k, label]) => (
-            <div key={k} className="bg-background p-4 flex items-center justify-between" data-testid={`integ-${k}`}>
-              <div>
-                <div className="text-sm">{label}</div>
-                <div className="text-xs font-mono text-zinc-500">
-                  {integ?.[k]?.configured ? "configured" : "not configured"}
-                </div>
-              </div>
-              <span className={`h-2 w-2 rounded-full ${integ?.[k]?.ok ? "bg-signal-live animate-ping-soft" : "bg-zinc-600"}`} />
-            </div>
-          ))}
         </div>
       </section>
     </div>

@@ -87,7 +87,17 @@ function IntegrationsTab() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono">
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
-            <StatusPill ok={data.coolify.configured && data.coolify?.health?.ok} label={data.coolify.configured ? (data.coolify?.health?.ok ? "healthy" : "unreachable") : "not configured"} />
+            {data.coolify.configured ? (
+              data.coolify?.health?.ok ? (
+                <StatusPill ok={true} label="connected" />
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-signal-queued text-xs font-mono" data-testid="admin-coolify-unreachable">
+                  <AlertCircle className="h-3.5 w-3.5" /> configured, unreachable from backend
+                </span>
+              )
+            ) : (
+              <StatusPill ok={false} label="not configured" />
+            )}
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">endpoint</div>
@@ -98,6 +108,13 @@ function IntegrationsTab() {
             <div className="text-zinc-300">{data.coolify?.health?.version || "—"}</div>
           </div>
         </div>
+        {data.coolify.configured && !data.coolify?.health?.ok && (
+          <div className="mt-3 text-[11px] font-mono text-zinc-500 leading-relaxed">
+            Credentials are saved, but DeployHub's backend couldn't reach <span className="text-zinc-300">{data.coolify.base_url}</span> right now.
+            Check firewall rules, server uptime, or network routing. Deployments will queue until reachable.
+            {data.coolify?.health?.error && <span className="text-signal-failed"> · {data.coolify.health.error}</span>}
+          </div>
+        )}
       </Section>
 
       <Section
@@ -139,6 +156,18 @@ function IntegrationsTab() {
                 data-testid="admin-copy-callback"
               ><Copy className="h-3.5 w-3.5" /></button>
             </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Twilio (SMS + WhatsApp)"
+        description="Used to send customer notification alerts (billed from each workspace's credit wallet)."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
+            <StatusPill ok={data.twilio?.configured} label={data.twilio?.configured ? "connected" : "not configured — add credentials below in Platform Domain → Twilio"} />
           </div>
         </div>
       </Section>
@@ -352,6 +381,14 @@ function PlatformTab() {
     company_postcode: "",
     company_city: "",
     company_vat_id: "",
+    // Twilio (SMS + WhatsApp). Auth token stored Fernet-encrypted server-side.
+    twilio_account_sid: "",
+    twilio_auth_token: "",
+    twilio_messaging_service_sid: "",
+    twilio_from_number: "",
+    twilio_whatsapp_from: "",
+    twilio_status_callback: "",
+    twilio_test_mode: false,
   });
 
   const load = async () => {
@@ -372,6 +409,13 @@ function PlatformTab() {
         company_postcode: r.data.company_postcode || "",
         company_city: r.data.company_city || "",
         company_vat_id: r.data.company_vat_id || "",
+        twilio_account_sid: r.data.twilio_account_sid || "",
+        twilio_auth_token: "", // never round-trip; backend redacts
+        twilio_messaging_service_sid: r.data.twilio_messaging_service_sid || "",
+        twilio_from_number: r.data.twilio_from_number || "",
+        twilio_whatsapp_from: r.data.twilio_whatsapp_from || "",
+        twilio_status_callback: r.data.twilio_status_callback || "",
+        twilio_test_mode: !!r.data.twilio_test_mode,
       }));
     } finally {
       setLoading(false);
@@ -384,13 +428,13 @@ function PlatformTab() {
     try {
       const payload = {};
       Object.entries(form).forEach(([k, v]) => {
-        // Only send the token if user typed a new one (avoid clearing by empty string)
-        if (k === "cloudflare_api_token" && v === "") return;
+        // Only send tokens if user typed a new value (avoid clearing by empty string)
+        if ((k === "cloudflare_api_token" || k === "twilio_auth_token") && v === "") return;
         payload[k] = v;
       });
       const r = await api.put("/admin/platform-settings", payload);
       setS(r.data);
-      setForm((f) => ({ ...f, cloudflare_api_token: "" }));
+      setForm((f) => ({ ...f, cloudflare_api_token: "", twilio_auth_token: "" }));
       toast.success("Platform settings saved");
     } catch (e) {
       toast.error("Save failed: " + (e?.response?.data?.detail || e.message));
@@ -508,6 +552,75 @@ function PlatformTab() {
               data-testid="admin-target-host"
             />
           </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Twilio (SMS + WhatsApp alerts)"
+        description="Used to send customer notifications (billed from credit wallet). Get credentials at twilio.com → Console → Account."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Field label="Account SID" hint="Find in Twilio Console → Account → API keys & tokens">
+            <Input
+              value={form.twilio_account_sid}
+              onChange={(e) => setForm({ ...form, twilio_account_sid: e.target.value })}
+              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              data-testid="admin-twilio-sid"
+            />
+          </Field>
+          <Field label="Auth Token" hint={s.twilio_auth_token_set ? "A token is already saved. Leave blank to keep it." : "Same page as Account SID in Twilio Console."}>
+            <Input
+              type="password"
+              value={form.twilio_auth_token}
+              onChange={(e) => setForm({ ...form, twilio_auth_token: e.target.value })}
+              placeholder={s.twilio_auth_token_set ? "•••••••• (saved)" : "paste token here"}
+              data-testid="admin-twilio-token"
+            />
+          </Field>
+          <Field label="From phone (E.164)" hint="Twilio number for SMS, e.g. +14155551234. Required if no Messaging Service SID.">
+            <Input
+              value={form.twilio_from_number}
+              onChange={(e) => setForm({ ...form, twilio_from_number: e.target.value })}
+              placeholder="+14155551234"
+              data-testid="admin-twilio-from"
+            />
+          </Field>
+          <Field label="Messaging Service SID (optional)" hint="If you use Twilio Messaging Services for routing. Leave blank to use From phone.">
+            <Input
+              value={form.twilio_messaging_service_sid}
+              onChange={(e) => setForm({ ...form, twilio_messaging_service_sid: e.target.value })}
+              placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              data-testid="admin-twilio-msg-service"
+            />
+          </Field>
+          <Field label="WhatsApp sender" hint="Approved WhatsApp Business sender, e.g. whatsapp:+14155238886">
+            <Input
+              value={form.twilio_whatsapp_from}
+              onChange={(e) => setForm({ ...form, twilio_whatsapp_from: e.target.value })}
+              placeholder="whatsapp:+14155238886"
+              data-testid="admin-twilio-whatsapp-from"
+            />
+          </Field>
+          <Field label="Status callback URL (optional)" hint="Webhook for delivery receipts. Defaults to /api/notifications/twilio/status.">
+            <Input
+              value={form.twilio_status_callback}
+              onChange={(e) => setForm({ ...form, twilio_status_callback: e.target.value })}
+              placeholder="https://yourapp.com/api/notifications/twilio/status"
+              data-testid="admin-twilio-callback"
+            />
+          </Field>
+          <div className="md:col-span-2 flex items-center gap-2 pt-1">
+            <input
+              id="twilio_test_mode"
+              type="checkbox"
+              checked={form.twilio_test_mode}
+              onChange={(e) => setForm({ ...form, twilio_test_mode: e.target.checked })}
+              data-testid="admin-twilio-test-mode"
+            />
+            <label htmlFor="twilio_test_mode" className="text-xs font-mono text-zinc-400 cursor-pointer">
+              Test mode (use Twilio test credentials — no real messages sent, no charges)
+            </label>
+          </div>
         </div>
       </Section>
 
