@@ -312,114 +312,219 @@ function HowItWorks() {
 /* ───────────────────────── Features bento ───────────────────────── */
 
 function MetricsGraphMock() {
-  const data = useMemo(
-    () => Array.from({ length: 30 }, (_, i) => ({
-      t: i, cpu: 30 + Math.sin(i / 3) * 18 + (i % 5) * 2,
+  const [data, setData] = useState(() =>
+    Array.from({ length: 30 }, (_, i) => ({
+      t: i,
+      cpu: 30 + Math.sin(i / 3) * 18 + (i % 5) * 2,
       mem: 55 + Math.cos(i / 4) * 12 + Math.sin(i / 6) * 6,
     })),
-    [],
   );
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return;
+    const id = setInterval(() => {
+      setData((prev) => {
+        const last = prev[prev.length - 1];
+        const next = {
+          t: last.t + 1,
+          cpu: Math.max(8, Math.min(95, last.cpu + (Math.random() - 0.5) * 14)),
+          mem: Math.max(20, Math.min(95, last.mem + (Math.random() - 0.5) * 9)),
+        };
+        return [...prev.slice(1), next];
+      });
+    }, 1600);
+    return () => clearInterval(id);
+  }, [paused]);
+
+  const latest = data[data.length - 1];
   return (
-    <div style={{ width: "100%", height: 160 }}>
-      <ResponsiveContainer>
-        <LineChart data={data}>
-          <CartesianGrid stroke="#1f1f23" vertical={false} />
-          <XAxis dataKey="t" hide />
-          <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} />
-          <RTooltip
-            contentStyle={{ background: "#0a0a0a", border: "1px solid #27272a", fontSize: 11, fontFamily: "JetBrains Mono" }}
-            cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }}
-          />
-          <Line type="monotone" dataKey="cpu" name="CPU %" stroke={CYAN} dot={false} strokeWidth={2} animationDuration={1800} />
-          <Line type="monotone" dataKey="mem" name="MEM %" stroke={GREEN} dot={false} strokeWidth={2} animationDuration={1800} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      data-testid="metrics-live-chart"
+    >
+      <div className="flex items-center justify-between mb-1 text-[10px] font-mono">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-emerald-400">
+            <span className={`h-1.5 w-1.5 rounded-full bg-emerald-400 ${paused ? "" : "animate-pulse"}`} />
+            {paused ? "paused" : "live"}
+          </span>
+          <span className="text-zinc-500">· 1.6s tick</span>
+        </div>
+        <div className="flex gap-3 tabular-nums">
+          <span className="text-cyan-400">CPU {Math.round(latest.cpu)}%</span>
+          <span className="text-emerald-400">MEM {Math.round(latest.mem)}%</span>
+        </div>
+      </div>
+      <div style={{ width: "100%", height: 140 }}>
+        <ResponsiveContainer>
+          <LineChart data={data}>
+            <CartesianGrid stroke="#1f1f23" vertical={false} />
+            <XAxis dataKey="t" hide />
+            <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} />
+            <RTooltip
+              contentStyle={{ background: "#0a0a0a", border: "1px solid #27272a", fontSize: 11, fontFamily: "JetBrains Mono" }}
+              cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }}
+            />
+            <Line type="monotone" dataKey="cpu" name="CPU %" stroke={CYAN} dot={false} strokeWidth={2} isAnimationActive={false} />
+            <Line type="monotone" dataKey="mem" name="MEM %" stroke={GREEN} dot={false} strokeWidth={2} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
 
 function PageSpeedGauge() {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
+  const inView = useInView(ref, { once: false, amount: 0.3 });
+  const [target, setTarget] = useState(98);
   const [score, setScore] = useState(0);
+  const [running, setRunning] = useState(false);
+
   useEffect(() => {
-    if (!inView) return;
-    const target = 98;
-    let f = 0;
-    const id = setInterval(() => { f += 2; setScore(Math.min(target, f)); if (f >= target) clearInterval(id); }, 22);
+    if (!inView && !running) return;
+    let f = score;
+    const id = setInterval(() => {
+      if (f < target) { f += 2; setScore(Math.min(target, f)); }
+      else { clearInterval(id); setRunning(false); }
+    }, 22);
     return () => clearInterval(id);
-  }, [inView]);
+    // eslint-disable-next-line
+  }, [target, inView]);
+
+  const run = () => {
+    setRunning(true);
+    setScore(0);
+    setTarget(89 + Math.floor(Math.random() * 11)); // 89..99
+  };
+
   const r = 56;
   const c = 2 * Math.PI * r;
   return (
-    <div ref={ref} className="flex items-center gap-5">
-      <svg width={130} height={130} viewBox="0 0 130 130">
-        <circle cx={65} cy={65} r={r} stroke="#1f1f23" strokeWidth={8} fill="none" />
-        <circle
-          cx={65} cy={65} r={r}
-          stroke={CYAN} strokeWidth={8} fill="none"
-          strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)}
-          strokeLinecap="round" transform="rotate(-90 65 65)"
-          style={{ transition: "stroke-dashoffset 1s ease-out" }}
-        />
-        <text x="65" y="72" textAnchor="middle" className="fill-cyan-400 font-mono" fontSize="28">{score}</text>
-      </svg>
-      <div className="text-xs font-mono text-zinc-400 space-y-1">
-        <div className="flex justify-between gap-3"><span>LCP</span><span className="text-emerald-400">1.2s</span></div>
-        <div className="flex justify-between gap-3"><span>FCP</span><span className="text-emerald-400">0.8s</span></div>
-        <div className="flex justify-between gap-3"><span>CLS</span><span className="text-emerald-400">0.02</span></div>
-        <div className="flex justify-between gap-3"><span>TBT</span><span className="text-cyan-400">120ms</span></div>
+    <div ref={ref}>
+      <div className="flex items-center gap-5">
+        <svg width={130} height={130} viewBox="0 0 130 130">
+          <circle cx={65} cy={65} r={r} stroke="#1f1f23" strokeWidth={8} fill="none" />
+          <circle
+            cx={65} cy={65} r={r}
+            stroke={CYAN} strokeWidth={8} fill="none"
+            strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)}
+            strokeLinecap="round" transform="rotate(-90 65 65)"
+            style={{ transition: "stroke-dashoffset 0.4s ease-out" }}
+          />
+          <text x="65" y="72" textAnchor="middle" className="fill-cyan-400 font-mono" fontSize="28">{score}</text>
+        </svg>
+        <div className="text-xs font-mono text-zinc-400 space-y-1 flex-1">
+          {[
+            { l: "LCP", v: "1.2s", k: "emerald" },
+            { l: "FCP", v: "0.8s", k: "emerald" },
+            { l: "CLS", v: "0.02", k: "emerald" },
+            { l: "TBT", v: "120ms", k: "cyan" },
+          ].map((m) => (
+            <div key={m.l} className="flex justify-between gap-3 group/m">
+              <span className="group-hover/m:text-zinc-200 transition-colors">{m.l}</span>
+              <span className={m.k === "emerald" ? "text-emerald-400" : "text-cyan-400"}>{m.v}</span>
+            </div>
+          ))}
+        </div>
       </div>
+      <button
+        type="button"
+        onClick={run}
+        disabled={running}
+        className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.25em] border border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-50 transition-colors"
+        data-testid="pagespeed-run-audit"
+      >
+        {running ? "auditing…" : "↺ re-run audit"}
+      </button>
     </div>
   );
 }
 
 function VisitorMapMock() {
-  const dots = useMemo(() => [
-    { x: 18, y: 35 }, { x: 22, y: 45 }, { x: 28, y: 38 }, { x: 25, y: 50 },
-    { x: 40, y: 30 }, { x: 45, y: 42 }, { x: 50, y: 38 }, { x: 60, y: 50 },
-    { x: 68, y: 45 }, { x: 78, y: 55 }, { x: 75, y: 38 }, { x: 32, y: 60 },
-    { x: 55, y: 65 }, { x: 30, y: 28 }, { x: 65, y: 28 },
+  const baseDots = useMemo(() => [
+    { x: 18, y: 35, c: "DE" }, { x: 22, y: 45, c: "FR" }, { x: 28, y: 38, c: "NL" }, { x: 25, y: 50, c: "ES" },
+    { x: 40, y: 30, c: "PL" }, { x: 45, y: 42, c: "IT" }, { x: 50, y: 38, c: "AT" }, { x: 60, y: 50, c: "GR" },
+    { x: 68, y: 45, c: "TR" }, { x: 78, y: 55, c: "AE" }, { x: 75, y: 38, c: "IN" }, { x: 32, y: 60, c: "PT" },
+    { x: 55, y: 65, c: "MA" }, { x: 30, y: 28, c: "UK" }, { x: 65, y: 28, c: "RU" },
   ], []);
+  const [visible, setVisible] = useState(() => baseDots.map(() => true));
+  const [visitors, setVisitors] = useState(847);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const idx = Math.floor(Math.random() * baseDots.length);
+      setVisible((prev) => {
+        const out = [...prev];
+        out[idx] = !out[idx];
+        return out;
+      });
+      setVisitors((v) => v + (Math.random() < 0.7 ? 1 : 0));
+    }, 900);
+    return () => clearInterval(id);
+  }, [baseDots.length]);
+
   return (
-    <div className="relative h-[160px] border border-zinc-800 bg-zinc-950/60 overflow-hidden">
+    <div className="relative h-[160px] border border-zinc-800 bg-zinc-950/60 overflow-hidden" data-testid="visitor-map">
       <div
         className="absolute inset-0 opacity-[0.07]"
         style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)", backgroundSize: "16px 16px" }}
       />
-      {dots.map((d, i) => (
+      {baseDots.map((d, i) => (
         <motion.span
           key={i}
           initial={{ opacity: 0, scale: 0 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.06, duration: 0.35 }}
-          className="absolute h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_2px_rgba(6,182,212,0.6)]"
+          animate={{ opacity: visible[i] ? 1 : 0, scale: visible[i] ? 1 : 0 }}
+          transition={{ duration: 0.5 }}
+          className="absolute h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_2px_rgba(6,182,212,0.6)] cursor-pointer hover:scale-150 transition-transform"
           style={{ left: `${d.x}%`, top: `${d.y}%` }}
+          title={d.c}
+          data-country={d.c}
         />
       ))}
-      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-400">
-        <span className="text-cyan-400">847</span> visitors · <span className="text-emerald-400">14 countries</span>
+      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-400 tabular-nums">
+        <span className="text-cyan-400">{visitors.toLocaleString()}</span> visitors · <span className="text-emerald-400">14 countries</span>
+      </div>
+      <div className="absolute top-3 right-3 inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> live
       </div>
     </div>
   );
 }
 
 function AlertsMock() {
-  const items = [
-    { ch: "slack", msg: "✓ /api/login healthy · 99.99% 24h", t: "12:04", k: "ok" },
-    { ch: "discord", msg: "↗ CPU 78% on web-01 · scaled", t: "12:08", k: "warn" },
-    { ch: "sms", msg: "→ Deploy succeeded · v1.4.2", t: "12:11", k: "ok" },
-  ];
+  const pool = useMemo(() => [
+    { ch: "slack",   msg: "✓ /api/login healthy · 99.99% 24h",   k: "ok" },
+    { ch: "discord", msg: "↗ CPU 78% on web-01 · scaled to 1.5", k: "warn" },
+    { ch: "sms",     msg: "→ Deploy succeeded · v1.4.2",         k: "ok" },
+    { ch: "discord", msg: "✓ DNS propagated · cdn.app.io",       k: "ok" },
+    { ch: "slack",   msg: "↗ Mem 91% on api-02 · auto-restart",  k: "warn" },
+    { ch: "wapp",    msg: "→ TLS renewed · servunit.app",         k: "ok" },
+    { ch: "slack",   msg: "✓ Build complete · 38s · 245 MB",     k: "ok" },
+  ], []);
+  const [items, setItems] = useState(() => pool.slice(0, 3).map((p, i) => ({ ...p, id: i, t: nowMin() })));
+  useEffect(() => {
+    const id = setInterval(() => {
+      setItems((prev) => {
+        const next = pool[Math.floor(Math.random() * pool.length)];
+        return [
+          { ...next, id: Date.now(), t: nowMin() },
+          ...prev,
+        ].slice(0, 3);
+      });
+    }, 3500);
+    return () => clearInterval(id);
+  }, [pool]);
+
   return (
-    <div className="space-y-2">
-      {items.map((it, i) => (
+    <div className="space-y-2" data-testid="alerts-live">
+      {items.map((it) => (
         <motion.div
-          key={i}
-          initial={{ opacity: 0, x: -10 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.15 * i }}
+          key={it.id}
+          initial={{ opacity: 0, y: -10, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.35 }}
           className="flex items-center gap-3 border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs font-mono"
         >
           <span className={`uppercase text-[9px] tracking-[0.25em] px-1.5 py-0.5 border ${it.k === "warn" ? "text-yellow-400 border-yellow-500/40" : "text-emerald-400 border-emerald-500/30"}`}>{it.ch}</span>
@@ -431,28 +536,47 @@ function AlertsMock() {
   );
 }
 
+function nowMin() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function WorkspaceSwitcherMock() {
-  const ws = ["Beyond Meassure", "ServUnit", "Stella Labs", "OakRoot"];
+  const ws = useMemo(() => [
+    { name: "Beyond Meassure", apps: 4,  deploys: 28 },
+    { name: "ServUnit",        apps: 6,  deploys: 41 },
+    { name: "Stella Labs",     apps: 8,  deploys: 17 },
+    { name: "OakRoot",         apps: 10, deploys: 52 },
+  ], []);
+  const [active, setActive] = useState(0);
   return (
-    <div className="border border-zinc-800 bg-zinc-950/50">
-      <div className="px-3 py-2 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">workspaces</div>
+    <div className="border border-zinc-800 bg-zinc-950/50" data-testid="workspace-switcher">
+      <div className="px-3 py-2 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 flex items-center justify-between">
+        <span>workspaces</span>
+        <span className="text-cyan-400">{ws[active].deploys} deploys / 30d</span>
+      </div>
       <div className="divide-y divide-zinc-900">
-        {ws.map((w, i) => (
-          <motion.div
-            key={w}
-            initial={{ opacity: 0, x: -8 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: i * 0.1 }}
-            className="flex items-center justify-between px-3 py-2 text-xs font-mono"
-          >
-            <span className="flex items-center gap-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${i === 0 ? "bg-cyan-400" : "bg-zinc-700"}`} />
-              <span className={i === 0 ? "text-cyan-300" : "text-zinc-400"}>{w}</span>
-            </span>
-            <span className="text-zinc-600">{4 + i * 2} apps</span>
-          </motion.div>
-        ))}
+        {ws.map((w, i) => {
+          const isActive = i === active;
+          return (
+            <button
+              type="button"
+              key={w.name}
+              onClick={() => setActive(i)}
+              className="w-full text-left flex items-center justify-between px-3 py-2 text-xs font-mono hover:bg-zinc-900/40 transition-colors group"
+              data-testid={`workspace-${i}`}
+            >
+              <span className="flex items-center gap-2">
+                <motion.span
+                  animate={{ scale: isActive ? 1.2 : 1 }}
+                  className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-cyan-400 shadow-[0_0_6px_2px_rgba(6,182,212,0.6)]" : "bg-zinc-700 group-hover:bg-zinc-500"}`}
+                />
+                <span className={isActive ? "text-cyan-300" : "text-zinc-400 group-hover:text-zinc-200"}>{w.name}</span>
+              </span>
+              <span className="text-zinc-600">{w.apps} apps</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -465,11 +589,15 @@ function BentoCard({ span = "lg:col-span-1 lg:row-span-1", overline, title, body
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.5 }}
-      whileHover={{ borderColor: "rgba(6,182,212,0.5)" }}
-      className={`relative border border-zinc-800 bg-zinc-950/40 p-6 lg:p-8 overflow-hidden flex flex-col ${span}`}
+      whileHover={{ y: -3, borderColor: "rgba(6,182,212,0.5)", boxShadow: "0 0 30px -10px rgba(6,182,212,0.35)" }}
+      className={`relative border border-zinc-800 bg-zinc-950/40 p-6 lg:p-8 overflow-hidden flex flex-col transition-shadow ${span}`}
       data-testid={testId}
     >
-      <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-cyan-500/[0.04] blur-3xl pointer-events-none" />
+      <motion.div
+        className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-cyan-500/[0.04] blur-3xl pointer-events-none"
+        animate={{ scale: [1, 1.15, 1], opacity: [0.4, 0.7, 0.4] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
       <div className="relative">
         <Overline>{overline}</Overline>
         <h3 className="mt-3 font-display text-xl md:text-2xl font-semibold tracking-tight text-white">{title}</h3>
@@ -625,19 +753,69 @@ function IlluDomains() {
 }
 
 function IlluAudit() {
-  const rows = [
-    { t: "14:32", who: "martijn",  what: "deploy v1.4.2",       k: "text-emerald-400" },
-    { t: "14:28", who: "ci/auto",  what: "resource ↑ 0.5→1.0",  k: "text-cyan-400" },
-    { t: "14:21", who: "admin",    what: "invited @bob",        k: "text-zinc-300" },
-  ];
+  const pool = useMemo(() => [
+    { who: "martijn",  what: "deploy v1.4.2",        k: "text-emerald-400" },
+    { who: "ci/auto",  what: "resource ↑ 0.5→1.0",   k: "text-cyan-400" },
+    { who: "admin",    who2: "invited @bob",         k: "text-zinc-300" },
+    { who: "ci/auto",  what: "TLS renewed",          k: "text-emerald-400" },
+    { who: "sara",     what: "rollback v1.4.1",      k: "text-yellow-400" },
+    { who: "ci/auto",  what: "scaled web-01 →2",     k: "text-cyan-400" },
+    { who: "martijn",  what: "edited env vars",      k: "text-zinc-300" },
+  ], []);
+  const [items, setItems] = useState(() => pool.slice(0, 3).map((p, i) => ({ ...p, id: i, t: nowMin() })));
+  useEffect(() => {
+    const id = setInterval(() => {
+      setItems((prev) => {
+        const next = pool[Math.floor(Math.random() * pool.length)];
+        return [{ ...next, id: Date.now(), t: nowMin() }, ...prev].slice(0, 3);
+      });
+    }, 4500);
+    return () => clearInterval(id);
+  }, [pool]);
   return (
-    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
-      {rows.map((r, i) => (
-        <div key={i} className="flex items-center gap-2">
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1 overflow-hidden" data-testid="illu-audit">
+      {items.map((r) => (
+        <motion.div
+          key={r.id}
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="flex items-center gap-2"
+        >
           <span className="text-zinc-600">{r.t}</span>
           <span className="text-zinc-500">{r.who}</span>
-          <span className={`ml-auto truncate ${r.k}`}>{r.what}</span>
-        </div>
+          <span className={`ml-auto truncate ${r.k}`}>{r.what || r.who2}</span>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function IlluCron() {
+  const initial = useMemo(() => [
+    { expr: "0 */6 * * *", name: "send_digest_email", state: "✓ 04:00", on: true },
+    { expr: "@daily",      name: "cleanup_uploads",   state: "✓ 00:00", on: true },
+    { expr: "*/15 * * *",  name: "refresh_cache",     state: "✓ 09:45", on: true },
+  ], []);
+  const [rows, setRows] = useState(initial);
+  const toggle = (i) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, on: !r.on } : r));
+  return (
+    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1" data-testid="illu-cron">
+      {rows.map((r, i) => (
+        <button
+          type="button"
+          key={i}
+          onClick={() => toggle(i)}
+          className="w-full grid grid-cols-[auto_1fr_auto_auto] gap-2 items-center hover:bg-zinc-900/40 px-1 py-0.5 transition-colors"
+          data-testid={`illu-cron-toggle-${i}`}
+        >
+          <span className={r.on ? "text-cyan-400" : "text-zinc-600 line-through"}>{r.expr}</span>
+          <span className={`text-left truncate ${r.on ? "text-zinc-300" : "text-zinc-600 line-through"}`}>{r.name}</span>
+          <span className={r.on ? "text-emerald-400" : "text-zinc-600"}>{r.on ? r.state : "paused"}</span>
+          <span className={`h-3 w-5 border rounded-sm relative transition-colors ${r.on ? "bg-cyan-500/30 border-cyan-500/60" : "border-zinc-700"}`}>
+            <span className={`absolute top-[1px] h-2 w-2 bg-zinc-200 transition-all ${r.on ? "left-[10px]" : "left-[1px]"}`} />
+          </span>
+        </button>
       ))}
     </div>
   );
@@ -664,25 +842,6 @@ function IlluResources() {
             />
           </div>
           <span className="text-zinc-500 w-24 text-right shrink-0">{b.max}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function IlluCron() {
-  const rows = [
-    { expr: "0 */6 * * *", name: "send_digest_email", state: "✓ 04:00" },
-    { expr: "@daily",      name: "cleanup_uploads",   state: "✓ 00:00" },
-    { expr: "*/15 * * *",  name: "refresh_cache",     state: "✓ 09:45" },
-  ];
-  return (
-    <div className="bg-black/40 border border-zinc-800 p-2.5 font-mono text-[10px] space-y-1">
-      {rows.map((r, i) => (
-        <div key={i} className="grid grid-cols-[auto_1fr_auto] gap-2 items-center">
-          <span className="text-cyan-400">{r.expr}</span>
-          <span className="text-zinc-300 truncate">{r.name}</span>
-          <span className="text-emerald-400">{r.state}</span>
         </div>
       ))}
     </div>

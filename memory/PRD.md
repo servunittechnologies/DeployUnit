@@ -183,7 +183,18 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **2026-05-11 — Landing v2.1: 70%+ green claim + Team Trees partnership + feature illustrations**
+  - **2026-05-11 — Landing v2.3: interactive + continuously-animated feature cards**
+  - Every bento feature card now feels "alive" — continuous animations + on-click interactivity.
+  - **MetricsGraphMock**: `setInterval` ticks every 1.6s, shifts the time-series and appends a new randomised CPU/MEM point. Header shows `● live · 1.6s tick · CPU 22% MEM 64%` (real-time). Hover pauses the loop with a `paused` badge.
+  - **PageSpeedGauge**: added "↺ Re-run audit" button that resets to 0 and re-animates to a fresh random target (89-99). `isAnimationActive={false}` on Line for snappy real-time feel.
+  - **VisitorMapMock**: dots randomly fade in/out every 0.9s, visitor count tabular-nums increments stochastically. Hover scales individual dots; `● live` indicator top-right.
+  - **AlertsMock**: pool of 7 alerts; new one prepends to the top every 3.5s, list capped at 3, oldest scrolls out. Fresh timestamp on each tick.
+  - **WorkspaceSwitcherMock**: each row is a `<button>` — click switches active workspace, dot animates `scale: 1.2` with cyan glow, header live-updates to that workspace's `deploys / 30d` count.
+  - **BentoCard wrapper**: hover lifts `y: -3` + brand-tinted box-shadow glow + cyan border. Background blob breathes continuously (`scale + opacity` loop, 8s).
+  - **Small cards** also got interactivity: **IlluAudit** prepends a new event every 4.5s, **IlluCron** each row is now a clickable toggle pill (clicked rows show `paused` + line-through + on/off switch knob slides).
+  - Shared `nowMin()` helper produces fresh `HH:MM` timestamps so every live tick has a current-clock time.
+
+
   - **Green-energy claim updated** to honest "70%+ renewable today. Climbing every day." (was "100% wind & solar"). Body copy reworked to emphasise quarterly improvement & no carbon-offset accounting. Stat grid updated: `70%+ renewable today · ↑ climbing daily · EU datacenters · ISO 14001 partners`. Circular badge reads "Carbon Conscious by default" (was "Carbon Neutral").
   - **Team Trees partnership block** added under the Sustainability section: emerald gradient panel with three columns — (1) animated leaf badge "Partner · Team Trees · 1 deploy = 1 tree.", (2) body copy linking to `teamtrees.org`, (3) live-counting tree counter that climbs 0→1,247 on viewport (cubic easing). Decorative SVG tree-grove sits in the bottom-right. Pulsing emerald dot on the leaf icon for life.
   - **Small feature tiles** got their own micro-illustrations matching the bento style: PR previews → SVG main+branch git graph with `pr-42 live` badge, Managed databases → status rows for postgres/redis/mysql attachments, Custom domains+DNS → A/CNAME/MX record stub with TLS lock, Audit log → timestamped event rows, Resource limits → 3 animated progress bars (vCPU/RAM/Disk), Custom cron → 3 cron-expression rows with last-run timestamps. All animated, all first-party.
