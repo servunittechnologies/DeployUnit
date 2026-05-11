@@ -21,10 +21,18 @@ router = APIRouter(tags=["roadmap"])
 # Whitelist of features users can sign up for. Keep keys stable — they
 # index waitlist segments in MongoDB and on the admin export.
 KNOWN_FEATURES = {
+    # Analytics & Insights
     "heatmaps":   "Native heatmaps & session replays",
+    # Developer experience
+    "branching":  "Database branching",
+    "copilot":    "AI Code Co-pilot",
+    "visualdiff": "Visual deploy diffs",
+    "api":        "Developers API",
+    # Business tools
+    "reports":    "White-label client reports",
+    # Infrastructure
     "mailserver": "Mailserver hosting",
     "dns":        "DNS Manager",
-    "api":        "Developers API",
 }
 
 

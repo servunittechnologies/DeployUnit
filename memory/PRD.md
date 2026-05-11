@@ -183,9 +183,14 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Frontend**: `pages/dashboard/Settings.jsx` — Notification Preferences section: E.164 phone input, 7×3 toggle matrix (events × {SMS, WhatsApp, Email}), credit-cost legend, Test SMS / Test WhatsApp buttons.
   - **Pricing**: SMS EU = 1 cr (~€0.10), SMS intl = 2 cr, WhatsApp = 1 cr, Email = free (in-app).
   - **Graceful degradation**: when Twilio is not configured, sends return `status:'skipped'` with a precise error reason (`'no phone'` / `'twilio not configured'`); never crashes the alert flow. Credits are refunded on TwilioError responses.
-  - **Tests**: 14/14 new Iter8 backend assertions green. Full suite 77/78. Report at `/app/test_reports/iteration_8.json`.
+  - **2026-05-11 — Roadmap v2: 8 features + category navigation**
+  - **Added 4 new high-value coming-soon features** based on competitive-differentiation brainstorm: **Database branching** (Neon-style per-PR snapshots), **AI Code Co-pilot** (GPT-5.2-powered context-aware assistant in console), **Visual deploy diffs** (auto-screenshot + side-by-side per-page), **White-label client reports** (auto-emailed branded PDFs for agencies). Roadmap now totals 8 features.
+  - **Page redesign for density**: replaced 2-col mega-cards with a 3-col grid of compact cards. Hero now shows live `total waiting` counter on the right. New **category tab bar** filters: All / Analytics & Insights / Developer experience / Business tools / Infrastructure with per-category counts. When "All" selected, features grouped by category section with header dividers.
+  - **Compact card spec**: 5px padding, brand icon tile, "soon" badge top-right, 1-line tagline, 3 bullets max, inline email + `Notify` button on a single row. Hover border lights up brand color.
+  - **Backend**: `KNOWN_FEATURES` expanded to `heatmaps · branching · copilot · visualdiff · api · reports · mailserver · dns`. Idempotent waitlist signup logic unchanged.
 
-  - **2026-05-11 — Clarity removed + public Roadmap with waitlist signups**
+
+- **2026-05-11 — Clarity removed + public Roadmap with waitlist signups**
   - **Clarity fully removed** from code: `clarity_project_id` field gone from `PlatformSettingsUpdate`, `services/analytics.get_config` & `routers/analytics.get_app_analytics_config` simplified back to first-party only (snippet has no `data-clarity`, no `clarity_deeplink`, no `HEATMAPS_FEATURE_LIVE` flag, no `set_clarity_project` helper). Cleared the leftover `clarity_project_id` value from `platform_settings` document. Admin → Integrations → "Heatmaps & session recordings" section gone.
   - **New `/app/roadmap` page**: beautiful "What we're shipping next" grid with 4 coming-soon features — Native heatmaps & session replays · Mailserver hosting · DNS Manager · Developers API. Each card: gradient hover backdrop, grid texture, brand-themed icon tile, tagline, rich body copy, 5 feature bullets, **waitlist email signup** (auto-filled with the logged-in user's email when available), live "N developers waiting" counter, "coming soon" badge.
   - **Sidebar**: new "Roadmap" entry (Sparkles icon + brand-themed "soon" badge) inserted between Audit log and Settings.
@@ -193,6 +198,7 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Verified**: E2E via curl — features list, signup, idempotent re-signup (`already_signed_up: true`), counter increments, admin endpoint returns grouped rows. UI screenshot confirms layout renders cleanly.
 
 
+- **2026-05-11 — Heatmaps: hold + coming-soon white-label**
   - **Pivot**: Customer-facing Heatmaps is now a "coming soon" feature, fully white-label, zero third-party leaks. Native engine (rrweb session-replay + canvas click heatmap on auto-captured page screenshots) is on the roadmap as the next big web-analytics ship.
   - **Backend**: new `HEATMAPS_FEATURE_LIVE = False` flag in `routers/analytics.py`. While `False`: `data-clarity` is NOT injected into customer snippets, no `clarity_deeplink` is emitted, customer's HTML stays 100% first-party. Flipping to `True` re-enables the auto-injection without further code changes.
   - **Customer UI**: `HeatmapsPane` replaced with a polished "coming soon" splash — grid backdrop, brand-glow blob, 3 feature cards (Click heatmaps · Session replays · Rage & dead clicks), disabled waitlist button "You're on the waitlist · shipping next · all Pro & Agency apps unlock automatically". Sub-tab navigation also shows a `soon` badge.
