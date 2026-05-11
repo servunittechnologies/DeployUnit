@@ -195,12 +195,14 @@ async def workspace_usage(workspace_id: str) -> dict:
     db = get_db()
     apps_used = await db.apps.count_documents({"workspace_id": workspace_id})
     domains_used = await db.domains.count_documents({"workspace_id": workspace_id})
+    databases_used = await db.databases.count_documents({"workspace_id": workspace_id})
     # 1 (owner) + count of workspace_members rows
     member_rows = await db.workspace_members.count_documents({"workspace_id": workspace_id})
-    members_used = 1 + member_rows
+    members_used = max(member_rows, 1)
     return {
         "apps": apps_used,
         "domains": domains_used,
+        "databases": databases_used,
         "team": members_used,
     }
 

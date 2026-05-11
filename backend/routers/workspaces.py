@@ -175,7 +175,7 @@ async def delete_workspace(workspace_id: str, request: Request, force: bool = Fa
     # Keep payments + invoices + audit_log as historical record.
 
     from services.audit import log as audit_log
-    audit_log(action="workspace.delete", actor=user,
+    audit_log(action="workspace.delete", actor=user, workspace_id=workspace_id,
               resource_type="workspace", resource_id=workspace_id,
               meta={"name": ws.get("name"), "force": force,
                     "apps_deleted": apps_count, "databases_deleted": dbs_count},

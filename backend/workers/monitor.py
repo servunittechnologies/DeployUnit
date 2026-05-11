@@ -142,6 +142,22 @@ async def deployment_watchdog():
         app = await db.apps.find_one({"id": dep["app_id"]})
         if not app or not app.get("coolify_app_uuid"):
             continue
+        # Bail out cleanly if the build engine has already lost the app (e.g.
+        # it was deleted out of band). Otherwise the watchdog spams forever.
+        cool_app = await coolify.get_application(app["coolify_app_uuid"])
+        if cool_app is None:
+            await db.deployments.update_one(
+                {"id": dep["id"]},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "finished_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    "$push": {"logs": "[WATCHDOG] build-engine app no longer exists — marking deployment failed."},
+                },
+            )
+            logger.info("deployment_watchdog: app %s gone on build engine; failing dep %s", app["id"], dep["id"])
+            continue
         logger.info(
             "deployment_watchdog: retrying coolify deploy for %s (app=%s)",
             dep["id"],
@@ -160,7 +176,16 @@ async def deployment_watchdog():
             update["status"] = "building"
             new_logs.append(f"[WATCHDOG] deploy reconciled (uuid={cool_uuid})")
         else:
-            new_logs.append("[WATCHDOG] build engine still not returning a deploy id — will retry in 60s")
+            # Count retries so we don't spam forever. After 5 misses (~2.5 min),
+            # give up and mark the deploy failed.
+            retries = int(dep.get("watchdog_retries") or 0) + 1
+            update["watchdog_retries"] = retries
+            if retries >= 5:
+                update["status"] = "failed"
+                update["finished_at"] = datetime.now(timezone.utc).isoformat()
+                new_logs.append("[WATCHDOG] giving up after 5 retries — marking deployment failed.")
+            else:
+                new_logs.append(f"[WATCHDOG] build engine still not returning a deploy id (retry {retries}/5)")
         if update or new_logs:
             patch = {"$set": update} if update else {}
             if new_logs:

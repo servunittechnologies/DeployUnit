@@ -87,8 +87,8 @@ export default function Settings() {
 
   const deleteWorkspace = async () => {
     if (!active) return;
-    const apps = wsUsage?.apps_used ?? 0;
-    const dbs = wsUsage?.databases_used ?? 0;
+    const apps = wsUsage?.usage?.apps ?? 0;
+    const dbs = wsUsage?.usage?.databases ?? 0;
     const hasResources = apps > 0 || dbs > 0;
     const warning = hasResources
       ? `Delete "${active.name}"?\n\nThis workspace has ${apps} app(s) and ${dbs} database(s) — they will be PERMANENTLY DESTROYED on the build engine and DeployHub. This cannot be undone.\n\nType the workspace name to confirm:`
@@ -282,19 +282,29 @@ export default function Settings() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/[0.06] border border-white/[0.06]">
               <div className="bg-background p-3">
                 <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Plan</div>
-                <div className="mt-1 font-display text-base text-zinc-200 capitalize">{wsUsage.plan || "free"}</div>
+                <div className="mt-1 font-display text-base text-zinc-200 capitalize">{wsUsage.plan?.name || wsUsage.plan?.id || "free"}</div>
+                <div className="text-[10px] font-mono text-zinc-500 mt-0.5">€{wsUsage.effective_price ?? wsUsage.plan?.price ?? 0}/mo</div>
               </div>
               <div className="bg-background p-3">
                 <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Apps</div>
-                <div className="mt-1 font-display text-base text-zinc-200">{wsUsage.apps_used ?? 0}{wsUsage.apps_limit ? `/${wsUsage.apps_limit}` : ""}</div>
+                <div className="mt-1 font-display text-base text-zinc-200">
+                  {wsUsage.usage?.apps ?? 0}
+                  {wsUsage.plan?.limits?.apps && wsUsage.plan.limits.apps > 0 ? `/${wsUsage.plan.limits.apps}` : ""}
+                </div>
               </div>
               <div className="bg-background p-3">
                 <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Credits</div>
-                <div className="mt-1 font-display text-base text-brand">{wsUsage.credits_balance ?? 0}</div>
+                <div className="mt-1 font-display text-base text-brand">{wsUsage.credits?.balance ?? 0}</div>
+                {wsUsage.credits?.monthly_grant ? (
+                  <div className="text-[10px] font-mono text-zinc-500 mt-0.5">+{wsUsage.credits.monthly_grant}/mo</div>
+                ) : null}
               </div>
               <div className="bg-background p-3">
                 <div className="text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">Members</div>
-                <div className="mt-1 font-display text-base text-zinc-200">{members.length || 1}</div>
+                <div className="mt-1 font-display text-base text-zinc-200">
+                  {wsUsage.usage?.team ?? members.length ?? 1}
+                  {wsUsage.plan?.limits?.team && wsUsage.plan.limits.team > 0 ? `/${wsUsage.plan.limits.team}` : ""}
+                </div>
               </div>
             </div>
           )}
@@ -322,8 +332,8 @@ export default function Settings() {
               <div>
                 <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-failed">Danger zone</div>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Delete this workspace permanently. {(wsUsage?.apps_used ?? 0) > 0 || (wsUsage?.databases_used ?? 0) > 0
-                    ? <span className="text-signal-failed">Will also destroy {wsUsage?.apps_used ?? 0} app(s) and {wsUsage?.databases_used ?? 0} database(s) on the build engine.</span>
+                  Delete this workspace permanently. {(wsUsage?.usage?.apps ?? 0) > 0 || (wsUsage?.usage?.databases ?? 0) > 0
+                    ? <span className="text-signal-failed">Will also destroy {wsUsage?.usage?.apps ?? 0} app(s) and {wsUsage?.usage?.databases ?? 0} database(s) on the build engine.</span>
                     : "Workspace is empty."}
                 </p>
               </div>
