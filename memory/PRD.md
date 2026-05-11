@@ -56,13 +56,11 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Hooks: `useTypewriter`, `useScrambleText`, `useSpotlight`, `useDeploymentStream`.
 
 ## P1 backlog (next)
-- **Agency Fleet View** — multi-tenant dashboard for agencies: list all client workspaces, "problem-first" sort (apps with failures/down sites bubble to the top), per-client KPI mini-cards, bulk redeploy.
-- **Cloudflare auto-subdomain** — wire the existing Admin Platform setting (zone id + API token + target IP) into `routers/apps.py::create_app` so every new app gets a free `{slug}.deployhub.app` A-record + primary_url out of the box.
 - **One-click templates** — pre-built Coolify launch presets for Next.js SaaS starter, blog, e-commerce, marketing landing. No GitHub OAuth required for first deploy.
-- GitHub Webhooks for auto-deploy on `git push` (P1).
+- **`.env.example` auto-import** from GitHub repo on first deploy — parse and seed the env vars editor automatically.
 - Email notifications (need Resend / SendGrid key) — replaces the current in-app stub in send_alert.
-- White-label / branding for agency workspaces.
-- Resource usage alerts.
+- White-label / branding for agency workspaces — custom logo + accent color per workspace.
+- Resource usage alerts (CPU / RAM / bandwidth limits hitting plan ceilings).
 
 ## P2 backlog
 - PR Preview Deploys (Vercel-style) — ephemeral apps per PR.
@@ -91,7 +89,14 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Admin Console**: Coolify blijft zichtbaar onder Admin → Integrations (interne ops tooling, alleen voor de eigenaar).
   - **Files touched**: `routers/settings.py`, `routers/domains.py`, `routers/apps.py`, `workers/monitor.py`, `tests/backend_test.py`; `pages/Landing.jsx`, `pages/Pricing.jsx`, `pages/Register.jsx`, `components/BuildErrorPanel.jsx`, `components/SitePreview.jsx`. Deleted: `clients/whmcs.py`.
 
-- **2026-05-11 — UX hygiene + Sprint 3 polish (Iter8)**
+- **2026-05-11 — Sprint 4: 3 sales-growth features (Iter9)**
+  - **🌐 Cloudflare auto-subdomain**: nieuwe `clients/cloudflare.py` + `services/subdomains.py`. Wanneer admin Cloudflare configureert (zone_id + token + target ip/host), krijgt elke app automatisch een gratis `{slug}.{zone_name}` DNS-record + `primary_url`. Coolify wordt op de hoogte gebracht via `fqdn` zodat Traefik SSL uitgeeft. Cleanup gebeurt automatisch bij app-delete. Graceful: zonder Cloudflare config blijft alles werken.
+  - **🔁 GitHub Webhooks (auto-deploy on push)**: nieuwe `routers/webhooks.py` + `services/github_webhooks.py`. Per-app webhook_secret (64-char hex, secrets.token_hex(32)), HMAC-SHA256 verificatie met `hmac.compare_digest` (constant-time), branch-matching, fire-and-forget redeploy via `_redeploy_background`. Auto-registratie bij `create_app` als de gebruiker GitHub OAuth heeft gekoppeld; manueel via `POST /api/apps/{id}/webhook/register` als hij later koppelt. UI in AppDetail → Settings → "Auto-deploy on push": webhook URL copy, secret reveal/copy/rotate, enable/disable toggle, manual setup instructies.
+  - **🏢 Agency Fleet View**: nieuwe `routers/fleet.py` + `pages/dashboard/Fleet.jsx`. Multi-workspace dashboard met problem-first sorting (broken apps bubblen naar boven), 5 KPI-cards (workspaces · apps total · broken · live · monthly recurring), bulk-redeploy knop voor alle broken apps tegelijk (cap 50). Gated op `plan.fleet_view=true` (alleen Agency plan); andere users zien een upgrade-paywall. Nav-link enkel zichtbaar voor agency-workspaces.
+  - **Tests**: 21/22 GREEN op iter9. Fix toegepast op enige cosmetic issue: webhook ping/ignored returns nu HTTP 200 (was 202 door foutieve route default), queued path blijft 202 via `JSONResponse`. Datetime parsing in fleet sort gehard met try/except. `bulk_redeploy` rapporteert ook `skipped` count voor apps zonder build-engine UUID. 
+  - **Files touched**: nieuw — `routers/{webhooks,fleet}.py`, `services/{subdomains,github_webhooks}.py`, `clients/cloudflare.py`, `pages/dashboard/Fleet.jsx`. Aangepast — `server.py`, `routers/apps.py`, `App.js`, `components/DashboardLayout.jsx`, `pages/dashboard/AppDetail.jsx`.
+
+- **2026-05-11 — UX hygiene (Iter8)**
   - Settings.jsx: Coolify/WHMCS/Twilio platform-integrations grid verwijderd uit user-facing pagina; alleen "Connected accounts" (GitHub) blijft.
   - Admin → Platform Domain: Twilio config-sectie toegevoegd (Account SID, Auth Token Fernet-encrypted, From phone, Messaging Service SID, WhatsApp sender, Status callback URL, Test mode). `twilio_auth_token_set` boolean redacted naar frontend.
   - Coolify integratie-status in Admin: nu drie duidelijke states (connected / configured-but-unreachable / not-configured) met foutreden inline. Geen misleidende "offline" meer.

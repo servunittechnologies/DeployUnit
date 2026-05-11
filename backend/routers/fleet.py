@@ -10,6 +10,7 @@ Agency plan unlocks the view.
 """
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from db import get_db
@@ -36,6 +37,17 @@ _STATUS_RANK = {
 
 def _rank(status: str) -> int:
     return _STATUS_RANK.get((status or "").lower(), 6)
+
+
+def _ts(iso: Optional[str]) -> float:
+    """Best-effort ISO-8601 → epoch seconds. Returns 0.0 on anything malformed
+    so the sort never crashes the entire endpoint."""
+    if not iso:
+        return 0.0
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 async def _user_accessible_workspaces(user: dict) -> list[dict]:
@@ -129,7 +141,7 @@ async def fleet_overview(request: Request):
         # Problem-first sort
         apps.sort(key=lambda a: (
             _rank("down" if a.get("health") == "down" else a.get("status")),
-            -(datetime.fromisoformat((a.get("last_deploy_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")).timestamp()),
+            -_ts(a.get("last_deploy_at")),
         ))
         broken = sum(1 for a in apps if _rank(a.get("status")) <= 1 or a.get("health") == "down")
         live = sum(1 for a in apps if (a.get("status") or "").lower() == "live")
@@ -197,14 +209,18 @@ async def bulk_redeploy(request: Request):
         raise HTTPException(status_code=402, detail="upgrade to Agency plan to use bulk-redeploy")
 
     ws_ids = [w["id"] for w in workspaces]
-    apps = await db.apps.find(
+    # All "broken" apps including those that never reached the build engine.
+    candidates = await db.apps.find(
         {
             "workspace_id": {"$in": ws_ids},
             "status": {"$in": ["failed", "error", "down"]},
-            "coolify_app_uuid": {"$ne": None},
         },
         {"_id": 0, "id": 1, "workspace_id": 1, "coolify_app_uuid": 1, "branch": 1},
     ).limit(50).to_list(50)
+    # Skip ones that never reached the build engine — _redeploy_background
+    # requires a coolify_app_uuid.
+    apps = [a for a in candidates if a.get("coolify_app_uuid")]
+    skipped = len(candidates) - len(apps)
 
     queued = []
     for app in apps:
@@ -226,4 +242,4 @@ async def bulk_redeploy(request: Request):
         asyncio.create_task(_redeploy_background(app["id"], deploy_id, app["coolify_app_uuid"], None))
         queued.append({"app_id": app["id"], "deployment_id": deploy_id})
 
-    return {"queued": len(queued), "deployments": queued}
+    return {"queued": len(queued), "skipped": skipped, "deployments": queued}

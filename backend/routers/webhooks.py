@@ -18,6 +18,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Header
+from fastapi.responses import JSONResponse
 from typing import Optional
 
 from db import get_db
@@ -42,7 +43,7 @@ def _verify_signature(secret: str, body: bytes, sig_header: Optional[str]) -> bo
     return hmac.compare_digest(digest, expected)
 
 
-@router.post("/webhooks/github/{app_id}", status_code=202)
+@router.post("/webhooks/github/{app_id}")
 async def github_webhook(
     app_id: str,
     request: Request,
@@ -110,4 +111,7 @@ async def github_webhook(
     else:
         background.add_task(_redeploy_background, app_id, deployment_id, coolify_uuid, None)
 
-    return {"status": "queued", "deployment_id": deployment_id, "branch": app_branch}
+    return JSONResponse(
+        status_code=202,
+        content={"status": "queued", "deployment_id": deployment_id, "branch": app_branch},
+    )
