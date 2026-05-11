@@ -70,7 +70,7 @@ async def register_webhook(*, app: dict, workspace_id: str) -> Optional[dict]:
     payload = {
         "name": "web",
         "active": True,
-        "events": ["push"],
+        "events": ["push", "pull_request"],
         "config": {
             "url": hook_url,
             "content_type": "json",

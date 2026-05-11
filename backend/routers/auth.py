@@ -133,6 +133,8 @@ async def login(payload: LoginIn, request: Request, response: Response):
     access = create_access_token(user["id"], user["email"])
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
+    from services.audit import log as audit_log
+    audit_log(action="auth.login", actor=user, request=request)
     return _user_public(user)
 
 

@@ -24,6 +24,8 @@ import Billing from "./pages/dashboard/Billing";
 import Settings from "./pages/dashboard/Settings";
 import Admin from "./pages/dashboard/Admin";
 import Fleet from "./pages/dashboard/Fleet";
+import AuditLog from "./pages/dashboard/AuditLog";
+import Databases from "./pages/dashboard/Databases";
 
 function App() {
   return (
@@ -64,6 +66,8 @@ function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="admin" element={<Admin />} />
                 <Route path="fleet" element={<Fleet />} />
+                <Route path="audit" element={<AuditLog />} />
+                <Route path="databases" element={<Databases />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

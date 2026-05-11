@@ -37,6 +37,10 @@ from routers import (
     credits as credits_router,
     webhooks as webhooks_router,
     fleet as fleet_router,
+    audit as audit_router,
+    cron as cron_router,
+    databases as databases_router,
+    pr_previews as pr_previews_router,
 )
 
 
@@ -98,6 +102,10 @@ api_router.include_router(admin_router.router)
 api_router.include_router(credits_router.router)
 api_router.include_router(webhooks_router.router)
 api_router.include_router(fleet_router.router)
+api_router.include_router(audit_router.router)
+api_router.include_router(cron_router.router)
+api_router.include_router(databases_router.router)
+api_router.include_router(pr_previews_router.router)
 
 app.include_router(api_router)
 

@@ -13,7 +13,7 @@ import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
   ExternalLink, Plus, Save, Loader2, Rocket, ShieldCheck, Undo2,
-  Webhook, Copy, Eye, EyeOff, RefreshCw,
+  Webhook, Copy, Eye, EyeOff, RefreshCw, Clock, GitPullRequest,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -497,6 +497,8 @@ export default function AppDetail() {
         <div className="p-6 space-y-10">
           <SettingsForm app={app} onSaved={(updated) => setApp(updated)} />
           <WebhookSection appId={app.id} />
+          <CronJobsSection appId={app.id} />
+          <PRPreviewsSection appId={app.id} />
           <div className="mt-10 max-w-2xl border border-signal-failed/30 p-5">
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-signal-failed">Danger zone</div>
             <div className="mt-2 flex items-center justify-between gap-4">
@@ -653,3 +655,190 @@ function WebhookSection({ appId }) {
     </section>
   );
 }
+
+/* ─────────────────────── Cron Jobs section ─────────────────────── */
+function CronJobsSection({ appId }) {
+  const [data, setData] = useState({ jobs: [], supports_coolify_sync: false });
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null = closed, "new" = creating, {id} = editing existing
+  const [form, setForm] = useState({ name: "", command: "", schedule: "0 3 * * *", enabled: true });
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/apps/${appId}/cron`);
+      setData(r.data);
+    } catch (e) { /* ignore */ }
+    finally { setLoading(false); }
+  }, [appId]);
+  useEffect(() => { load(); }, [load]);
+
+  const startNew = () => { setForm({ name: "", command: "", schedule: "0 3 * * *", enabled: true }); setEditing("new"); };
+  const startEdit = (j) => { setForm({ name: j.name, command: j.command, schedule: j.schedule, enabled: j.enabled }); setEditing(j.id); };
+
+  const save = async () => {
+    if (!form.name.trim() || !form.command.trim() || !form.schedule.trim()) { toast.error("All fields required"); return; }
+    setBusy(true);
+    try {
+      if (editing === "new") {
+        await api.post(`/apps/${appId}/cron`, form);
+        toast.success("Cron job created");
+      } else {
+        await api.put(`/apps/${appId}/cron/${editing}`, form);
+        toast.success("Cron job updated");
+      }
+      setEditing(null);
+      load();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id, name) => {
+    if (!window.confirm(`Delete cron job "${name}"?`)) return;
+    try {
+      await api.delete(`/apps/${appId}/cron/${id}`);
+      toast.success("Cron job deleted");
+      load();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+  };
+
+  return (
+    <section className="max-w-3xl border border-white/[0.06] p-6 space-y-5" data-testid="cron-section">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-brand" />
+            <h2 className="font-display text-xl">Scheduled jobs</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mt-1">
+            Run commands on a schedule inside your app's container. {data.supports_coolify_sync ? "Synced with build engine." : "Will sync to build engine on next deploy."}
+          </p>
+        </div>
+        {editing === null && (
+          <button onClick={startNew} className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 hover:border-brand/50 text-xs font-mono" data-testid="cron-new">
+            <Plus className="h-3 w-3" /> New cron
+          </button>
+        )}
+      </div>
+
+      {editing !== null && (
+        <div className="border border-brand/30 p-4 space-y-3" data-testid="cron-form">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Job name" className="bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="cron-form-name" />
+            <input value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} placeholder="0 3 * * *" className="bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="cron-form-schedule" />
+          </div>
+          <textarea value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="node scripts/cleanup.js" rows={2} className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="cron-form-command" />
+          <div className="text-[10px] font-mono text-zinc-600">
+            Format: 5-field cron. Try <code className="text-brand">0 3 * * *</code> (3am daily), <code className="text-brand">*/15 * * * *</code> (every 15 min), <code className="text-brand">0 0 * * 0</code> (Sunday midnight).
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={save} disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90 disabled:opacity-50" data-testid="cron-form-save">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
+            </button>
+            <button onClick={() => setEditing(null)} className="px-3 py-2 border border-white/10 text-xs font-mono">cancel</button>
+          </div>
+        </div>
+      )}
+
+      {data.jobs.length === 0 && !loading && editing === null && (
+        <div className="text-xs font-mono text-zinc-500 py-4">No scheduled jobs yet.</div>
+      )}
+
+      {data.jobs.length > 0 && (
+        <div className="border border-white/[0.06] divide-y divide-white/[0.04]">
+          {data.jobs.map((j) => (
+            <div key={j.id} className="grid grid-cols-[1fr_140px_auto] gap-4 items-center px-4 py-3" data-testid={`cron-row-${j.id}`}>
+              <div>
+                <div className="text-sm">{j.name}</div>
+                <code className="text-[11px] font-mono text-zinc-500 truncate block">{j.command}</code>
+              </div>
+              <code className="text-xs font-mono text-brand">{j.schedule}</code>
+              <div className="flex items-center gap-1">
+                <button onClick={() => startEdit(j)} className="px-2 py-1.5 text-xs border border-white/10 hover:border-brand/50" data-testid={`cron-edit-${j.id}`}>edit</button>
+                <button onClick={() => remove(j.id, j.name)} className="px-2 py-1.5 text-xs border border-white/10 text-signal-failed hover:bg-signal-failed/10" data-testid={`cron-delete-${j.id}`}>
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─────────────────────── PR Previews section ─────────────────────── */
+function PRPreviewsSection({ appId }) {
+  const [previews, setPreviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/apps/${appId}/pr-previews`);
+      setPreviews(r.data.previews || []);
+    } catch (e) { /* ignore */ }
+    finally { setLoading(false); }
+  }, [appId]);
+  useEffect(() => { load(); }, [load]);
+
+  const teardown = async (id, pr) => {
+    if (!window.confirm(`Tear down preview for PR #${pr}? The child app + DNS record will be deleted.`)) return;
+    try {
+      await api.delete(`/apps/${appId}/pr-previews/${id}`);
+      toast.success("Preview torn down");
+      load();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+  };
+
+  return (
+    <section className="max-w-3xl border border-white/[0.06] p-6 space-y-4" data-testid="pr-previews-section">
+      <div>
+        <div className="flex items-center gap-2">
+          <GitPullRequest className="h-4 w-4 text-brand" />
+          <h2 className="font-display text-xl">PR Preview deploys</h2>
+        </div>
+        <p className="text-xs text-zinc-500 mt-1">
+          Open a pull request on GitHub and we'll automatically build a preview at a unique URL.
+          The preview is torn down when the PR is closed or merged.
+          {previews.length === 0 && <span> Webhooks must be connected for this to work.</span>}
+        </p>
+      </div>
+
+      {previews.length === 0 && !loading && (
+        <div className="text-xs font-mono text-zinc-500 py-4">No active previews. Open a PR and refresh.</div>
+      )}
+
+      {previews.length > 0 && (
+        <div className="border border-white/[0.06] divide-y divide-white/[0.04]">
+          {previews.map((p) => (
+            <div key={p.id} className="grid grid-cols-[60px_1fr_140px_auto] gap-4 items-center px-4 py-3" data-testid={`pr-row-${p.pr_number}`}>
+              <div className="text-sm font-mono text-brand">#{p.pr_number}</div>
+              <div>
+                <div className="text-xs font-mono">{p.branch}</div>
+                {p.primary_url && (
+                  <a href={p.primary_url} target="_blank" rel="noreferrer" className="text-[11px] font-mono text-brand inline-flex items-center gap-1 mt-0.5 hover:underline">
+                    {p.primary_url.replace(/^https?:\/\//, "")} <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              <div className={`text-xs font-mono ${
+                p.status === "building" ? "text-signal-queued" :
+                p.status === "closed" ? "text-zinc-500" : "text-signal-live"
+              }`}>● {p.status}</div>
+              <div className="flex items-center gap-1">
+                {p.status !== "closed" && (
+                  <button onClick={() => teardown(p.id, p.pr_number)} className="px-2 py-1.5 text-xs border border-white/10 text-signal-failed hover:bg-signal-failed/10" data-testid={`pr-teardown-${p.pr_number}`}>
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+

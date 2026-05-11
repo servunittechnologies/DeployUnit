@@ -35,6 +35,7 @@ from services.github_webhooks import (
     unregister_webhook as wh_unregister,
 )
 from services.plans import assert_limit
+from services.audit import log as audit_log
 
 router = APIRouter(tags=["apps"])
 logger = logging.getLogger(__name__)
@@ -473,6 +474,15 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
     # Best-effort GitHub webhook auto-registration. Fires in the background so
     # we don't slow down /apps response. The function itself is no-op-safe.
     background.add_task(_auto_register_webhook, app_id)
+    audit_log(
+        action="app.create",
+        actor=user,
+        workspace_id=payload.workspace_id,
+        resource_type="app",
+        resource_id=app_id,
+        meta={"name": payload.name, "repo_url": repo, "branch": branch_to_use, "framework": payload.framework},
+        request=request,
+    )
     return doc
 
 
@@ -548,6 +558,15 @@ async def delete_app(app_id: str, request: Request):
     await db.apps.delete_one({"id": app_id})
     await db.deployments.delete_many({"app_id": app_id})
     await db.domains.delete_many({"app_id": app_id})
+    audit_log(
+        action="app.delete",
+        actor=user,
+        workspace_id=app["workspace_id"],
+        resource_type="app",
+        resource_id=app_id,
+        meta={"name": app.get("name"), "repo_url": app.get("repo_url")},
+        request=request,
+    )
     await db.monitoring_results.delete_many({"app_id": app_id})
     return {"deleted": True}
 

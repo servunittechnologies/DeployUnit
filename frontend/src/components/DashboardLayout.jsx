@@ -7,7 +7,7 @@ import Logo from "./Logo";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, CreditCard, Settings, LogOut,
   Plus, Boxes, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
-  ShieldCheck, Layers,
+  ShieldCheck, Layers, Database, FileClock,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,9 +19,11 @@ const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/app/projects", label: "Projects", icon: FolderKanban },
   { to: "/app/fleet", label: "Fleet", icon: Layers, agencyOnly: true },
+  { to: "/app/databases", label: "Databases", icon: Database },
   { to: "/app/domains", label: "Domains", icon: Globe },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
   { to: "/app/alerts", label: "Alerts", icon: BellRing },
+  { to: "/app/audit", label: "Audit log", icon: FileClock },
   { to: "/app/billing", label: "Billing", icon: CreditCard },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];

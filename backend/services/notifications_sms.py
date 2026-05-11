@@ -199,6 +199,36 @@ async def send_alert(
             })
             results.append({"channel": "email", "status": "queued", "cost": 0})
 
+        elif ch in ("slack", "discord"):
+            # Webhook-based — free for the user, no Twilio. We just POST to the
+            # user-provided incoming webhook URL.
+            webhook = (user.get("notification_prefs") or {}).get(f"{ch}_webhook_url")
+            if not webhook:
+                await _log_send(
+                    workspace_id=workspace_id, user_id=user["id"], channel=ch,
+                    event_type=event_type, to="—", body=body,
+                    status="skipped", cost=0, error=f"no {ch} webhook URL",
+                )
+                results.append({"channel": ch, "status": "skipped"})
+                continue
+            try:
+                from clients.chat_webhooks import send_slack, send_discord
+                sender = send_slack if ch == "slack" else send_discord
+                await sender(webhook_url=webhook, title=title, body=body, event_type=event_type)
+                await _log_send(
+                    workspace_id=workspace_id, user_id=user["id"], channel=ch,
+                    event_type=event_type, to=webhook[:60], body=body,
+                    status="sent", cost=0,
+                )
+                results.append({"channel": ch, "status": "sent", "cost": 0})
+            except Exception as e:
+                await _log_send(
+                    workspace_id=workspace_id, user_id=user["id"], channel=ch,
+                    event_type=event_type, to=webhook[:60], body=body,
+                    status="failed", cost=0, error=str(e)[:200],
+                )
+                results.append({"channel": ch, "status": "failed", "error": str(e)[:200]})
+
     return results
 
 

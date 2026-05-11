@@ -19,6 +19,8 @@ const CHANNEL_META = {
   sms: { label: "SMS", icon: Phone, hint: "1–2 cr per send (EU = 1 cr)" },
   whatsapp: { label: "WhatsApp", icon: MessageSquare, hint: "1 cr per send" },
   email: { label: "Email", icon: Mail, hint: "Free (in-app)" },
+  slack: { label: "Slack", icon: MessageSquare, hint: "Free · needs webhook URL" },
+  discord: { label: "Discord", icon: MessageSquare, hint: "Free · needs webhook URL" },
 };
 
 export default function Settings() {
@@ -36,14 +38,17 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState("developer");
   const [inviteError, setInviteError] = useState("");
 
-  // Notification preferences (Sprint 3 — Twilio SMS/WhatsApp + email)
+  // Notification preferences (Sprint 3 — Twilio SMS/WhatsApp + email + Sprint 5 Slack/Discord)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [phoneE164, setPhoneE164] = useState("");
-  const [channelMatrix, setChannelMatrix] = useState({}); // {event_type: {sms, whatsapp, email}}
+  const [slackUrl, setSlackUrl] = useState("");
+  const [discordUrl, setDiscordUrl] = useState("");
+  const [channelMatrix, setChannelMatrix] = useState({}); // {event_type: {sms, whatsapp, email, slack, discord}}
   const [supportedEvents, setSupportedEvents] = useState([]);
+  const [supportedChannels, setSupportedChannels] = useState(["sms", "whatsapp", "email"]);
   const [prefsMsg, setPrefsMsg] = useState("");
   const [prefsErr, setPrefsErr] = useState("");
-  const [testBusy, setTestBusy] = useState(null); // "sms" | "whatsapp" | null
+  const [testBusy, setTestBusy] = useState(null); // "sms" | "whatsapp" | "email" | "slack" | "discord" | null
   const [testMsg, setTestMsg] = useState("");
   const [testErr, setTestErr] = useState("");
 
@@ -63,16 +68,18 @@ export default function Settings() {
     api.get("/notifications/prefs").then((r) => {
       const data = r.data || {};
       setPhoneE164(data.phone_e164 || "");
+      setSlackUrl(data.slack_webhook_url || "");
+      setDiscordUrl(data.discord_webhook_url || "");
       const events = data.supported_events || [];
+      const chans = data.supported_channels || ["sms", "whatsapp", "email"];
       setSupportedEvents(events);
+      setSupportedChannels(chans);
       const channels = data.channels || {};
       const matrix = {};
       events.forEach((ev) => {
-        matrix[ev] = {
-          sms: (channels.sms || []).includes(ev),
-          whatsapp: (channels.whatsapp || []).includes(ev),
-          email: (channels.email || []).includes(ev),
-        };
+        const row = {};
+        chans.forEach((c) => { row[c] = (channels[c] || []).includes(ev); });
+        matrix[ev] = row;
       });
       setChannelMatrix(matrix);
       setPrefsLoaded(true);
@@ -89,16 +96,17 @@ export default function Settings() {
   const savePrefs = async () => {
     setPrefsMsg("");
     setPrefsErr("");
-    // Convert matrix back to {sms: [events], whatsapp: [events], email: [events]}
-    const channels = { sms: [], whatsapp: [], email: [] };
+    // Convert matrix back to {sms: [events], whatsapp: [events], email: [events], slack: [events], discord: [events]}
+    const channels = {};
+    supportedChannels.forEach((c) => { channels[c] = []; });
     Object.entries(channelMatrix).forEach(([ev, ch]) => {
-      ["sms", "whatsapp", "email"].forEach((c) => {
-        if (ch?.[c]) channels[c].push(ev);
-      });
+      supportedChannels.forEach((c) => { if (ch?.[c]) channels[c].push(ev); });
     });
     try {
       await api.put("/notifications/prefs", {
         phone_e164: phoneE164.trim() || null,
+        slack_webhook_url: slackUrl.trim() || null,
+        discord_webhook_url: discordUrl.trim() || null,
         channels,
       });
       setPrefsMsg("Preferences saved.");
@@ -252,15 +260,16 @@ export default function Settings() {
         </div>
 
         {/* Per-event matrix */}
-        <div className="border border-white/[0.06]">
-          <div className="grid grid-cols-[1fr_72px_72px_72px] text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500 border-b border-white/[0.06]">
+        <div className="border border-white/[0.06] overflow-x-auto">
+          <div className={`grid text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500 border-b border-white/[0.06]`}
+               style={{gridTemplateColumns: `minmax(180px,1fr) repeat(${supportedChannels.length}, 72px)`}}>
             <div className="p-3">Event</div>
-            {["sms", "whatsapp", "email"].map((c) => {
-              const Icon = CHANNEL_META[c].icon;
+            {supportedChannels.map((c) => {
+              const Icon = CHANNEL_META[c]?.icon || Mail;
               return (
                 <div key={c} className="p-3 text-center flex flex-col items-center gap-1">
                   <Icon className="h-3 w-3" />
-                  {CHANNEL_META[c].label}
+                  {CHANNEL_META[c]?.label || c}
                 </div>
               );
             })}
@@ -271,14 +280,15 @@ export default function Settings() {
           {supportedEvents.map((ev) => (
             <div
               key={ev}
-              className="grid grid-cols-[1fr_72px_72px_72px] border-b border-white/[0.06] last:border-b-0 items-center"
+              className="grid border-b border-white/[0.06] last:border-b-0 items-center"
+              style={{gridTemplateColumns: `minmax(180px,1fr) repeat(${supportedChannels.length}, 72px)`}}
               data-testid={`notif-event-row-${ev}`}
             >
               <div className="p-3">
                 <div className="text-sm">{EVENT_LABELS[ev] || ev}</div>
                 <div className="text-[10px] font-mono text-zinc-600">{ev}</div>
               </div>
-              {["sms", "whatsapp", "email"].map((c) => {
+              {supportedChannels.map((c) => {
                 const on = !!channelMatrix[ev]?.[c];
                 return (
                   <div key={c} className="p-3 flex justify-center">
@@ -288,7 +298,7 @@ export default function Settings() {
                       className={`h-6 w-11 relative rounded-full transition-colors ${on ? "bg-brand" : "bg-white/[0.08] hover:bg-white/[0.14]"}`}
                       data-testid={`notif-toggle-${ev}-${c}`}
                       aria-pressed={on}
-                      aria-label={`${EVENT_LABELS[ev] || ev} via ${CHANNEL_META[c].label}`}
+                      aria-label={`${EVENT_LABELS[ev] || ev} via ${CHANNEL_META[c]?.label || c}`}
                     >
                       <span
                         className={`absolute top-0.5 h-5 w-5 rounded-full bg-black transition-all ${on ? "left-[22px]" : "left-0.5"}`}
@@ -299,6 +309,40 @@ export default function Settings() {
               })}
             </div>
           ))}
+        </div>
+
+        {/* Slack + Discord webhook URLs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
+              Slack incoming webhook URL
+            </label>
+            <input
+              value={slackUrl}
+              onChange={(e) => setSlackUrl(e.target.value)}
+              placeholder="https://hooks.slack.com/services/T../B../...."
+              className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-xs font-mono focus:border-brand outline-none"
+              data-testid="notif-slack-url"
+            />
+            <div className="text-[10px] font-mono text-zinc-600 mt-1">
+              <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noreferrer" className="hover:text-brand">Get a webhook URL</a> · channel-specific
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
+              Discord webhook URL
+            </label>
+            <input
+              value={discordUrl}
+              onChange={(e) => setDiscordUrl(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/..../...."
+              className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-xs font-mono focus:border-brand outline-none"
+              data-testid="notif-discord-url"
+            />
+            <div className="text-[10px] font-mono text-zinc-600 mt-1">
+              Server Settings → Integrations → Webhooks → New
+            </div>
+          </div>
         </div>
 
         <div className="text-[10px] font-mono text-zinc-600 leading-relaxed">
@@ -329,6 +373,22 @@ export default function Settings() {
             data-testid="notif-test-whatsapp"
           >
             <Send className="h-3 w-3" /> {testBusy === "whatsapp" ? "sending…" : "Test WhatsApp"}
+          </button>
+          <button
+            onClick={() => sendTest("slack")}
+            disabled={testBusy === "slack" || !slackUrl}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono hover:border-brand/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="notif-test-slack"
+          >
+            <Send className="h-3 w-3" /> {testBusy === "slack" ? "sending…" : "Test Slack"}
+          </button>
+          <button
+            onClick={() => sendTest("discord")}
+            disabled={testBusy === "discord" || !discordUrl}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono hover:border-brand/50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="notif-test-discord"
+          >
+            <Send className="h-3 w-3" /> {testBusy === "discord" ? "sending…" : "Test Discord"}
           </button>
           {prefsMsg && <span className="text-xs font-mono text-signal-live">{prefsMsg}</span>}
           {prefsErr && <span className="text-xs font-mono text-signal-failed">{prefsErr}</span>}

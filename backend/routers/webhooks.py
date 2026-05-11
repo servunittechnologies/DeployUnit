@@ -70,8 +70,17 @@ async def github_webhook(
     if not app.get("webhook_enabled", True):
         return {"status": "disabled"}
 
-    if (x_github_event or "").lower() != "push":
-        return {"status": "ignored", "reason": f"event={x_github_event}"}
+    event = (x_github_event or "").lower()
+
+    # ────────── PR Preview Deploys ──────────
+    # Vercel-style: opened/synchronize/reopened → create or rebuild a preview;
+    # closed/merged → tear it down. Each preview is its own ephemeral child app.
+    if event == "pull_request":
+        from services.pr_previews import handle_pr_event
+        return await handle_pr_event(parent_app=app, payload=await request.json(), background=background)
+
+    if event != "push":
+        return {"status": "ignored", "reason": f"event={event}"}
 
     payload = await request.json()
     ref = (payload or {}).get("ref") or ""  # e.g. "refs/heads/main"

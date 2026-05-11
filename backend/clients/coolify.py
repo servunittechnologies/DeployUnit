@@ -198,5 +198,60 @@ class CoolifyClient:
     async def get_deployment(self, deployment_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/deployments/{deployment_uuid}")
 
+    # ─────────────────── Scheduled tasks (cron jobs) ───────────────────
+    async def list_scheduled_tasks(self, app_uuid: str) -> list:
+        data = await self._request("GET", f"/applications/{app_uuid}/scheduled-tasks")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and "data" in data:
+            return data["data"]
+        return []
+
+    async def create_scheduled_task(self, app_uuid: str, *, name: str, command: str, frequency: str) -> Optional[dict]:
+        """Coolify scheduled task. `frequency` is a cron expression like '0 3 * * *'."""
+        return await self._request(
+            "POST", f"/applications/{app_uuid}/scheduled-tasks",
+            json={"name": name, "command": command, "frequency": frequency},
+        )
+
+    async def update_scheduled_task(self, app_uuid: str, task_uuid: str, *, name: str, command: str, frequency: str) -> Optional[dict]:
+        return await self._request(
+            "PATCH", f"/applications/{app_uuid}/scheduled-tasks/{task_uuid}",
+            json={"name": name, "command": command, "frequency": frequency},
+        )
+
+    async def delete_scheduled_task(self, app_uuid: str, task_uuid: str) -> Optional[dict]:
+        return await self._request("DELETE", f"/applications/{app_uuid}/scheduled-tasks/{task_uuid}")
+
+    # ─────────────────── Managed databases (Postgres / Redis) ───────────────────
+    async def create_database(self, *, server_uuid: str, project_uuid: str, environment_name: str,
+                              db_type: str, name: str, version: Optional[str] = None) -> Optional[dict]:
+        """db_type in {postgresql, mysql, mariadb, mongodb, redis, keydb, dragonfly}. Coolify auto-generates
+        the connection string + credentials and returns the uuid for follow-up calls."""
+        body = {
+            "server_uuid": server_uuid,
+            "project_uuid": project_uuid,
+            "environment_name": environment_name,
+            "name": name,
+        }
+        if version:
+            body["version"] = version
+        return await self._request("POST", f"/databases/{db_type}", json=body)
+
+    async def get_database(self, db_uuid: str) -> Optional[dict]:
+        return await self._request("GET", f"/databases/{db_uuid}")
+
+    async def start_database(self, db_uuid: str) -> Optional[dict]:
+        return await self._request("GET", f"/databases/{db_uuid}/start")
+
+    async def stop_database(self, db_uuid: str) -> Optional[dict]:
+        return await self._request("GET", f"/databases/{db_uuid}/stop")
+
+    async def delete_database(self, db_uuid: str) -> Optional[dict]:
+        return await self._request(
+            "DELETE",
+            f"/databases/{db_uuid}?delete_configurations=true&delete_volumes=true",
+        )
+
 
 coolify = CoolifyClient()
