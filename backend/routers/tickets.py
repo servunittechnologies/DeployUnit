@@ -295,6 +295,7 @@ async def admin_ticket_detail(ticket_id: str, request: Request):
 
 @router.post("/admin/tickets/{ticket_id}/messages")
 async def admin_add_message(ticket_id: str, payload: TicketMessageIn, request: Request, background: BackgroundTasks):
+    await _require_admin(request)
     return await add_message(ticket_id, payload, request, background)
 
 

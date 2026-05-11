@@ -395,7 +395,9 @@ export default function Tickets() {
     } catch (e) { toast.error(getApiErrorMessage(e)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+  // Re-fetch the list whenever we land on /app/tickets (id undefined),
+  // including returning from /app/tickets/:id via the in-page back button.
+  useEffect(() => { if (!id) load(); }, [id]);
 
   if (id) {
     return (
