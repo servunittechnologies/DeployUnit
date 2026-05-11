@@ -1443,6 +1443,9 @@ function Footer() {
         </div>
         <div className="mt-10 pt-6 border-t border-zinc-900 flex items-center justify-between flex-wrap gap-3 text-[11px] font-mono text-zinc-600">
           <span>© {new Date().getFullYear()} DeployHub. Crafted in the EU.</span>
+          <span className="inline-flex items-center gap-1.5">
+            Powered by <a href="https://servunit.com" target="_blank" rel="noreferrer" className="text-zinc-400 hover:text-cyan-400 transition-colors">ServUnit Technologies BV</a>
+          </span>
           <span>Operated under GDPR · Hosted in the EU.</span>
         </div>
       </Container>
