@@ -72,6 +72,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployhub.dev` / `demo1234`
 
 ## Changelog
+- **2026-05-11 — Account vs Workspace settings split (Iter12, 18/18 backend GREEN)**
+  - **Plan, credits & notifications zijn nu account-niveau** (één plan, één wallet, één meldingen-inbox per gebruiker — toegepast over alle workspaces die de gebruiker bezit).
+  - **Nieuwe `/app/account` pagina** met sticky sectie-nav: Profile, Plan & usage (met grafische usage-bars + plan-grid), Credits wallet (balance, monthly grant, recent activity, koop-packs), Billing & invoices (profile + PDF lijst), Notification preferences (matrix events × kanalen), Security (password change).
+  - **`/app/settings` strak gemaakt**: alleen workspace-zaken (name, type, members, audit-log link, danger-zone delete) + een "snapshot" tile met workspace-specifieke usage + verwijzing naar Account voor plan.
+  - **Backend**:
+    - Nieuw `routers/account.py` met 12 endpoints (`/account`, `/account/profile`, `/account/password`, `/account/plan{,/checkout,/cancel}`, `/account/credits{,/history,/packs,/checkout}`, `/account/billing{,/profile}`).
+    - `services/account_migration.py` draait éénmalig bij startup: highest-plan-wins (demo+martijn → agency, admin → free), credits-balances gesummeerd, oudste `credits_period_start` overgenomen, billing-profile gekopieerd naar `users.billing_profile`.
+    - `services/plans.py` heruitgevonden: `user_plan(user_id)` is bron, `workspace_plan(workspace_id)` lost op via `workspace.owner_id`; nieuw `account_usage(user_id)` voor totaal-aggregatie; `assert_limit(workspace_id, resource)` checkt nu tegen account-wide totaal.
+    - `services/credits.py` herschreven: wallet leeft op `users.credits_balance`. Oude callers (`consume_credits(workspace_id, ...)`) blijven werken via een `_resolve_user_id` shim die workspace-id naar owner-user resolved. `credit_transactions` rijen krijgen nu `user_id` + optionele `workspace_id` context.
+    - `routers/billing.py` Mollie webhook ondersteunt `meta.user_id` (account-level checkout) naast `meta.workspace_id` (legacy).
+    - 2 nano-fixes uit code review: downgrade naar "hobby" zet nu correct `plan="hobby"` (was hardcoded "free"); payments filter gebruikt `$exists: True` om legacy rijen zonder plan-veld te skippen.
+  - **Frontend**:
+    - `DashboardLayout`: sidebar split — workspace-NAV bovenaan eindigt met "Workspace" (renamed from Settings); onderaan "Personal" sectie met "Account". User-menu (top-right avatar) heeft Account + Workspace links.
+    - `Account.jsx` — 6 secties met sticky in-page nav, plan-grid met Upgrade/Switch-down knoppen, credit-pack koop-tiles, transaction-history tabel, billing-profile editor met EU-country select, full notif-matrix met Slack/Discord test-knoppen.
+  - **Migration data verified**: demo plan=agency credits=10, admin plan=free, martijn plan=agency. NL billing profile op demo opnieuw geladen.
+
 - **2026-05-11 — Workspace Settings polish + watchdog hardening (Fork verify pass)**
   - **Fix — Settings page data mapping**: `Settings.jsx` las `wsUsage.plan` als string en `wsUsage.apps_used`/`credits_balance`/`databases_used` als platte velden, maar de API geeft `{plan:{...}, usage:{apps,domains,databases,team}, credits:{balance,monthly_grant,...}}`. Frontend toonde daardoor altijd "0 apps", "0 credits", `[object Object]` voor plan, en de Delete-warning zag nooit databases. Frontend nu correct gemapt; plan-card toont {plan.name, €price/mo, apps/limit, credits +monthly_grant/mo, members/limit}.
   - **Fix — `services/plans.py::workspace_usage`**: (a) added `databases` count so the Delete warning enumerates real DB risk, (b) fixed members double-count bug (`members_used = 1 + member_rows` was wrong because the owner is already a workspace_members row). Now `members_used = max(member_rows, 1)`. `usage.team` now matches `members.length`.

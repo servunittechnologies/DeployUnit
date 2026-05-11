@@ -156,7 +156,7 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
     if not plan:
         raise HTTPException(status_code=400, detail="Unknown plan")
 
-    # Free / hobby — immediate switch
+    # Free / hobby — immediate switch (preserve the actual id chosen)
     if plan["id"] in ("free", "hobby"):
         sub = await db.subscriptions.find_one({"user_id": user["id"]})
         if sub and sub.get("mollie_subscription_id") and sub.get("status") not in ("canceled",):
@@ -171,7 +171,7 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
             {"$set": {
                 "id": (sub or {}).get("id") or str(uuid.uuid4()),
                 "user_id": user["id"],
-                "plan": "free",
+                "plan": plan["id"],
                 "status": "active",
                 "mollie_subscription_id": None,
                 "mollie_customer_id": (sub or {}).get("mollie_customer_id"),
@@ -179,11 +179,11 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
             }},
             upsert=True,
         )
-        await db.users.update_one({"id": user["id"]}, {"$set": {"plan": "free"}})
+        await db.users.update_one({"id": user["id"]}, {"$set": {"plan": plan["id"]}})
         audit_log(action="account.plan_downgrade", actor=user,
                   resource_type="user", resource_id=user["id"],
-                  meta={"new_plan": "free"}, request=request)
-        return {"plan": "free", "status": "active", "checkout_url": None}
+                  meta={"new_plan": plan["id"]}, request=request)
+        return {"plan": plan["id"], "status": "active", "checkout_url": None}
 
     if not mollie.configured:
         raise HTTPException(status_code=503, detail="Payments not configured")
@@ -424,7 +424,7 @@ async def get_account_billing(request: Request):
         pay_q["$or"].append({"workspace_id": {"$in": ws_ids}, "user_id": {"$exists": False}})
         inv_q["$or"].append({"workspace_id": {"$in": ws_ids}, "user_id": {"$exists": False}})
     payments = await db.payments.find(
-        {"$and": [pay_q, {"plan": {"$nin": ["free", "hobby"]}},
+        {"$and": [pay_q, {"plan": {"$exists": True, "$nin": ["free", "hobby"]}},
                   {"$or": [{"subtotal": {"$gt": 0}}, {"total": {"$gt": 0}}]}]},
         {"_id": 0},
     ).sort("created_at", -1).limit(24).to_list(24)
