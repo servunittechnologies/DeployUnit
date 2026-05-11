@@ -27,6 +27,7 @@ import Admin from "./pages/dashboard/Admin";
 import Fleet from "./pages/dashboard/Fleet";
 import AuditLog from "./pages/dashboard/AuditLog";
 import Databases from "./pages/dashboard/Databases";
+import Roadmap from "./pages/dashboard/Roadmap";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -74,6 +75,7 @@ function App() {
                 <Route path="fleet" element={<Fleet />} />
                 <Route path="audit" element={<AuditLog />} />
                 <Route path="databases" element={<Databases />} />
+                <Route path="roadmap" element={<Roadmap />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

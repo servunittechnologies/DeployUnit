@@ -7,7 +7,7 @@ import Logo from "./Logo";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, Settings, LogOut,
   Plus, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
-  ShieldCheck, Layers, Database, FileClock, Coins,
+  ShieldCheck, Layers, Database, FileClock, Coins, Sparkles,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -24,6 +24,7 @@ const NAV = [
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
   { to: "/app/alerts", label: "Alerts", icon: BellRing },
   { to: "/app/audit", label: "Audit log", icon: FileClock },
+  { to: "/app/roadmap", label: "Roadmap", icon: Sparkles, badge: "soon" },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];
 const ADMIN_NAV = { to: "/app/admin", label: "Admin Console", icon: ShieldCheck };
@@ -249,7 +250,12 @@ export default function DashboardLayout() {
               }
             >
               <n.icon className="h-4 w-4" />
-              {n.label}
+              <span className="flex-1">{n.label}</span>
+              {n.badge && (
+                <span className="px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] bg-brand/15 text-brand border border-brand/30 leading-none">
+                  {n.badge}
+                </span>
+              )}
             </NavLink>
           ))}
           {user?.role === "admin" && (

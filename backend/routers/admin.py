@@ -138,9 +138,6 @@ class PlatformSettingsUpdate(BaseModel):
     mailersend_from_email: str | None = None    # must be on a verified domain
     mailersend_from_name: str | None = None
     mailersend_reply_to: str | None = None      # optional
-    # Platform-wide Microsoft Clarity project id — auto-injected on all
-    # Pro+ apps so customers get heatmaps without any setup.
-    clarity_project_id: str | None = None       # short alphanum id, e.g. "abcdef1234"
 
 
 @router.put("/admin/platform-settings")

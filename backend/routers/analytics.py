@@ -179,45 +179,17 @@ def _features(plan: dict) -> dict:
 async def get_app_analytics_config(app_id: str, request: Request):
     _, app, _, plan = await _load_app(app_id, request)
     site_id = await analytics_svc.ensure_site_id(app_id)
-    cfg = await analytics_svc.get_config(app_id)
     fe = _public_base()
-    # Heatmaps are not yet shipped — see HEATMAPS_FEATURE_LIVE comment at
-    # top of this file. We only auto-inject the recording tag once the
-    # native engine is live, the platform admin enabled it, and the plan
-    # unlocks the feature. Until then: clean first-party snippet only.
-    feats = _features(plan)
-    inject_clarity = bool(
-        HEATMAPS_FEATURE_LIVE
-        and cfg.get("clarity_project_id")
-        and feats.get("heatmaps")
-    )
     snippet = (f'<script defer data-site="{site_id}" '
-               f'data-endpoint="{fe}/api/analytics/collect"'
-               + (f' data-clarity="{cfg["clarity_project_id"]}"' if inject_clarity else "")
-               + f' src="{fe}/api/analytics/tracker.js"></script>')
-    # Pre-filtered deeplink scoped to this app's primary host — only useful
-    # while the recording integration is live; suppressed otherwise.
-    clarity_deeplink = None
-    if inject_clarity and app.get("primary_url"):
-        from urllib.parse import urlparse, quote
-        host = urlparse(app["primary_url"]).hostname or ""
-        if host:
-            clarity_deeplink = (
-                f"https://clarity.microsoft.com/projects/view/{cfg['clarity_project_id']}"
-                f"/dashboard?filters=URL+contains+{quote(host)}"
-            )
+               f'data-endpoint="{fe}/api/analytics/collect" '
+               f'src="{fe}/api/analytics/tracker.js"></script>')
     return {
         "site_id": site_id,
-        "heatmaps_active": inject_clarity,
-        "heatmaps_coming_soon": not HEATMAPS_FEATURE_LIVE,
-        "platform_clarity_configured": cfg.get("platform_clarity_configured", False),
-        "clarity_deeplink": clarity_deeplink,
-        "auto_inject_enabled": cfg.get("auto_inject_enabled", False),
         "snippet": snippet,
         "tracker_url": f"{fe}/api/analytics/tracker.js",
         "collect_url": f"{fe}/api/analytics/collect",
         "primary_url": app.get("primary_url"),
-        "features": feats,
+        "features": _features(plan),
         "plan_id": (plan or {}).get("id"),
     }
 

@@ -51,6 +51,7 @@ from routers import (
     resources as resources_router,
     metrics as metrics_router,
     analytics as analytics_router,
+    roadmap as roadmap_router,
 )
 
 
@@ -141,6 +142,7 @@ api_router.include_router(account_router.router)
 api_router.include_router(resources_router.router)
 api_router.include_router(metrics_router.router)
 api_router.include_router(analytics_router.router)
+api_router.include_router(roadmap_router.router)
 
 app.include_router(api_router)
 

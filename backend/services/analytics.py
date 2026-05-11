@@ -104,17 +104,6 @@ async def get_config(app_id: str) -> dict:
     }
 
 
-async def set_clarity_project(app_id: str, project_id: Optional[str]) -> dict:
-    db = get_db()
-    project_id = (project_id or "").strip() or None
-    await db.app_analytics_config.update_one(
-        {"app_id": app_id},
-        {"$set": {"clarity_project_id": project_id, "updated_at": _now().isoformat()}},
-        upsert=True,
-    )
-    return await get_config(app_id)
-
-
 async def set_auto_inject(app_id: str, enabled: bool) -> dict:
     db = get_db()
     await db.app_analytics_config.update_one(
