@@ -356,6 +356,35 @@ async def sync_deployments():
         if new_status in ("live", "failed"):
             update["last_deploy_at"] = _now_iso()
         await db.apps.update_one({"id": a["id"]}, {"$set": update})
+        # Safety net: every app that goes live without a managed Cloudflare
+        # subdomain gets one auto-provisioned now. Random 8-char prefix so
+        # branded names never leak into public DNS history. Runs once per
+        # app — provision_subdomain is a no-op when Cloudflare isn't
+        # configured, and we only enter this branch when cloudflare_fqdn is
+        # still unset.
+        if new_status == "live" and not a.get("cloudflare_fqdn"):
+            try:
+                from services.subdomains import provision_subdomain
+                sub = await provision_subdomain({**a, **update})
+                if sub:
+                    await db.apps.update_one(
+                        {"id": a["id"]},
+                        {"$set": {
+                            "primary_url": sub["primary_url"],
+                            "cloudflare_dns_record_id": sub["record_id"],
+                            "cloudflare_fqdn": sub["fqdn"],
+                            "cloudflare_slug": sub.get("cf_slug"),
+                        }},
+                    )
+                    try:
+                        await coolify.update_application(
+                            a["coolify_app_uuid"],
+                            {"fqdn": f"https://{sub['fqdn']}"},
+                        )
+                    except Exception as e:
+                        logger.warning("coolify fqdn sync after auto-provision failed for %s: %s", a["id"], e)
+            except Exception as e:
+                logger.warning("auto-provision subdomain failed for %s: %s", a["id"], e)
         # If we just rescued an app from failed → live, also flip the latest
         # deployment row to "live" so the UI history reflects reality.
         if new_status == "live" and is_currently_failed:
