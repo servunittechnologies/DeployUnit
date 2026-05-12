@@ -343,3 +343,28 @@ async def admin_subdomain_pool_refill(request: Request):
     from services.subdomains import refill_pool, pool_stats
     added = await refill_pool()
     return {"added": added, **(await pool_stats())}
+
+
+
+# ---------------------------------------------------------------------------
+# Routing self-healer — manual triggers for "no available server" / no SSL.
+# Background tick runs every 2 min via the scheduler; these endpoints let
+# the admin force a heal right now from the UI.
+# ---------------------------------------------------------------------------
+@router.post("/admin/apps/{app_id}/heal-routing")
+async def admin_heal_app_routing(app_id: str, request: Request):
+    """Re-push the FQDN to the build engine and restart the container so
+    Traefik picks up the labels again. Fixes the "TRAEFIK DEFAULT CERT" / "no
+    available server" case in one click."""
+    await _require_admin(request)
+    from services.routing_healer import heal_app
+    return await heal_app(app_id)
+
+
+@router.post("/admin/routing-healer/run")
+async def admin_run_routing_healer(request: Request):
+    """Trigger one full healer tick right now — probes every live app and
+    fixes anything broken. Returns counts."""
+    await _require_admin(request)
+    from services.routing_healer import routing_healer_tick
+    return await routing_healer_tick()

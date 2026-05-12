@@ -1,0 +1,48 @@
+{
+  "summary": "End-to-end testing of the routing self-healer feature (services/routing_healer.py + admin endpoints + Heal routing UI button). 11/11 pytest backend tests passed; UI flow verified — Heal routing button sits next to Refill now, triggers POST /admin/routing-healer/run, returns 200 with {checked, healed, orphans} and shows the correct toast. Scheduler logs confirm 'Added job routing_healer_tick' on startup. No crashes even though Cloudflare is intentionally NOT configured in this preview env.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_routing_healer.py",
+    "/app/test_reports/pytest/pytest_iter16.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/routing_healer.cleanup_orphan_pool_entries() lazy-imports get_cloudflare_config from routers.admin — same tight router→service coupling already flagged in iter15. Consider extracting cloudflare config helpers into services/cloudflare_config.py to avoid future circular-import risk.",
+    "_probe_traefik_route() uses httpx with verify=ssl.CERT_NONE to peek at the Traefik default cert. The peer-cert lookup r.extensions['network_stream'].get_extra_info('ssl_object') is undocumented httpx internals — could silently break on httpx upgrade. Add a unit test or fall back to TLS handshake via raw ssl.SSLContext to make this more robust.",
+    "routing_healer_tick caps at 25 apps/tick and 3 retries/hour — good defense. But routing_heal_attempts is $inc'd without an explicit reset path other than the 1h cooldown branch; if cooldown's last-heal-at parse fails we set attempts=0 in-memory only (not persisted). Consider an explicit $set: {routing_heal_attempts:0} when the cooldown elapses so the persisted counter actually resets.",
+    "heal_app() and routing_healer_tick() use slightly different field names when persisting: heal_app writes routing_last_healed_at while the tick writes routing_last_heal_at. Pick one (last_heal_at) and update both code paths so downstream queries / UI don't have to know both names.",
+    "POST /admin/apps/{id}/heal-routing returns {ok:false, error:'app not found'} with HTTP 200 — slightly unusual (most REST APIs would 404 here). Functionally fine since the UI parses .ok, but a 404 with the error in detail would be more REST-conventional."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_routing_healer.py (new — 11 tests, all green)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11)",
+    "frontend": "100% (button placement, API call 200, toast displayed correctly)"
+  },
+  "test_credentials": "admin@deployunit.com / admin123 ; demo@deployunit.com / demo1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "test_heal_app_with_seeded_doc inserts a temporary db.apps doc with id=test-heal-<uuid8> and unconditionally deletes it in a finally block. No persistent test data remains after the run. subdomain_pool_target regression test saves and restores the original value.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Cloudflare is intentionally NOT configured in this preview env. cleanup_orphan_pool_entries() correctly returns {checked:0, released:0, skipped:'cloudflare not configured'} and the healer tick returns {checked:0, healed:0, orphans:{...}} with no crash. The Heal routing UI button is at /app/admin → Platform Domain tab (note: route is /app/admin, NOT /dashboard/admin). data-testids verified: admin-routing-heal, admin-pool-refill, admin-subdomain-pool, pool-free-count, pool-health-label, admin-pool-target. Toast displayed: 'No live apps with managed FQDNs to check.' Scheduler log confirms 'apscheduler.scheduler - INFO - Added job \"routing_healer_tick\" to job store \"default\"' on each backend reload.",
+  "verified_behaviors": [
+    "POST /api/admin/routing-healer/run: 401 anon, 403 demo, 200 admin → {checked:0, healed:0, orphans:{checked:0, released:0, skipped:'cloudflare not configured'}}",
+    "POST /api/admin/apps/does-not-exist/heal-routing: 200 with {ok:false, error:'app not found'}",
+    "POST /api/admin/apps/{seeded_with_fqdn}/heal-routing: 200 with full {ok, fqdn, before, action, after} structure — no crash on unreachable host + fake coolify uuid",
+    "POST /api/admin/apps/{seeded_without_fqdn}/heal-routing: 200 with {ok:false, error:'app has no Cloudflare FQDN'}",
+    "RBAC: 401 anon, 403 demo on both endpoints",
+    "Scheduler: 'Added job routing_healer_tick' present in backend logs at every startup; job runs every 2 min as configured",
+    "Regression: GET /admin/subdomain-pool, POST /admin/subdomain-pool/refill, PUT /admin/platform-settings {subdomain_pool_target} all still work and round-trip correctly",
+    "Import sanity: services.routing_healer exports heal_app, routing_healer_tick, cleanup_orphan_pool_entries, _probe_traefik_route with no circular import",
+    "Frontend: 'Heal routing' (data-testid=admin-routing-heal) button visible at x=1005 y=1372, 'Refill now' (data-testid=admin-pool-refill) at x=1126 y=1372 — same row, side-by-side as required",
+    "Frontend integration: clicking Heal routing fires POST /admin/routing-healer/run (200) and shows sonner toast 'No live apps with managed FQDNs to check.' (matches the checked=0 branch in runHealer())"
+  ]
+}

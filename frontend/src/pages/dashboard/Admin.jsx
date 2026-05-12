@@ -645,6 +645,28 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
     }
   };
 
+  const [healing, setHealing] = useState(false);
+  const runHealer = async () => {
+    setHealing(true);
+    try {
+      const r = await api.post("/admin/routing-healer/run");
+      const checked = r.data?.checked ?? 0;
+      const healed = r.data?.healed ?? 0;
+      const orphans = r.data?.orphans?.released ?? 0;
+      if (healed > 0 || orphans > 0) {
+        toast.success(`Healer fixed ${healed} app${healed === 1 ? "" : "s"}${orphans > 0 ? ` · released ${orphans} orphan DNS record${orphans === 1 ? "" : "s"}` : ""}`);
+      } else if (checked === 0) {
+        toast.message("No live apps with managed FQDNs to check.");
+      } else {
+        toast.success(`All ${checked} app${checked === 1 ? "" : "s"} routing OK — nothing to fix.`);
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setHealing(false);
+    }
+  };
+
   const free = stats?.free ?? 0;
   const claimed = stats?.claimed ?? 0;
   const tgt = stats?.target ?? target ?? 10;
@@ -699,7 +721,16 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
           <div className="text-[11px] font-mono text-zinc-500 leading-relaxed md:col-span-1">
             Save platform settings to apply a new target — the scheduler refills automatically every 3 min, or click "Refill now" for an instant top-up.
           </div>
-          <div className="flex md:justify-end">
+          <div className="flex md:justify-end gap-2">
+            <button
+              onClick={runHealer}
+              disabled={healing}
+              className="px-4 py-2 border border-emerald-500 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+              data-testid="admin-routing-heal"
+              title="Re-push FQDN to build engine + restart any apps where Traefik has lost the route. Fixes 'no available server' / no SSL."
+            >
+              {healing ? "Healing…" : "Heal routing"}
+            </button>
             <button
               onClick={refill}
               disabled={refilling || !stats?.cloudflare_ready}

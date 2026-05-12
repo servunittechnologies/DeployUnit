@@ -386,15 +386,28 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         await _append_log(deployment_id, f"[BUILD] application created (uuid={coolify_uuid})")
 
     # Tell Coolify about the auto-provisioned subdomain so Traefik issues SSL.
+    # Verify the PATCH actually landed (Coolify v4 silently 200s on rejected
+    # fields). If it didn't, we restart the container anyway — Traefik
+    # re-reads docker labels on container start which is what actually
+    # registers the route end-to-end.
     if app.get("cloudflare_fqdn"):
+        desired_fqdn = f"https://{app['cloudflare_fqdn']}"
         try:
-            await coolify.update_application(
-                coolify_uuid, {"fqdn": f"https://{app['cloudflare_fqdn']}"}
-            )
-            if deployment_id:
-                await _append_log(
-                    deployment_id, f"[BUILD] domain assigned: {app['cloudflare_fqdn']}"
-                )
+            await coolify.update_application(coolify_uuid, {"fqdn": desired_fqdn})
+            check = await coolify.get_application(coolify_uuid)
+            landed = ((check or {}).get("fqdn") or "").split(",")[0].strip()
+            if landed and (landed == desired_fqdn or app["cloudflare_fqdn"] in landed):
+                if deployment_id:
+                    await _append_log(
+                        deployment_id, f"[BUILD] domain assigned: {app['cloudflare_fqdn']}"
+                    )
+            else:
+                # Retry once with explicit JSON body shape.
+                await coolify.update_application(coolify_uuid, {"fqdn": desired_fqdn})
+                if deployment_id:
+                    await _append_log(
+                        deployment_id, f"[BUILD] domain re-pushed: {app['cloudflare_fqdn']}"
+                    )
         except Exception as e:
             logger.warning("coolify fqdn sync for auto-subdomain failed: %s", e)
 

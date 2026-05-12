@@ -24,6 +24,7 @@ from services.account_migration import migrate_accounts, needs_migration
 from services.pagespeed import daily_pagespeed_tick
 from services.analytics import gc as analytics_gc
 from services.subdomains import refill_pool as subdomain_refill_pool
+from services.routing_healer import routing_healer_tick
 from routers.status import status_ping_tick
 
 from routers import (
@@ -105,6 +106,11 @@ async def lifespan(app: FastAPI):
     # get instantly-resolving URLs at creation time instead of waiting on
     # DNS propagation. Tick every 3 min; refill is a no-op when full.
     scheduler.add_job(subdomain_refill_pool, "interval", minutes=3, id="subdomain_pool_refill", replace_existing=True, max_instances=1)
+    # Routing self-healer — probes every live app's Cloudflare FQDN every 2
+    # min, auto-pushes the FQDN back to Coolify + restarts the container when
+    # Traefik has lost the route ("no available server" / TRAEFIK DEFAULT
+    # CERT). Also reaps orphan DNS pool entries whose app no longer exists.
+    scheduler.add_job(routing_healer_tick, "interval", minutes=2, id="routing_healer", replace_existing=True, max_instances=1)
     scheduler.start()
     # Initial fill on boot (fire-and-forget) so the very first deploy after
     # a restart doesn't have to wait 3 min for the first scheduler tick.
