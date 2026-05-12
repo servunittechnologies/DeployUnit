@@ -211,7 +211,7 @@ export default function Roadmap() {
   }, [activeCat]);
 
   return (
-    <div className="px-8 py-10 max-w-7xl mx-auto" data-testid="roadmap-page">
+    <div className="px-4 py-6 sm:px-8 sm:py-10 max-w-7xl mx-auto" data-testid="roadmap-page">
       {/* Hero */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>

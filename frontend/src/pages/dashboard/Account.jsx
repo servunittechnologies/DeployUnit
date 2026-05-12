@@ -261,18 +261,18 @@ export default function Account() {
   const currentRank = planRank[plan.id] ?? 0;
 
   return (
-    <div className="px-6 py-6 max-w-6xl" data-testid="account-page">
+    <div className="px-4 py-5 sm:px-6 sm:py-6 max-w-6xl" data-testid="account-page">
       {/* Hero */}
       <div className="mb-6">
         <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// account</div>
         <div className="flex items-end justify-between gap-4 flex-wrap">
-          <h1 className="font-display text-4xl font-semibold tracking-tighter">
+          <h1 className="font-display text-2xl sm:text-4xl font-semibold tracking-tighter break-words">
             {user?.name || user?.email}
           </h1>
-          <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+          <div className="flex items-center gap-2 text-xs font-mono text-zinc-500 flex-wrap">
             <span className="px-2 py-1 border border-brand/40 text-brand uppercase tracking-wider">{plan.name}</span>
             <span>•</span>
-            <span>{snap.workspaces.length} Team{snap.workspaces.length === 1 ? "" : "s"}</span>
+            <span>{snap.workspaces.length} Workspace{snap.workspaces.length === 1 ? "" : "s"}</span>
             <span>•</span>
             <span className="text-brand">{credits.balance} credits</span>
           </div>

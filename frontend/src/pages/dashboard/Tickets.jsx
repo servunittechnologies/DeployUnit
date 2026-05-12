@@ -401,7 +401,7 @@ export default function Tickets() {
 
   if (id) {
     return (
-      <div className="p-8 max-w-5xl">
+      <div className="px-4 py-6 sm:p-8 max-w-5xl">
         <TicketThread ticketId={id} onBack={() => navigate("/app/tickets")} />
       </div>
     );
@@ -409,7 +409,7 @@ export default function Tickets() {
 
   if (creating) {
     return (
-      <div className="p-8 max-w-3xl">
+      <div className="px-4 py-6 sm:p-8 max-w-3xl">
         <NewTicket
           onCancel={() => setCreating(false)}
           onCreated={(t) => { setCreating(false); navigate(`/app/tickets/${t.id}`); }}
@@ -419,7 +419,7 @@ export default function Tickets() {
   }
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="px-4 py-6 sm:p-8 max-w-5xl">
       <TicketsList
         tickets={tickets}
         loading={loading}

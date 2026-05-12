@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../../lib/api";
 import StatusBadge from "../../components/StatusBadge";
+import TabBar from "../../components/TabBar";
 import TerminalLog from "../../components/TerminalLog";
 import EnvVarsEditor from "../../components/EnvVarsEditor";
 import DeployModal from "../../components/DeployModal";
@@ -501,14 +502,14 @@ export default function AppDetail() {
 
   return (
     <div data-testid="app-detail">
-      <div className="px-6 py-6 border-b border-white/[0.06]">
+      <div className="px-4 sm:px-6 py-5 sm:py-6 border-b border-white/[0.06]">
         <Link to="/app" className="text-xs font-mono text-zinc-500 hover:text-white inline-flex items-center gap-1">
           <ChevronLeft className="h-3 w-3" /> dashboard
         </Link>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="font-display text-4xl font-semibold tracking-tighter">{app.name}</h1>
+              <h1 className="font-display text-2xl sm:text-4xl font-semibold tracking-tighter break-all">{app.name}</h1>
               <StatusBadge status={app.status} />
               <EnvBadge env={app.environment} paired={!!app.paired_app_id} />
             </div>
@@ -537,17 +538,14 @@ export default function AppDetail() {
             </button>
           </div>
         </div>
-        <div className="mt-6 flex gap-1 border-b border-white/[0.06] -mb-6">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-3 text-xs uppercase font-mono tracking-[0.25em] border-b-2 transition ${tab === t ? "border-brand text-brand" : "border-transparent text-zinc-500 hover:text-white"}`}
-              data-testid={`tab-${t}`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="mt-6 -mb-6">
+          <TabBar
+            tabs={TABS.map((t) => ({ id: t, label: t.toUpperCase() }))}
+            value={tab}
+            onChange={setTab}
+            testIdPrefix="tab"
+            className="mb-0"
+          />
         </div>
       </div>
 

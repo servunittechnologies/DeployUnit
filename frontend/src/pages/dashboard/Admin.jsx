@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { TicketThread, StatusPill as TicketStatusPill } from "./Tickets";
+import TabBar from "../../components/TabBar";
 
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
@@ -1542,29 +1543,14 @@ export default function Admin() {
   const [tab, setTab] = useState("integrations");
 
   return (
-    <div className="p-8 max-w-5xl" data-testid="admin-page">
+    <div className="px-4 py-6 sm:p-8 max-w-5xl" data-testid="admin-page">
       <div className="flex items-center gap-3 mb-1">
         <ShieldCheck className="h-5 w-5 text-brand" />
-        <h1 className="font-display text-3xl tracking-tighter">Admin Console</h1>
+        <h1 className="font-display text-2xl sm:text-3xl tracking-tighter">Admin Console</h1>
       </div>
-      <p className="text-sm text-zinc-400 mb-8">Platform-wide configuration. Only visible to admins.</p>
+      <p className="text-sm text-zinc-400 mb-6">Platform-wide configuration. Only visible to admins.</p>
 
-      <div className="flex items-center gap-1 border-b border-white/[0.06] mb-6">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            data-testid={`admin-tab-${t.id}`}
-            className={`relative inline-flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
-              tab === t.id ? "text-brand" : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            <t.icon className="h-4 w-4" />
-            {t.label}
-            {tab === t.id && <span className="absolute inset-x-0 -bottom-px h-px bg-brand" />}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} value={tab} onChange={setTab} testIdPrefix="admin-tab" />
 
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "plans" && <PlansTab />}
