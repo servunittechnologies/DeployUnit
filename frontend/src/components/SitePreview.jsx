@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
-import { ExternalLink, RefreshCw, Globe, ShieldX, Loader2, Zap } from "lucide-react";
+import { ExternalLink, RefreshCw, Globe, ShieldX, Loader2, Zap, Monitor, Tablet, Smartphone } from "lucide-react";
 
 function fmtMs(ms) {
   if (ms == null) return "—";
@@ -26,12 +26,37 @@ function statusColor(code, ok) {
   return "text-signal-failed";
 }
 
+// Viewport presets — the iframe is rendered at this nominal size and then
+// scaled with CSS transform so the user sees how the site responds at each
+// breakpoint without leaving the dashboard.
+const VIEWPORTS = {
+  desktop: { w: 1440, h: 900, icon: Monitor, label: "Desktop" },
+  tablet:  { w: 768, h: 1024, icon: Tablet, label: "Tablet" },
+  mobile:  { w: 390, h: 844, icon: Smartphone, label: "Mobile" },
+};
+
 export default function SitePreview({ appId, monitoring }) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [iframeFailed, setIframeFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [viewport, setViewport] = useState("desktop");
   const iframeRef = useRef(null);
+  const stageRef = useRef(null);
+  const [stageWidth, setStageWidth] = useState(0);
+
+  // Measure the available width of the iframe stage so we can scale a
+  // 1440px-wide iframe to fit. ResizeObserver keeps this current on layout
+  // changes (sidebar collapses, window resize, etc).
+  useEffect(() => {
+    if (!stageRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setStageWidth(e.contentRect.width);
+    });
+    ro.observe(stageRef.current);
+    setStageWidth(stageRef.current.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
 
   const probe = useCallback(async () => {
     setLoading(true);
@@ -59,6 +84,11 @@ export default function SitePreview({ appId, monitoring }) {
   const isInsecureOrigin = !!(url && /^http:\/\//i.test(url));
   const canIframe = url && health?.available && !health?.framing_blocked && !isInsecureOrigin;
   const showFallback = !canIframe || iframeFailed;
+  const vp = VIEWPORTS[viewport] || VIEWPORTS.desktop;
+  // Scale the viewport-sized iframe to fit horizontally, capped at 1 so
+  // tablet/mobile don't blow up larger than their real size.
+  const scale = stageWidth > 0 ? Math.min(1, stageWidth / vp.w) : 1;
+  const scaledH = vp.h * scale;
 
   return (
     <div className="border border-white/[0.06] bg-elevated/30 overflow-hidden" data-testid="site-preview">
@@ -71,6 +101,24 @@ export default function SitePreview({ appId, monitoring }) {
         </div>
         <div className="flex-1 px-3 py-1 bg-black/60 border border-white/10 text-[11px] font-mono text-zinc-400 truncate">
           {url ? url.replace(/^https?:\/\//, "") : "no domain assigned"}
+        </div>
+        {/* Viewport toggle — desktop / tablet / mobile */}
+        <div className="hidden sm:flex items-center gap-px bg-black/60 border border-white/10" data-testid="preview-viewport-toggle">
+          {Object.entries(VIEWPORTS).map(([k, v]) => {
+            const Icon = v.icon;
+            const active = viewport === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setViewport(k)}
+                className={`px-2 py-1.5 transition-colors ${active ? "bg-brand/20 text-brand" : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5"}`}
+                title={`${v.label} (${v.w}×${v.h})`}
+                data-testid={`preview-viewport-${k}`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            );
+          })}
         </div>
         <button
           onClick={reload}
@@ -95,7 +143,11 @@ export default function SitePreview({ appId, monitoring }) {
       </div>
 
       {/* preview surface */}
-      <div className="relative bg-black/40" style={{ aspectRatio: "16 / 9" }}>
+      <div
+        ref={stageRef}
+        className="relative bg-black/40 overflow-auto flex items-start justify-center"
+        style={{ height: showFallback || !url ? Math.round(vp.w * 0.5625) : Math.max(scaledH, 320) }}
+      >
         {!url ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 font-mono text-sm">
             <Globe className="h-8 w-8 mb-3" />
@@ -119,17 +171,28 @@ export default function SitePreview({ appId, monitoring }) {
             </a>
           </div>
         ) : (
-          <iframe
-            key={reloadKey}
-            ref={iframeRef}
-            src={url}
-            title="Live site preview"
-            sandbox="allow-scripts allow-same-origin allow-forms"
-            referrerPolicy="no-referrer"
-            className="absolute inset-0 w-full h-full border-0 bg-white"
-            data-testid="preview-iframe"
-            onError={() => setIframeFailed(true)}
-          />
+          <div
+            style={{
+              width: vp.w,
+              height: vp.h,
+              transform: `scale(${scale})`,
+              transformOrigin: "top center",
+              flexShrink: 0,
+            }}
+          >
+            <iframe
+              key={reloadKey}
+              ref={iframeRef}
+              src={url}
+              title="Live site preview"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              referrerPolicy="no-referrer"
+              className="border-0 bg-white"
+              style={{ width: vp.w, height: vp.h }}
+              data-testid="preview-iframe"
+              onError={() => setIframeFailed(true)}
+            />
+          </div>
         )}
       </div>
 

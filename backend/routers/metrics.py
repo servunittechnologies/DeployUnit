@@ -8,6 +8,7 @@
 * `GET  /api/apps/{id}/metrics`        — workspace member: query app metrics time-series
 """
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -49,12 +50,23 @@ async def _require_admin(request: Request):
     return user
 
 
-import os
-
-
 def _public_base(request: Request) -> str:
-    """Use FRONTEND_URL (user's external HTTPS URL) for the install command
-    and agent endpoint, falling back to request.base_url for dev environments."""
+    """Use the current request's public origin so the install command always
+    matches whichever domain the admin is browsing from (preview, prod, or
+    custom). We trust X-Forwarded-* because we always sit behind an ingress.
+    Falls back to FRONTEND_URL only when nothing is parseable."""
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.hostname
+    )
+    proto = (
+        request.headers.get("x-forwarded-proto")
+        or request.url.scheme
+        or "https"
+    )
+    if host:
+        return f"{proto}://{host}".rstrip("/")
     env = (os.environ.get("FRONTEND_URL") or "").rstrip("/")
     if env:
         return env
@@ -82,6 +94,98 @@ async def admin_rotate_agent_key(request: Request):
               meta={}, request=request)
     return {"api_key": key,
             "warning": "store this NOW — we only show it once and it can't be retrieved."}
+
+
+# ─────────────── Unmapped-UUID ignore list (silences the warning) ────────────
+class _IgnoreUuidPayload(BaseModel):
+    uuids: list[str] | None = None  # explicit list — if omitted, use current `last_skipped_uuids`
+
+
+@router.post("/admin/metrics/agent/ignore")
+async def admin_ignore_uuids(payload: _IgnoreUuidPayload, request: Request):
+    """Mark one or more unmapped Coolify UUIDs as "we know, stop nagging us".
+    If `uuids` is omitted, every currently-skipped UUID is silenced in one go
+    (the "Hide all" button)."""
+    user = await _require_admin(request)
+    db = get_db()
+    if payload.uuids:
+        to_add = [u for u in payload.uuids if u]
+    else:
+        doc = await db.platform_settings.find_one({"id": "platform-singleton"}, {"_id": 0, "metrics_agent.last_skipped_uuids": 1}) or {}
+        to_add = ((doc.get("metrics_agent") or {}).get("last_skipped_uuids")) or []
+    if not to_add:
+        return {"ignored": 0, "total": 0}
+    res = await db.platform_settings.update_one(
+        {"id": "platform-singleton"},
+        {"$addToSet": {"metrics_agent.ignored_uuids": {"$each": to_add}},
+         "$pull": {"metrics_agent.last_skipped_uuids": {"$in": to_add}}},
+        upsert=True,
+    )
+    audit_log(action="admin.metrics_agent_ignore_uuids", actor=user,
+              resource_type="platform", resource_id="agent_ignore",
+              meta={"count": len(to_add)}, request=request)
+    doc = await db.platform_settings.find_one({"id": "platform-singleton"}, {"_id": 0, "metrics_agent.ignored_uuids": 1}) or {}
+    total = len((doc.get("metrics_agent") or {}).get("ignored_uuids") or [])
+    return {"ignored": len(to_add), "total": total, "matched": res.matched_count}
+
+
+@router.post("/admin/metrics/agent/unignore")
+async def admin_unignore_uuids(payload: _IgnoreUuidPayload, request: Request):
+    """Remove UUIDs from the ignore list (so warnings come back if the agent
+    still reports them). If `uuids` is omitted, wipes the entire list."""
+    user = await _require_admin(request)
+    db = get_db()
+    if payload.uuids:
+        await db.platform_settings.update_one(
+            {"id": "platform-singleton"},
+            {"$pull": {"metrics_agent.ignored_uuids": {"$in": payload.uuids}}},
+        )
+        removed = len(payload.uuids)
+    else:
+        await db.platform_settings.update_one(
+            {"id": "platform-singleton"},
+            {"$set": {"metrics_agent.ignored_uuids": []}},
+        )
+        removed = -1  # "all"
+    audit_log(action="admin.metrics_agent_unignore_uuids", actor=user,
+              resource_type="platform", resource_id="agent_ignore",
+              meta={"removed": removed}, request=request)
+    doc = await db.platform_settings.find_one({"id": "platform-singleton"}, {"_id": 0, "metrics_agent.ignored_uuids": 1}) or {}
+    return {"removed": removed, "total": len((doc.get("metrics_agent") or {}).get("ignored_uuids") or [])}
+
+
+# ─────────────── Force-delete an unmapped container from the build engine ────
+@router.delete("/admin/metrics/agent/container/{coolify_uuid}")
+async def admin_delete_unmapped_container(coolify_uuid: str, request: Request):
+    """Last-resort: tell the build engine to remove this resource entirely.
+    Use when the UUID belongs to an orphan app/database that's still chewing
+    CPU but is no longer wanted. We try `delete_application` first; if the
+    build engine says it's not an app, we try `delete_database`."""
+    user = await _require_admin(request)
+    from clients.coolify import coolify as _coolify
+    db = get_db()
+    # Make sure this isn't an app/db we ALREADY manage (safety).
+    if await db.apps.find_one({"coolify_app_uuid": coolify_uuid}, {"_id": 0, "id": 1}):
+        raise HTTPException(status_code=409, detail="This UUID is a managed DeployUnit app — delete it from the app dashboard instead.")
+    if await db.databases.find_one({"coolify_app_uuid": coolify_uuid}, {"_id": 0, "id": 1}):
+        raise HTTPException(status_code=409, detail="This UUID is a managed DeployUnit database — delete it from the database dashboard.")
+    # Try app delete first; build engine will 404 if it's not an app.
+    res = await _coolify.delete_application(coolify_uuid)
+    kind = "application"
+    if res is None and hasattr(_coolify, "delete_database"):
+        res = await _coolify.delete_database(coolify_uuid)
+        kind = "database"
+    # Whatever the outcome, also drop from the warning list so the admin
+    # doesn't keep seeing it.
+    await db.platform_settings.update_one(
+        {"id": "platform-singleton"},
+        {"$pull": {"metrics_agent.last_skipped_uuids": coolify_uuid,
+                   "metrics_agent.ignored_uuids": coolify_uuid}},
+    )
+    audit_log(action="admin.metrics_agent_delete_container", actor=user,
+              resource_type=kind, resource_id=coolify_uuid,
+              meta={"build_engine_response": bool(res)}, request=request)
+    return {"ok": res is not None, "kind": kind, "uuid": coolify_uuid}
 
 
 # ─────────────────────── Public installer (no auth) ───────────────────────

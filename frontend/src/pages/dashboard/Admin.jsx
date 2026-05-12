@@ -406,16 +406,62 @@ function MetricsAgentSection() {
 
       {info.last_skipped_uuids && info.last_skipped_uuids.length > 0 && (
         <div className="bg-signal-queued/10 border border-signal-queued/40 p-4 mb-4" data-testid="admin-agent-unmapped">
-          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued mb-2">
-            ⚠ unmapped containers detected
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued">
+              ⚠ unmapped containers detected
+            </div>
+            <button
+              onClick={async () => {
+                if (!confirm("Hide ALL currently-unmapped UUIDs from this warning? You can un-hide them later from the agent settings.")) return;
+                try {
+                  await api.post("/admin/metrics/agent/ignore", { uuids: null });
+                  toast.success("All current UUIDs hidden.");
+                  load();
+                } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+              }}
+              className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 hover:text-brand"
+              data-testid="admin-agent-hide-all"
+            >
+              hide all →
+            </button>
           </div>
-          <div className="text-xs text-zinc-400 mb-2">
+          <div className="text-xs text-zinc-400 mb-3">
             The agent reports stats for containers whose UUID isn't linked to any DeployUnit app or database.
-            Either these are infra containers you don't need to monitor, or the app needs to be (re)imported so its UUID is registered.
+            Click <b className="text-zinc-300">Hide</b> for known infra containers, or <b className="text-zinc-300">Delete</b> to remove them from the build engine entirely.
           </div>
-          <div className="font-mono text-xs text-zinc-300 space-y-1">
+          <div className="space-y-1.5">
             {info.last_skipped_uuids.map((u) => (
-              <div key={u} className="break-all" data-testid={`admin-agent-unmapped-uuid`}>· {u}</div>
+              <div key={u} className="flex items-center gap-2 bg-black/30 px-3 py-2" data-testid={`admin-agent-unmapped-row`}>
+                <code className="flex-1 font-mono text-xs text-zinc-300 break-all" data-testid={`admin-agent-unmapped-uuid`}>{u}</code>
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.post("/admin/metrics/agent/ignore", { uuids: [u] });
+                      toast.success("UUID hidden — won't appear again.");
+                      load();
+                    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+                  }}
+                  className="px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] font-mono text-zinc-400 hover:text-brand hover:bg-white/5 border border-white/10"
+                  data-testid={`admin-agent-uuid-hide`}
+                >
+                  hide
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete container ${u} from the build engine? This stops + removes the container, volumes, and configurations.`)) return;
+                    try {
+                      const r = await api.delete(`/admin/metrics/agent/container/${u}`);
+                      if (r.data?.ok) toast.success(`Deleted ${r.data.kind} on build engine.`);
+                      else toast.error("Build engine returned no record — container may be already gone.");
+                      load();
+                    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+                  }}
+                  className="px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] font-mono text-signal-failed hover:text-white hover:bg-signal-failed/30 border border-signal-failed/40"
+                  data-testid={`admin-agent-uuid-delete`}
+                >
+                  delete
+                </button>
+              </div>
             ))}
           </div>
         </div>

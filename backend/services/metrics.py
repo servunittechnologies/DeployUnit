@@ -131,6 +131,12 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
                 "coolify_app_uuid": d["coolify_app_uuid"], "_kind": "database",
             })
 
+    # Apply admin-side ignore list — UUIDs the operator has flagged as
+    # "I know about this, don't bug me". Coolify infra containers, legacy
+    # apps that were deleted out of band, etc.
+    doc = await db.platform_settings.find_one({"id": PLATFORM_SETTINGS_ID}, {"_id": 0, "metrics_agent.ignored_uuids": 1}) or {}
+    ignored = set(((doc.get("metrics_agent") or {}).get("ignored_uuids")) or [])
+
     accepted = 0
     skipped = 0
     skipped_uuids: list[str] = []
@@ -140,7 +146,7 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
         app = apps.get(u)
         if not app:
             skipped += 1
-            if u and u not in skipped_uuids:
+            if u and u not in skipped_uuids and u not in ignored:
                 skipped_uuids.append(u)
             continue
         docs.append({

@@ -72,6 +72,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Drie UX fixes: viewport toggle, dynamische agent URL, hide/delete unmapped UUIDs**
+  - **Fix 1 — SitePreview viewport toggle** (`components/SitePreview.jsx`): de iframe rendert nu op een NOMINALE viewport-grootte (Desktop 1440×900 / Tablet 768×1024 / Mobile 390×844) en wordt met CSS `transform: scale()` proportioneel ingepast in de stage. Site responsive aan zijn breakpoints gestuurd — niet meer aan de breedte van het preview-element. Toggle-icons (Monitor/Tablet/Smartphone uit lucide-react) bovenin het browser-frame, actieve view brand-kleur. ResizeObserver houdt de scale live bij wanneer de sidebar inklapt of het venster wijzigt.
+  - **Fix 2 — Metrics agent install.sh URL** (`routers/metrics.py::_public_base`): de oude implementatie las `FRONTEND_URL` env-var en viel terug op `request.base_url`. Op productie achter de Cloudflare ingress gaf dat soms de preview URL terug omdat de env-var nooit was overschreven. Nieuwe implementatie gebruikt ZELFDE X-Forwarded-Host / X-Forwarded-Proto detectie als de GitHub OAuth redirect (`routers/github_oauth.py::_request_origin`). De install.sh die de admin uit Admin → Metrics agent download spiegelt nu altijd de domain waarvan de admin de pagina opent → 0 chance op preview-URL leakage in productie.
+  - **Fix 3 — Unmapped Coolify UUIDs: Hide + Delete actions**:
+    - **Probleem**: gebruiker krijgt continu de waarschuwing "⚠ UNMAPPED CONTAINERS DETECTED" voor UUIDs die ofwel infra zijn (niet onze app) of legacy containers die opgeruimd moeten worden. Er was geen UI-actie mogelijk → de melding bleef voor altijd hangen.
+    - **Backend** (`services/metrics.py` + `routers/metrics.py`):
+      - Nieuwe veld `platform_settings.metrics_agent.ignored_uuids` (array). `ingest_samples()` filtert genegeerde UUIDs uit `skipped_uuids` zodat ze nooit meer in de waarschuwing terechtkomen.
+      - `POST /admin/metrics/agent/ignore` — payload `{uuids?:[]}` of `{}` (omit = "hide all currently-skipped"). Idempotent via `$addToSet`. Pull tegelijk uit `last_skipped_uuids` zodat de UI direct schoon is.
+      - `POST /admin/metrics/agent/unignore` — symmetrische undo; `{}` body wist de hele lijst.
+      - `DELETE /admin/metrics/agent/container/{uuid}` — last-resort: stuurt `coolify.delete_application(uuid)` of `delete_database(uuid)` fallback. Veiligheid: 409 als de UUID een MANAGED DeployUnit app of database is (forceert delete via reguliere flow). Wist daarna ook uit `last_skipped_uuids` + `ignored_uuids`.
+    - **Frontend** (`pages/dashboard/Admin.jsx::MetricsAgentSection`): waarschuwing toont nu per UUID twee inline-knoppen — kleine "hide" knop (zinc) en "delete" knop (rood, confirm-dialog). Bovenin de waarschuwing een "hide all →" link voor de bulk-actie. Alle acties hebben unieke `data-testid` (`admin-agent-uuid-hide`, `admin-agent-uuid-delete`, `admin-agent-hide-all`).
+  - **Audit trail**: alle hide/unhide/delete acties loggen via `audit_log()` (`admin.metrics_agent_ignore_uuids`, `admin.metrics_agent_unignore_uuids`, `admin.metrics_agent_delete_container`).
+  - **Tests**: curl tests groen — `ignore` dedupes correct (1 ignored / 1 total bij herhaalde call), `unignore` werkt symmetrisch, install.sh toont nu correcte preview-URL bij preview-request (op productie zal het automatisch `deployunit.com` zijn via X-Forwarded-Host).
+  - **Files**: `components/SitePreview.jsx` (viewport toggle + scale logic), `routers/metrics.py` (dyn URL + 3 admin endpoints), `services/metrics.py` (ignored_uuids filter), `pages/dashboard/Admin.jsx` (UI met hide/delete acties).
+
+
 - **2026-05-12 — Cloudflare Tunnel + Origin Cert support: pool records nu proxied=true (orange cloud)**
   - **Achtergrond**: gebruiker stelde Cloudflare Tunnel + wildcard Origin Cert in volgens [Coolify Full TLS guide](https://coolify.io/docs/integrations/cloudflare/tunnels/full-tls). In die setup termineert Cloudflare TLS aan de edge met haar eigen edge-cert, en spreekt naar Coolify Traefik via HTTPS met de Origin Cert die op de Coolify server staat (`/data/coolify/proxy/certs/`). Coolify hoeft géén Let's Encrypt meer te doen want het wildcard `*.deployunit.app` Origin Cert dekt alle subdomains — 15 jaar geldig.
   - **Nieuwe code**:
