@@ -636,9 +636,9 @@ function WorkspaceSwitcherMock() {
   ], []);
   const [active, setActive] = useState(0);
   return (
-    <div className="border border-zinc-800 bg-zinc-950/50" data-testid="workspace-switcher">
+    <div className="border border-zinc-800 bg-zinc-950/50" data-testid="Team-switcher">
       <div className="px-3 py-2 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 flex items-center justify-between">
-        <span>workspaces</span>
+        <span>Teams</span>
         <span className="text-cyan-400">{ws[active].deploys} deploys / 30d</span>
       </div>
       <div className="divide-y divide-zinc-900">
@@ -650,7 +650,7 @@ function WorkspaceSwitcherMock() {
               key={w.name}
               onClick={() => setActive(i)}
               className="w-full text-left flex items-center justify-between px-3 py-2 text-xs font-mono hover:bg-zinc-900/40 transition-colors group"
-              data-testid={`workspace-${i}`}
+              data-testid={`Team-${i}`}
             >
               <span className="flex items-center gap-2">
                 <motion.span
@@ -920,9 +920,9 @@ function Features() {
 
           <BentoCard
             overline="Agency multi-tenant"
-            title="Workspaces per customer."
-            body="Click to switch fleets. Per-workspace billing, members, audit logs and credit budget — out of the box."
-            testId="feature-workspaces"
+            title="Teams per customer."
+            body="Click to switch fleets. Per-Team billing, members, audit logs and credit budget — out of the box."
+            testId="feature-Teams"
           >
             <WorkspaceSwitcherMock />
           </BentoCard>

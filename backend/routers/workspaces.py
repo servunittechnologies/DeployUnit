@@ -38,6 +38,21 @@ async def list_workspaces(request: Request):
 async def create_workspace(payload: WorkspaceIn, request: Request):
     user = await get_current_user(request)
     db = get_db()
+    # Enforce plan `teams` cap (account-level).
+    from services.plans import user_plan, account_usage, list_plans
+    plan = await user_plan(user["id"])
+    cap = (plan.get("limits") or {}).get("teams")
+    if cap is not None and cap >= 0:
+        usage = await account_usage(user["id"])
+        if usage.get("teams", 0) >= cap:
+            higher = [p for p in await list_plans(only_active=True)
+                      if p.get("price", 0) > plan.get("price", 0)]
+            suggestion = higher[0]["name"] if higher else None
+            msg = (
+                f"You hit your {plan.get('name') or plan['id']} plan's Teams limit ({cap}). "
+                + (f"Upgrade to {suggestion} for more." if suggestion else "")
+            )
+            raise HTTPException(status_code=402, detail=msg)
     ws_id = str(uuid.uuid4())
     base_slug = slugify(f"{payload.name}-{ws_id[:6]}")
     doc = {
@@ -207,9 +222,7 @@ async def list_members(workspace_id: str, request: Request):
 async def add_member(workspace_id: str, payload: WorkspaceMemberIn, request: Request):
     user = await get_current_user(request)
     await require_workspace_member(workspace_id, user, ["owner", "admin"])
-    # Enforce plan team-member limit
-    from services.plans import assert_limit
-    await assert_limit(workspace_id, "team")
+    # Note: members per Team are unconditionally unlimited on every plan.
     db = get_db()
     target = await db.users.find_one({"email": payload.email.lower()})
     if not target:

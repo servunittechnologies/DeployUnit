@@ -70,8 +70,8 @@ function App() {
                 }
               >
                 <Route index element={<Overview />} />
-                <Route path="projects" element={<Projects />} />
-                <Route path="projects/:id" element={<ProjectDetail />} />
+                <Route path="clients" element={<Projects />} />
+                <Route path="clients/:id" element={<ProjectDetail />} />
                 <Route path="apps/new" element={<NewApp />} />
                 <Route path="apps/:id" element={<AppDetail />} />
                 <Route path="domains" element={<Domains />} />

@@ -220,9 +220,9 @@ export default function NewApp() {
 
           {projects.length > 0 && (
             <div className="mt-6">
-              <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Project (optional)</label>
+              <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Client (optional)</label>
               <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none">
-                <option value="">No project</option>
+                <option value="">No client</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>

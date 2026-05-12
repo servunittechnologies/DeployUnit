@@ -21,9 +21,9 @@ const ACTION_LABELS = {
   "billing.subscription.cancel": "Subscription canceled",
   "billing.checkout.start": "Checkout started",
   "credits.topup": "Credits topped up",
-  "workspace.member.invite": "Member invited",
-  "workspace.member.remove": "Member removed",
-  "workspace.update": "Workspace updated",
+  "Team.member.invite": "Member invited",
+  "Team.member.remove": "Member removed",
+  "Team.update": "Team updated",
   "admin.platform_settings.update": "Platform settings updated",
 };
 
@@ -63,7 +63,7 @@ export default function AuditLog() {
   useEffect(() => { if (active) load(true); /* eslint-disable-next-line */ }, [active, actionFilter]);
 
   if (!active) {
-    return <div className="p-6 text-sm font-mono text-zinc-500">Select a workspace to view its audit log.</div>;
+    return <div className="p-6 text-sm font-mono text-zinc-500">Select a Team to view its audit log.</div>;
   }
 
   return (
@@ -104,7 +104,7 @@ export default function AuditLog() {
       {entries.length === 0 && !loading && (
         <div className="border border-white/[0.06] p-10 text-center text-sm text-zinc-500" data-testid="audit-empty">
           <ShieldCheck className="h-6 w-6 mx-auto mb-3 text-zinc-600" />
-          No audit entries yet. Actions on this workspace will appear here in real-time.
+          No audit entries yet. Actions on this Team will appear here in real-time.
         </div>
       )}
 

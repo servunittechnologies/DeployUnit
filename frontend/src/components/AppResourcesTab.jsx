@@ -287,7 +287,7 @@ function AttachedDatabases({ appId, conns, reload }) {
         <div className="text-xs font-mono text-zinc-600 py-6 border border-dashed border-white/[0.06] text-center">
           No databases attached. {(conns.available_databases || []).length > 0
             ? "Click 'Attach database' above to wire one in."
-            : <>No databases in this workspace yet. <Link to="/app/databases" className="text-brand hover:underline">Create one</Link>.</>}
+            : <>No databases in this Team yet. <Link to="/app/databases" className="text-brand hover:underline">Create one</Link>.</>}
         </div>
       ) : (
         <div className="border border-white/[0.06] divide-y divide-white/[0.06]">

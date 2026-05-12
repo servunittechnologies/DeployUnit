@@ -10,7 +10,7 @@ export default function ProtectedRoute({ children }) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="font-mono text-xs uppercase tracking-[0.3em] text-zinc-500">
           <span className="inline-block w-2 h-2 rounded-full bg-brand mr-3 animate-ping-soft" />
-          Booting workspace...
+          Booting Team...
         </div>
       </div>
     );

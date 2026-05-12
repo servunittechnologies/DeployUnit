@@ -17,10 +17,11 @@ Plan shape:
     "limits": {
         "apps": int,               # hard cap; -1 = unlimited
         "domains": int,            # hard cap; -1 = unlimited
-        "team": int,               # team-member cap; -1 = unlimited
+        "teams": int,              # max Teams (workspaces) per account; -1 = unlimited
         "bandwidth_gb": int,       # fair-use bandwidth before credits kick in
         "build_minutes": int,      # fair-use build minutes
     },
+    # NOTE: members per team are unconditionally unlimited — no `members` field.
     "credits": int,                # credits granted each billing cycle
     "highlight": bool,             # "recommended" badge on pricing page
     "order": int,                  # sort order
@@ -45,6 +46,7 @@ DEFAULT_PLANS = [
         "interval": "month",
         "tagline": "For weekend projects.",
         "features": [
+            "1 Team",
             "1 app",
             "1 custom domain",
             "100 GB bandwidth",
@@ -55,7 +57,7 @@ DEFAULT_PLANS = [
         "limits": {
             "apps": 1,
             "domains": 1,
-            "team": 1,
+            "teams": 1,
             "bandwidth_gb": 100,
             "build_minutes": 100,
         },
@@ -75,7 +77,7 @@ DEFAULT_PLANS = [
         "interval": "month",
         "tagline": "Everything Vercel charges per-seat for. Flat.",
         "features": [
-            "Unlimited team seats",
+            "1 Team · unlimited members",
             "10 apps",
             "500 GB bandwidth",
             "1.000 build minutes / mo",
@@ -87,7 +89,7 @@ DEFAULT_PLANS = [
         "limits": {
             "apps": 10,
             "domains": 10,
-            "team": -1,
+            "teams": 1,
             "bandwidth_gb": 500,
             "build_minutes": 1000,
         },
@@ -107,12 +109,12 @@ DEFAULT_PLANS = [
         "interval": "month",
         "tagline": "For studios shipping for clients.",
         "features": [
-            "Unlimited team seats",
+            "Unlimited Teams (host every client separately)",
+            "Unlimited members per Team",
             "50 apps",
             "2 TB bandwidth",
             "5.000 build minutes / mo",
             "250 credits / mo (≈250 SMS alerts)",
-            "Unlimited workspaces (host every client separately)",
             "1-year audit log",
             "Priority support 4h + Slack",
             "99.9% uptime SLA",
@@ -120,7 +122,7 @@ DEFAULT_PLANS = [
         "limits": {
             "apps": 50,
             "domains": -1,
-            "team": -1,
+            "teams": -1,
             "bandwidth_gb": 2048,
             "build_minutes": 5000,
         },
@@ -221,7 +223,7 @@ async def workspace_plan(workspace_id: str) -> dict:
     plan = await get_plan(plan_id)
     if not plan:
         plan = await get_plan("free")
-    return plan or {"id": "free", "limits": {"apps": 1, "domains": 1, "team": 1, "bandwidth_gb": 100, "build_minutes": 100}, "credits": 0}
+    return plan or {"id": "free", "limits": {"apps": 1, "domains": 1, "teams": 1, "bandwidth_gb": 100, "build_minutes": 100}, "credits": 0}
 
 
 async def user_plan(user_id: str) -> dict:
@@ -233,7 +235,7 @@ async def user_plan(user_id: str) -> dict:
     plan = await get_plan(plan_id)
     if not plan:
         plan = await get_plan("free")
-    return plan or {"id": "free", "limits": {"apps": 1, "domains": 1, "team": 1, "bandwidth_gb": 100, "build_minutes": 100}, "credits": 0}
+    return plan or {"id": "free", "limits": {"apps": 1, "domains": 1, "teams": 1, "bandwidth_gb": 100, "build_minutes": 100}, "credits": 0}
 
 
 async def workspace_usage(workspace_id: str) -> dict:
@@ -242,34 +244,31 @@ async def workspace_usage(workspace_id: str) -> dict:
     apps_used = await db.apps.count_documents({"workspace_id": workspace_id})
     domains_used = await db.domains.count_documents({"workspace_id": workspace_id})
     databases_used = await db.databases.count_documents({"workspace_id": workspace_id})
-    # 1 (owner) + count of workspace_members rows
-    member_rows = await db.workspace_members.count_documents({"workspace_id": workspace_id})
-    members_used = max(member_rows, 1)
     return {
         "apps": apps_used,
         "domains": domains_used,
         "databases": databases_used,
-        "team": members_used,
+        "teams": 1,  # single-Team scope; account_usage gives the real count
     }
 
 
 async def account_usage(user_id: str) -> dict:
-    """Aggregate usage across every workspace the user owns. Plan limits
-    apply against this total (Agency = 50 apps total across all workspaces)."""
+    """Aggregate usage across every Team (workspace) the user owns. Plan limits
+    apply against this total (Agency = 50 apps total across all Teams)."""
     db = get_db()
     ws_ids = await db.workspaces.distinct("id", {"owner_id": user_id})
     if not ws_ids:
-        return {"apps": 0, "domains": 0, "databases": 0, "team": 0, "workspaces": 0}
+        return {"apps": 0, "domains": 0, "databases": 0, "teams": 0, "clients": 0}
     apps_used = await db.apps.count_documents({"workspace_id": {"$in": ws_ids}})
     domains_used = await db.domains.count_documents({"workspace_id": {"$in": ws_ids}})
     databases_used = await db.databases.count_documents({"workspace_id": {"$in": ws_ids}})
-    member_rows = await db.workspace_members.count_documents({"workspace_id": {"$in": ws_ids}})
+    clients_used = await db.projects.count_documents({"workspace_id": {"$in": ws_ids}})
     return {
         "apps": apps_used,
         "domains": domains_used,
         "databases": databases_used,
-        "team": max(member_rows, len(ws_ids)),  # at least one (owner) per workspace
-        "workspaces": len(ws_ids),
+        "teams": len(ws_ids),
+        "clients": clients_used,
     }
 
 

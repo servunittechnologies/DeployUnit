@@ -120,7 +120,7 @@ export default function Register() {
                 "Deploy any Next.js or Node app in 2 clicks",
                 "Custom domains with auto-SSL",
                 "Realtime monitoring + alerts",
-                "Workspaces & team roles for agencies",
+                "Teams & team roles for agencies",
               ].map((t, i) => (
                 <motion.li
                   key={t}

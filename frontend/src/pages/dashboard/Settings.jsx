@@ -50,7 +50,7 @@ export default function Settings() {
     try {
       await api.put(`/workspaces/${active.id}`, { name: wsName.trim(), type: wsType });
       await refreshWorkspaces();
-      toast.success("Workspace updated");
+      toast.success("Team updated");
     } catch (e) { toast.error(getApiErrorMessage(e)); }
     finally { setWsBusy(false); }
   };
@@ -61,8 +61,8 @@ export default function Settings() {
     const dbs = wsUsage?.usage?.databases ?? 0;
     const hasResources = apps > 0 || dbs > 0;
     const warning = hasResources
-      ? `Delete "${active.name}"?\n\nThis workspace has ${apps} app(s) and ${dbs} database(s) — they will be PERMANENTLY DESTROYED on the build engine. This cannot be undone.\n\nType the workspace name to confirm:`
-      : `Delete "${active.name}"?\n\nThis cannot be undone. Type the workspace name to confirm:`;
+      ? `Delete "${active.name}"?\n\nThis Team has ${apps} app(s) and ${dbs} database(s) — they will be PERMANENTLY DESTROYED on the build engine. This cannot be undone.\n\nType the Team name to confirm:`
+      : `Delete "${active.name}"?\n\nThis cannot be undone. Type the Team name to confirm:`;
     const confirmation = window.prompt(warning);
     if (confirmation !== active.name) {
       if (confirmation !== null) toast.error("Name did not match — not deleted");
@@ -71,7 +71,7 @@ export default function Settings() {
     setWsBusy(true);
     try {
       await api.delete(`/workspaces/${active.id}`, { params: hasResources ? { force: true } : {} });
-      toast.success("Workspace deleted");
+      toast.success("Team deleted");
       const others = (workspaces || []).filter((w) => w.id !== active.id);
       if (others[0] && setActive) setActive(others[0].id);
       await refreshWorkspaces();
@@ -95,7 +95,7 @@ export default function Settings() {
   };
 
   if (!active) {
-    return <div className="px-6 py-10 text-sm font-mono text-zinc-500">No workspace selected.</div>;
+    return <div className="px-6 py-10 text-sm font-mono text-zinc-500">No Team selected.</div>;
   }
 
   const plan = wsUsage?.plan;
@@ -105,10 +105,10 @@ export default function Settings() {
     <div className="px-6 py-6 max-w-4xl space-y-8" data-testid="settings-page">
       {/* Hero */}
       <div>
-        <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// workspace settings</div>
+        <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// Team settings</div>
         <h1 className="font-display text-4xl font-semibold tracking-tighter">{active.name}</h1>
         <p className="text-xs text-zinc-500 mt-2 max-w-2xl">
-          Settings for this workspace only — name, type, members. Plan, credits, billing and
+          Settings for this Team only — name, type, members. Plan, credits, billing and
           notification preferences are personal and live on your <Link to="/app/account" className="text-brand hover:underline">Account page</Link>.
         </p>
       </div>
@@ -121,7 +121,7 @@ export default function Settings() {
               <span className="px-2 py-1 border border-brand/40 text-brand uppercase text-[10px] font-mono tracking-wider">
                 {plan.name} plan
               </span>
-              <span className="text-xs text-zinc-500 font-mono">— shared across all your workspaces</span>
+              <span className="text-xs text-zinc-500 font-mono">— shared across all your Teams</span>
             </div>
             <Link
               to="/app/account#plan"
@@ -135,13 +135,13 @@ export default function Settings() {
             <Tile label="Apps in this ws" v={usage.apps ?? 0} />
             <Tile label="Domains in this ws" v={usage.domains ?? 0} />
             <Tile label="Databases in this ws" v={usage.databases ?? 0} />
-            <Tile label="Team in this ws" v={usage.team ?? members.length ?? 1} />
+            <Tile label="Members in this Team" v={members.length ?? 1} />
           </div>
         </div>
       )}
 
       {/* General */}
-      <section className="border border-white/[0.06] p-6 space-y-4" data-testid="workspace-section">
+      <section className="border border-white/[0.06] p-6 space-y-4" data-testid="Team-section">
         <div className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-brand" />
           <h2 className="font-display text-xl">General</h2>
@@ -164,7 +164,7 @@ export default function Settings() {
               className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
               data-testid="ws-type-select"
             >
-              <option value="solo" className="bg-black">Solo (personal projects)</option>
+              <option value="solo" className="bg-black">Solo (personal clients)</option>
               <option value="agency" className="bg-black">Agency (client work)</option>
             </select>
           </div>
@@ -233,7 +233,7 @@ export default function Settings() {
           <FileClock className="h-5 w-5 text-zinc-400" />
           <div>
             <div className="font-display text-base">Activity & audit log</div>
-            <div className="text-xs text-zinc-500">Every action in this workspace is recorded for compliance.</div>
+            <div className="text-xs text-zinc-500">Every action in this Team is recorded for compliance.</div>
           </div>
         </div>
         <Link
@@ -253,11 +253,11 @@ export default function Settings() {
         </div>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-sm">Delete this workspace</div>
+            <div className="text-sm">Delete this Team</div>
             <div className="text-xs text-zinc-500 mt-1">
               {(usage.apps ?? 0) > 0 || (usage.databases ?? 0) > 0
                 ? <span className="text-signal-failed">Will destroy {usage.apps ?? 0} app(s) and {usage.databases ?? 0} database(s) on the build engine.</span>
-                : "This workspace is empty — safe to delete."}
+                : "This Team is empty — safe to delete."}
             </div>
           </div>
           <button
@@ -266,7 +266,7 @@ export default function Settings() {
             className="inline-flex items-center gap-2 px-3 py-2 border border-signal-failed/40 text-signal-failed hover:bg-signal-failed/10 text-sm disabled:opacity-50"
             data-testid="ws-delete"
           >
-            <Trash2 className="h-4 w-4" /> Delete workspace
+            <Trash2 className="h-4 w-4" /> Delete Team
           </button>
         </div>
       </section>
