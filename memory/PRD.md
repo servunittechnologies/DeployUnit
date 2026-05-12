@@ -72,6 +72,19 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Silent drop + auto-reconcile (rollback van hide/delete UI)**
+  - **User feedback**: "ik wil ze niet kunnen verwijderen of hiden ik wil gewoon dat dit performant werkt en een container een app is en niet meerdere containers per app". Vorige iteratie bouwde hide/delete knoppen — verkeerde aanpak. De juiste fix: 1-op-1 mapping garanderen via stilte filtering + automatische drift-reconcile, zónder admin-acties.
+  - **Rollback**: verwijderde de hide/unignore/delete-container endpoints en alle bijbehorende UI-knoppen (zinc "hide", red "delete", "hide all →" link). `ignored_uuids` veld en bijbehorende filter ook gewist.
+  - **Silent drop** (`services/metrics.py::ingest_samples`): unknown UUIDs worden niet meer opgeslagen in `last_skipped_uuids` en niet meer in de response geretourneerd. Pure performance: 1 less DB write per ingest tick, geen list-growth, geen noise. Counter `last_skipped_count` blijft (telkortst metriek, geen lijst).
+  - **Nieuwe reconcile job** (`services/coolify_reconcile.py`): elke 10 min:
+    - Pulls `coolify.list_applications()` — nieuw endpoint in `clients/coolify.py` (`GET /applications`)
+    - Voor elke DeployUnit-app met een `coolify_app_uuid` die NIET meer in Coolify staat → `status='archived', archived_at, archived_reason='no longer on build engine'` (geen hard-delete, admin kan inspecteren)
+    - Telt Coolify-apps die DeployUnit niet kent (`unmanaged = coolify_uuids - deployunit_uuids`), cached in `platform_settings.metrics_agent.unmanaged_coolify_count`
+  - **UI**: oude waarschuwingsblok vervangen door één compacte info-pill `[•] N Coolify resources not yet imported — they'll appear here on the next reconcile.` (alleen wanneer count > 0). Geen knoppen, geen confirm-dialogs, geen actie nodig — pure status.
+  - **Backend agent endpoint**: `GET /admin/metrics/agent` retourneert nu `unmanaged_coolify_count` + `last_reconcile_at` ipv `last_skipped_uuids`.
+  - **Voor de user**: na deploy zal de waarschuwing `gk1u7cu6qvny06aevqvl53iy` nooit meer terugkomen — die UUID hoort bij een Coolify infra-container (Traefik/proxy/etc), de agent stuurt 'm nog steeds maar de server dropt het stilletjes en het verschijnt nergens meer in de UI. Bestaande apps die uit Coolify verwijderd zijn worden binnen 10 min auto-archived in DeployUnit.
+
+
 - **2026-05-12 — Drie UX fixes: viewport toggle, dynamische agent URL, hide/delete unmapped UUIDs**
   - **Fix 1 — SitePreview viewport toggle** (`components/SitePreview.jsx`): de iframe rendert nu op een NOMINALE viewport-grootte (Desktop 1440×900 / Tablet 768×1024 / Mobile 390×844) en wordt met CSS `transform: scale()` proportioneel ingepast in de stage. Site responsive aan zijn breakpoints gestuurd — niet meer aan de breedte van het preview-element. Toggle-icons (Monitor/Tablet/Smartphone uit lucide-react) bovenin het browser-frame, actieve view brand-kleur. ResizeObserver houdt de scale live bij wanneer de sidebar inklapt of het venster wijzigt.
   - **Fix 2 — Metrics agent install.sh URL** (`routers/metrics.py::_public_base`): de oude implementatie las `FRONTEND_URL` env-var en viel terug op `request.base_url`. Op productie achter de Cloudflare ingress gaf dat soms de preview URL terug omdat de env-var nooit was overschreven. Nieuwe implementatie gebruikt ZELFDE X-Forwarded-Host / X-Forwarded-Proto detectie als de GitHub OAuth redirect (`routers/github_oauth.py::_request_origin`). De install.sh die de admin uit Admin → Metrics agent download spiegelt nu altijd de domain waarvan de admin de pagina opent → 0 chance op preview-URL leakage in productie.

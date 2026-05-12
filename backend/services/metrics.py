@@ -53,8 +53,10 @@ async def get_or_create_agent_key_info() -> dict:
         "last_sample_count": agent.get("last_sample_count"),
         "last_skipped_count": agent.get("last_skipped_count"),
         "last_seen_count": agent.get("last_seen_count"),
-        "last_skipped_uuids": agent.get("last_skipped_uuids") or [],
+        "last_skipped_uuids": [],  # silently dropped at ingest now — no more per-UUID warnings
         "last_source_ip": agent.get("last_source_ip"),
+        "unmanaged_coolify_count": int(agent.get("unmanaged_coolify_count") or 0),
+        "last_reconcile_at": agent.get("last_reconcile_at"),
     }
 
 
@@ -131,23 +133,21 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
                 "coolify_app_uuid": d["coolify_app_uuid"], "_kind": "database",
             })
 
-    # Apply admin-side ignore list — UUIDs the operator has flagged as
-    # "I know about this, don't bug me". Coolify infra containers, legacy
-    # apps that were deleted out of band, etc.
-    doc = await db.platform_settings.find_one({"id": PLATFORM_SETTINGS_ID}, {"_id": 0, "metrics_agent.ignored_uuids": 1}) or {}
-    ignored = set(((doc.get("metrics_agent") or {}).get("ignored_uuids")) or [])
-
+    # Build a UUID → app/db lookup the agent samples will be matched against.
+    # Unknown UUIDs are silently dropped — they belong to infrastructure
+    # containers (Traefik, Coolify proxy, watchtower, etc) and don't need
+    # metrics tracked. The reconcile job below makes sure that any container
+    # which IS a Coolify resource (app or database) but isn't in DeployUnit's
+    # DB yet ends up in `unmanaged_coolify_resources` so the admin can
+    # one-click import it. Everything else: silent drop. Performant.
     accepted = 0
     skipped = 0
-    skipped_uuids: list[str] = []
     docs: list[dict] = []
     for s in samples:
         u = s.get("coolify_app_uuid")
         app = apps.get(u)
         if not app:
             skipped += 1
-            if u and u not in skipped_uuids and u not in ignored:
-                skipped_uuids.append(u)
             continue
         docs.append({
             "id": str(uuid.uuid4()),
@@ -170,10 +170,10 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
         accepted += 1
     if docs:
         await db.container_metrics_samples.insert_many(docs)
-    logger.info("metrics ingest: accepted=%d skipped=%d (unmapped uuids=%s) from %s",
-                accepted, skipped, skipped_uuids[:5], source_ip)
-    await _touch(accepted, skipped=skipped, seen=len(samples), skipped_uuids=skipped_uuids)
-    return {"accepted": accepted, "skipped": skipped, "unmapped_uuids": skipped_uuids[:10]}
+    logger.info("metrics ingest: accepted=%d silently_dropped=%d (from %s)",
+                accepted, skipped, source_ip)
+    await _touch(accepted, skipped=skipped, seen=len(samples), skipped_uuids=[])
+    return {"accepted": accepted, "skipped": skipped, "unmapped_uuids": []}
 
 
 # ─────────────────────── Retention / downsampling ───────────────────────

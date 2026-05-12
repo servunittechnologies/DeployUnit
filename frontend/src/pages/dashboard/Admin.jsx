@@ -404,66 +404,14 @@ function MetricsAgentSection() {
         </div>
       </div>
 
-      {info.last_skipped_uuids && info.last_skipped_uuids.length > 0 && (
-        <div className="bg-signal-queued/10 border border-signal-queued/40 p-4 mb-4" data-testid="admin-agent-unmapped">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-signal-queued">
-              ⚠ unmapped containers detected
-            </div>
-            <button
-              onClick={async () => {
-                if (!confirm("Hide ALL currently-unmapped UUIDs from this warning? You can un-hide them later from the agent settings.")) return;
-                try {
-                  await api.post("/admin/metrics/agent/ignore", { uuids: null });
-                  toast.success("All current UUIDs hidden.");
-                  load();
-                } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
-              }}
-              className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-400 hover:text-brand"
-              data-testid="admin-agent-hide-all"
-            >
-              hide all →
-            </button>
-          </div>
-          <div className="text-xs text-zinc-400 mb-3">
-            The agent reports stats for containers whose UUID isn't linked to any DeployUnit app or database.
-            Click <b className="text-zinc-300">Hide</b> for known infra containers, or <b className="text-zinc-300">Delete</b> to remove them from the build engine entirely.
-          </div>
-          <div className="space-y-1.5">
-            {info.last_skipped_uuids.map((u) => (
-              <div key={u} className="flex items-center gap-2 bg-black/30 px-3 py-2" data-testid={`admin-agent-unmapped-row`}>
-                <code className="flex-1 font-mono text-xs text-zinc-300 break-all" data-testid={`admin-agent-unmapped-uuid`}>{u}</code>
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.post("/admin/metrics/agent/ignore", { uuids: [u] });
-                      toast.success("UUID hidden — won't appear again.");
-                      load();
-                    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
-                  }}
-                  className="px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] font-mono text-zinc-400 hover:text-brand hover:bg-white/5 border border-white/10"
-                  data-testid={`admin-agent-uuid-hide`}
-                >
-                  hide
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Delete container ${u} from the build engine? This stops + removes the container, volumes, and configurations.`)) return;
-                    try {
-                      const r = await api.delete(`/admin/metrics/agent/container/${u}`);
-                      if (r.data?.ok) toast.success(`Deleted ${r.data.kind} on build engine.`);
-                      else toast.error("Build engine returned no record — container may be already gone.");
-                      load();
-                    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
-                  }}
-                  className="px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] font-mono text-signal-failed hover:text-white hover:bg-signal-failed/30 border border-signal-failed/40"
-                  data-testid={`admin-agent-uuid-delete`}
-                >
-                  delete
-                </button>
-              </div>
-            ))}
-          </div>
+      {/* Unmanaged containers are silently dropped at ingest — no more
+          nagging warnings. The reconcile job (every 10 min) imports any
+          real Coolify resources that should be tracked. Show a tiny
+          informational pill only if there's a backlog to look at. */}
+      {(info.unmanaged_coolify_count ?? 0) > 0 && (
+        <div className="bg-black/30 border border-white/[0.06] px-3 py-2 mb-4 text-[11px] font-mono text-zinc-400 flex items-center gap-2" data-testid="admin-agent-unmanaged">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+          {info.unmanaged_coolify_count} Coolify resource{info.unmanaged_coolify_count === 1 ? "" : "s"} not yet imported to DeployUnit — they'll appear here on the next reconcile.
         </div>
       )}
 

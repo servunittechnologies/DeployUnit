@@ -189,6 +189,17 @@ class CoolifyClient:
     async def get_application(self, app_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/applications/{app_uuid}")
 
+    async def list_applications(self) -> list[dict]:
+        """Return every application the build engine knows about. Used by the
+        reconcile job to detect drift between Coolify and DeployUnit (e.g.
+        apps deleted out of band)."""
+        res = await self._request("GET", "/applications")
+        if isinstance(res, list):
+            return res
+        if isinstance(res, dict) and isinstance(res.get("data"), list):
+            return res["data"]
+        return []
+
     async def update_env(self, app_uuid: str, env_vars: dict) -> Optional[dict]:
         # Coolify takes one variable at a time via /applications/{uuid}/envs
         results = []

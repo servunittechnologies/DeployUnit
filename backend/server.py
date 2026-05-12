@@ -25,6 +25,7 @@ from services.pagespeed import daily_pagespeed_tick
 from services.analytics import gc as analytics_gc
 from services.subdomains import refill_pool as subdomain_refill_pool
 from services.routing_healer import routing_healer_tick
+from services.coolify_reconcile import reconcile_tick as coolify_reconcile_tick
 from routers.status import status_ping_tick
 
 from routers import (
@@ -111,6 +112,10 @@ async def lifespan(app: FastAPI):
     # Traefik has lost the route ("no available server" / TRAEFIK DEFAULT
     # CERT). Also reaps orphan DNS pool entries whose app no longer exists.
     scheduler.add_job(routing_healer_tick, "interval", minutes=2, id="routing_healer", replace_existing=True, max_instances=1)
+    # Coolify ↔ DeployUnit drift reconciler — every 10 min. Archives DeployUnit
+    # apps that no longer exist on the build engine and counts Coolify apps
+    # not tracked by DeployUnit (info pill only, no warning spam).
+    scheduler.add_job(coolify_reconcile_tick, "interval", minutes=10, id="coolify_reconcile", replace_existing=True, max_instances=1)
     scheduler.start()
     # Initial fill on boot (fire-and-forget) so the very first deploy after
     # a restart doesn't have to wait 3 min for the first scheduler tick.
