@@ -23,8 +23,8 @@ function PlanCard({ plan, onChoose, index }) {
       data-testid={`plan-${plan.id}`}
     >
       {plan.highlight && (
-        <div className="absolute top-4 right-4 text-[10px] font-mono uppercase tracking-[0.3em] text-brand inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-brand pulse-glow" />
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-fit px-3 py-1 bg-brand text-brand-fg text-[10px] font-mono uppercase tracking-[0.3em] inline-flex items-center gap-1.5 whitespace-nowrap z-10">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-fg/70" />
           recommended
         </div>
       )}
