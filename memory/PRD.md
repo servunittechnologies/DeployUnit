@@ -72,6 +72,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Mobile-friendly nav + dashboard drawer**
+  - **Marketing**: `MarketingNav` (About/Contact/Support pages) en de eigen `Nav` op `Landing.jsx` hebben nu een hamburger-knop (`md:hidden`) die een fullscreen overlay-drawer opent met grote tap-targets (text-xl). Body-scroll lock terwijl open, auto-sluit op route-change, CTA "Deploy now" prominent onderaan in de drawer.
+  - **Dashboard**: `DashboardLayout` heeft een hamburger-knop linksboven in de topbar (`lg:hidden`) die een slide-in drawer opent met de volledige zijbalk (workspace switcher + alle nav-items + admin-link). Backdrop-tap én elke nav-tap sluit de drawer automatisch. Sidebar `SidebarContent` is geëxtraheerd zodat dezelfde content op desktop én in de mobile drawer gebruikt wordt — één bron van waarheid.
+  - **Topbar mobile fit**: search-box blijft `hidden md:flex`, CreditsPill `hidden md:inline-flex`, dus op iPhone-formaat (390px) zien gebruikers alleen hamburger + klein logo + bell + user-menu. Geen overflow.
+  - **CSS**: nieuwe `@keyframes slide-in-left` in `index.css` voor de drawer-animatie (0.18s ease-out).
+  - **E2E getest** (Playwright iPhone 13 emulatie): hamburger zichtbaar + drawer opent + nav-klik navigeert + drawer auto-sluit + backdrop-tap sluit — alle interacties groen.
+
+- **2026-05-12 — GitHub OAuth: dynamic per-host redirect_uri**
+  - **Bug**: `_redirect_uri()` en `_frontend_origin()` lazen statisch uit env-vars die de preview-URL bevatten. Op productie stuurde de OAuth-start GitHub dus naar de preview-callback, en de eindredirect ging naar het preview-domein. Op productie resulteerde dat in een Cloudflare 520.
+  - **Fix** (`routers/github_oauth.py`): nieuwe `_request_origin(request)` leidt de origin af uit `X-Forwarded-Host`/`X-Forwarded-Proto`. `/start` slaat `origin` + `redirect_uri` op in `oauth_states`. `/callback` gebruikt de opgeslagen `redirect_uri` voor de token-exchange (GitHub vereist exacte match) en stuurt de gebruiker terug naar dezelfde origin. Werkt voor preview, productie én elk custom domein zonder env-wijziging.
+
+- **2026-05-12 — Productie "Network Error" + Coolify 404-spam opgelost**
+  - **Frontend `lib/api.js`**: backend-URL wordt nu runtime resolved via `window.location.origin` voor élk niet-localhost domein. Same-origin = geen CORS preflight nodig = geen "Network Error" meer.
+  - **Backend `server.py`**: CORS gebruikt `allow_origin_regex=".*"` met credentials, zodat de ingress de request-Origin echoet ipv onbruikbare `*` wildcard.
+  - **Workers `monitor.py`**: `sync_deployments` backfill-loop stempelt dode externe deployments nu eenmalig met `failure_summary` zodat ze uit de query-set vallen. Eind aan de oneindige 404-spam in productielogs.
+
 - **2026-05-11 — Support Ticket System (P0 COMPLETE — 19/19 backend, frontend E2E green)**
   - **Backend `routers/tickets.py`**: full user CRUD (`POST/GET /api/tickets`, `GET /api/tickets/{id}`, `POST /api/tickets/{id}/messages`, `POST /api/tickets/{id}/close`) + admin endpoints (`GET /api/admin/tickets` with status/priority/q filters + pagination, `GET /api/admin/tickets/stats` aggregates open/awaiting_*/resolved/closed/needs_attention, `GET /api/admin/tickets/{id}`, `POST /api/admin/tickets/{id}/messages`, `PATCH /api/admin/tickets/{id}` for status+priority+category updates). RBAC: non-admins get 403 on all `/admin/tickets*` routes (explicit `_require_admin` guard, including defense-in-depth on `admin_add_message`). State machine: user reply flips status → `awaiting_support`; admin reply flips → `awaiting_user`; closed ticket replies return 409.
   - **Email notifications via MailerSend** (BackgroundTasks, fire-and-forget): new ticket → emails all platform admins; admin reply → emails ticket owner; user reply → emails admins (excluding the author if they're admin). All emails branded via shared `_BASE_CSS`/`_shell` chrome in `services/emails.py`. Gracefully skipped when MailerSend not configured.
