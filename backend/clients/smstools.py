@@ -76,10 +76,17 @@ _ERROR_MESSAGES = {
 }
 
 
-async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None = None) -> dict:
+async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None = None, _retry_no_sender: bool = False) -> dict:
     """Send an SMS via SMSTools. Returns the JSON response. Raises
     SMSToolsError on HTTP/business failures so the caller can decide to
-    refund credits (handled upstream)."""
+    refund credits (handled upstream).
+
+    Auto-retry quirk: if SMSTools rejects with code 111 (invalid sender) AND
+    we did send a sender, transparently retry once without it. SMSTools then
+    picks the route's default sender (works for most EU operators when the
+    brand sender hasn't been pre-registered yet). This stops first-time
+    setups from failing silently while the admin waits for sender approval.
+    """
     # Strip the leading + so SMSTools accepts it (their API wants the digits
     # only, no '+'). E.164 → "+316XXXXXXXX" → "316XXXXXXXX".
     digits = (to or "").lstrip("+")
@@ -89,8 +96,10 @@ async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None 
     payload: dict = {
         "message": body,
         "to": digits,
-        "sender": cfg.get("sender"),
     }
+    sender_to_use = None if _retry_no_sender else cfg.get("sender")
+    if sender_to_use:
+        payload["sender"] = sender_to_use
     if reference:
         payload["reference"] = reference[:255]
     if cfg.get("test_mode"):
@@ -113,7 +122,18 @@ async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None 
 
     if r.status_code >= 400:
         code = data.get("code") or data.get("error_code")
-        hint = _ERROR_MESSAGES.get(int(code)) if (code and str(code).isdigit()) else None
+        code_int = int(code) if (code and str(code).isdigit()) else None
+        # Auto-fallback on "invalid sender" — try once more without one.
+        if code_int == 111 and not _retry_no_sender and sender_to_use:
+            logger.warning("smstools 111 (invalid sender %r) — retrying without sender", sender_to_use)
+            return await _post_message(cfg, to=to, body=body, reference=reference, _retry_no_sender=True)
+        hint = _ERROR_MESSAGES.get(code_int) if code_int else None
+        # For 111, add the actionable next-steps so the toast is useful.
+        if code_int == 111:
+            hint = ("invalid sender — even after fallback. "
+                    "Fix: in Admin → SMSTools, set Sender ID to (a) your own phone number digits-only "
+                    "(e.g. 32475123456 — works immediately) OR (b) a pre-registered brand name "
+                    "(register at smstools.com → Sender names → Add sender, 24-48h approval).")
         msg = data.get("message") or data.get("error") or r.text[:200]
         raise SMSToolsError(f"smstools {r.status_code}: {hint or msg}")
 

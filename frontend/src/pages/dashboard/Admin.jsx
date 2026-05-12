@@ -610,6 +610,53 @@ function ResourcesTab() {
 
 
 /* ──────────────────── SMSTools test-send mini-widget ──────────────────── */
+function SenderIdValidator({ value }) {
+  const v = (value || "").trim();
+  if (!v) return (
+    <div className="mt-1.5 text-[11px] font-mono text-amber-400/80" data-testid="sender-validator-empty">
+      ⚠ Empty — SMSTools will reject the send with error 111. Set a brand name or your own phone number (digits only).
+    </div>
+  );
+  const isDigits = /^[0-9]+$/.test(v);
+  const isAlphanum = /^[a-zA-Z0-9]+$/.test(v);
+  const digitsTooLong = isDigits && v.length > 14;
+  const alphanumTooLong = isAlphanum && !isDigits && v.length > 11;
+  const hasSpecials = !isAlphanum && !isDigits;
+
+  if (hasSpecials) return (
+    <div className="mt-1.5 text-[11px] font-mono text-rose-400" data-testid="sender-validator-bad">
+      ✗ Contains special characters — only A–Z, a–z and 0–9 allowed. SMSTools will return error 111.
+    </div>
+  );
+  if (alphanumTooLong) return (
+    <div className="mt-1.5 text-[11px] font-mono text-rose-400" data-testid="sender-validator-too-long">
+      ✗ Too long ({v.length} chars) — alphanumeric senders must be ≤11 chars.
+    </div>
+  );
+  if (digitsTooLong) return (
+    <div className="mt-1.5 text-[11px] font-mono text-rose-400" data-testid="sender-validator-digits-too-long">
+      ✗ Too long ({v.length} digits) — numeric senders must be ≤14 digits.
+    </div>
+  );
+  // Format is fine — but for EU we still need pre-registration warning.
+  return (
+    <div className="mt-1.5 text-[11px] font-mono text-emerald-400/90 leading-relaxed" data-testid="sender-validator-ok">
+      ✓ Format is valid ({v.length} {isDigits ? "digits" : "alphanumeric chars"}).
+      {!isDigits && (
+        <span className="block text-amber-400/80 mt-0.5">
+          ⚠ For EU carriers (NL, BE, DE, FR, …) you MUST pre-register this name in your SMSTools dashboard → <b>Sender names</b> → <b>Add sender</b>. Without approval, carriers return error 111.
+        </span>
+      )}
+      {isDigits && (
+        <span className="block text-zinc-500 mt-0.5">
+          Numeric senders (your own GSM number, digits only) work without pre-registration — the safest option for first-time setup.
+        </span>
+      )}
+    </div>
+  );
+}
+
+
 function SMSToolsTestSend() {
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
@@ -1140,13 +1187,17 @@ function PlatformTab() {
               data-testid="admin-smstools-client-secret"
             />
           </Field>
-          <Field label="Sender ID" hint="Brand name (≤11 alphanumeric chars) OR digits (≤14). Pre-register your brand with SMSTools for EU carrier acceptance.">
+          <Field
+            label="Sender ID"
+            hint="Brand name (≤11 alphanumeric chars) OR digits-only (≤14). Pre-register your brand with SMSTools for EU carrier acceptance — otherwise carriers return error 111."
+          >
             <Input
               value={form.smstools_sender_id}
               onChange={(e) => setForm({ ...form, smstools_sender_id: e.target.value })}
               placeholder="DeployUnit"
               data-testid="admin-smstools-sender"
             />
+            <SenderIdValidator value={form.smstools_sender_id} />
           </Field>
           <Field label="Delivery webhook URL (optional)" hint="Have SMSTools call back here when a message status changes — used to refund failed sends. Recommended.">
             <Input
