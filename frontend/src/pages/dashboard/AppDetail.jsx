@@ -412,6 +412,20 @@ export default function AppDetail() {
   const [error, setError] = useState("");
   const [domainWizardOpen, setDomainWizardOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  const [reclaimBusy, setReclaimBusy] = useState(false);
+
+  async function reclaimCfSubdomain() {
+    setReclaimBusy(true);
+    try {
+      const r = await api.post(`/apps/${id}/cloudflare-subdomain`);
+      toast.success(`Subdomain assigned: ${r.data.fqdn}. Redeploy to issue SSL.`);
+      load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e) || "Cloudflare provisioning failed");
+    } finally {
+      setReclaimBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     const [a, d, e, m] = await Promise.all([
@@ -639,6 +653,35 @@ export default function AppDetail() {
 
       {tab === "domains" && (
         <div className="p-6 max-w-3xl">
+          {/* Managed subdomain card — sslip fallback or Cloudflare-issued */}
+          <div className="mb-6 border border-white/[0.06] p-4" data-testid="managed-subdomain-card">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Managed subdomain</div>
+                <div className="mt-1 font-mono text-sm text-zinc-200 truncate">
+                  {app.cloudflare_fqdn || (app.primary_url || "").replace(/^https?:\/\//, "") || "—"}
+                </div>
+                <div className="mt-1 text-[11px] font-mono text-zinc-500">
+                  {app.cloudflare_fqdn
+                    ? "Routed via Cloudflare DNS · Let's Encrypt SSL"
+                    : (app.primary_url || "").includes("sslip.io")
+                      ? "Fallback domain — claim a real Cloudflare subdomain below."
+                      : "No subdomain assigned yet."}
+                </div>
+              </div>
+              {!app.cloudflare_fqdn && (
+                <button
+                  onClick={reclaimCfSubdomain}
+                  disabled={reclaimBusy}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-xs font-mono border border-brand text-brand hover:bg-brand hover:text-brand-fg disabled:opacity-50 transition-colors"
+                  data-testid="reclaim-cf-subdomain"
+                >
+                  {reclaimBusy ? "Provisioning…" : "Use Cloudflare subdomain"}
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between mb-6">
             <div>
               <div className="font-display text-xl tracking-tight">Custom domains</div>

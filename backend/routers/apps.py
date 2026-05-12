@@ -670,6 +670,68 @@ async def update_app(app_id: str, payload: AppUpdate, request: Request, backgrou
     return await db.apps.find_one({"id": app_id}, {"_id": 0})
 
 
+@router.post("/apps/{app_id}/cloudflare-subdomain")
+async def reclaim_cloudflare_subdomain(app_id: str, request: Request):
+    """Assign a managed Cloudflare subdomain to an existing app (idempotent).
+
+    Apps created before Cloudflare was configured fall back to the sslip.io
+    catch-all. Once the platform admin sets the Cloudflare API key + zone, this
+    endpoint lets owners reclaim a proper `<slug>.<zone>` subdomain — and
+    re-points the build engine so Traefik issues a real SSL cert.
+    """
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+
+    if app.get("cloudflare_fqdn"):
+        return {
+            "ok": True,
+            "fqdn": app["cloudflare_fqdn"],
+            "primary_url": app.get("primary_url"),
+            "record_id": app.get("cloudflare_dns_record_id"),
+            "already_assigned": True,
+        }
+
+    sub = await provision_subdomain(app)
+    if not sub:
+        raise HTTPException(
+            status_code=503,
+            detail="Cloudflare is not configured yet — please ask the platform admin to set it up.",
+        )
+
+    await db.apps.update_one(
+        {"id": app_id},
+        {"$set": {
+            "primary_url": sub["primary_url"],
+            "cloudflare_dns_record_id": sub["record_id"],
+            "cloudflare_fqdn": sub["fqdn"],
+        }},
+    )
+
+    # Sync the new FQDN to the build engine so Traefik routes traffic and
+    # provisions a Let's Encrypt cert on the next deploy.
+    coolify_uuid = app.get("coolify_app_uuid")
+    if coolify_uuid:
+        try:
+            await coolify.update_application(
+                coolify_uuid, {"fqdn": f"https://{sub['fqdn']}"}
+            )
+        except Exception as e:
+            logger.warning("coolify fqdn sync on reclaim failed for %s: %s", app_id, e)
+
+    return {
+        "ok": True,
+        "fqdn": sub["fqdn"],
+        "primary_url": sub["primary_url"],
+        "record_id": sub["record_id"],
+        "already_assigned": False,
+    }
+
+
+
 @router.post("/apps/{app_id}/redeploy")
 async def redeploy(app_id: str, request: Request, background: BackgroundTasks, payload: RedeployIn | None = None):
     user = await get_current_user(request)
@@ -975,7 +1037,7 @@ async def get_webhook(app_id: str, request: Request):
         raise HTTPException(status_code=404, detail="App not found")
     await require_workspace_member(app["workspace_id"], user)
     return {
-        "url": app.get("webhook_url") or wh_public_url(app_id),
+        "url": wh_public_url(app_id),
         "secret": app.get("webhook_secret"),
         "enabled": bool(app.get("webhook_enabled", True)),
         "github_hook_id": app.get("webhook_github_id"),
@@ -1011,7 +1073,7 @@ async def rotate_webhook(app_id: str, request: Request, background: BackgroundTa
     new_secret = wh_generate_secret()
     await db.apps.update_one({"id": app_id}, {"$set": {"webhook_secret": new_secret}})
     background.add_task(_auto_register_webhook, app_id)
-    return {"secret": new_secret, "url": app.get("webhook_url") or wh_public_url(app_id)}
+    return {"secret": new_secret, "url": wh_public_url(app_id)}
 
 
 @router.post("/apps/{app_id}/webhook/register")
