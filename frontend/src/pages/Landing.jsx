@@ -126,8 +126,8 @@ function Nav() {
       </Container>
 
       {open && (
-        <div className="md:hidden fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="nav-mobile-drawer">
-          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800">
+        <div className="md:hidden fixed inset-0 h-screen z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="nav-mobile-drawer">
+          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800 shrink-0">
             <Link to="/" onClick={() => setOpen(false)}><Logo className="h-7 w-auto" /></Link>
             <button
               onClick={() => setOpen(false)}
@@ -138,7 +138,7 @@ function Nav() {
               <XIcon className="h-6 w-6" />
             </button>
           </div>
-          <nav className="flex-1 flex flex-col px-6 py-8 gap-1 overflow-y-auto">
+          <nav className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
             {links.map(([label, href, isAnchor]) => {
               const Comp = isAnchor ? "a" : Link;
               const props = isAnchor ? { href } : { to: href };
@@ -148,7 +148,7 @@ function Nav() {
                   {...props}
                   onClick={() => setOpen(false)}
                   data-testid={`nav-mobile-${label.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="py-3 text-xl font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
+                  className="py-2.5 text-base font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
                 >
                   {label}
                 </Comp>
@@ -158,7 +158,7 @@ function Nav() {
               to="/register"
               onClick={() => setOpen(false)}
               data-testid="nav-mobile-cta"
-              className="mt-6 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-3 transition-colors"
+              className="mt-4 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-2.5 transition-colors"
             >
               Deploy now
               <ArrowRight className="h-4 w-4" />

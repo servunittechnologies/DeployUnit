@@ -76,8 +76,8 @@ export function MarketingNav() {
 
       {/* Mobile drawer */}
       {open && (
-        <div className="md:hidden fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="marketing-nav-mobile-drawer">
-          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800">
+        <div className="md:hidden fixed inset-0 h-screen z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="marketing-nav-mobile-drawer">
+          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800 shrink-0">
             <Link to="/" onClick={() => setOpen(false)}><Logo className="h-7 w-auto" /></Link>
             <button
               onClick={() => setOpen(false)}
@@ -88,7 +88,7 @@ export function MarketingNav() {
               <X className="h-6 w-6" />
             </button>
           </div>
-          <nav className="flex-1 flex flex-col px-6 py-8 gap-1 overflow-y-auto">
+          <nav className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
             {NAV_LINKS.map((n) => {
               const isAnchor = n.to.startsWith("/#");
               const props = isAnchor ? { href: n.to } : { to: n.to };
@@ -99,7 +99,7 @@ export function MarketingNav() {
                   {...props}
                   onClick={() => setOpen(false)}
                   data-testid={`${n.testId}-mobile`}
-                  className="py-3 text-xl font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
+                  className="py-2.5 text-base font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
                 >
                   {n.label}
                 </Comp>
@@ -109,7 +109,7 @@ export function MarketingNav() {
               to="/login"
               onClick={() => setOpen(false)}
               data-testid="marketing-nav-login-mobile"
-              className="py-3 text-xl font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
+              className="py-2.5 text-base font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
             >
               Log in
             </Link>
@@ -117,14 +117,14 @@ export function MarketingNav() {
               to="/register"
               onClick={() => setOpen(false)}
               data-testid="marketing-nav-cta-mobile"
-              className="mt-6 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-3 transition-colors"
+              className="mt-4 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-2.5 transition-colors"
             >
               Deploy now
               <ArrowRight className="h-4 w-4" />
             </Link>
           </nav>
-          <div className="px-6 py-5 border-t border-zinc-900 text-[11px] font-mono text-zinc-500">
-            © {new Date().getFullYear()} DeployUnit · EU-hosted · GDPR
+          <div className="px-6 py-3 border-t border-zinc-900 text-[10px] font-mono text-zinc-500 shrink-0">
+            © {new Date().getFullYear()} DeployUnit · EU · GDPR
           </div>
         </div>
       )}
