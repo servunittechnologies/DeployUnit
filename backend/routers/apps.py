@@ -488,13 +488,17 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
         "created_at": _now_iso(),
     }
 
-    # Auto-provision a free {slug}.zone subdomain if Cloudflare is configured.
-    # Falls back silently if not — app still gets created with a Coolify URL.
+    # Auto-provision a free {random}.zone subdomain if Cloudflare is configured.
+    # If Cloudflare is not configured yet, the app is created without a public
+    # URL — the user can add their own custom domain or the platform admin can
+    # finish Cloudflare setup and the reclaim endpoint can be used later. We
+    # NEVER fall back to the sslip catch-all — that's an internal detail.
     sub = await provision_subdomain(doc)
     if sub:
         doc["primary_url"] = sub["primary_url"]
         doc["cloudflare_dns_record_id"] = sub["record_id"]
         doc["cloudflare_fqdn"] = sub["fqdn"]
+        doc["cloudflare_slug"] = sub.get("cf_slug")
 
     # Generate a webhook secret upfront so the registration + UI work in
     # one round-trip. If we can't talk to GitHub yet, the secret stays
@@ -708,6 +712,7 @@ async def reclaim_cloudflare_subdomain(app_id: str, request: Request):
             "primary_url": sub["primary_url"],
             "cloudflare_dns_record_id": sub["record_id"],
             "cloudflare_fqdn": sub["fqdn"],
+            "cloudflare_slug": sub.get("cf_slug"),
         }},
     )
 

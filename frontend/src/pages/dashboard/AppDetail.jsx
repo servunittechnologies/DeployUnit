@@ -653,20 +653,18 @@ export default function AppDetail() {
 
       {tab === "domains" && (
         <div className="p-6 max-w-3xl">
-          {/* Managed subdomain card — sslip fallback or Cloudflare-issued */}
+          {/* Managed subdomain card */}
           <div className="mb-6 border border-white/[0.06] p-4" data-testid="managed-subdomain-card">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Managed subdomain</div>
                 <div className="mt-1 font-mono text-sm text-zinc-200 truncate">
-                  {app.cloudflare_fqdn || (app.primary_url || "").replace(/^https?:\/\//, "") || "—"}
+                  {app.cloudflare_fqdn || "—"}
                 </div>
                 <div className="mt-1 text-[11px] font-mono text-zinc-500">
                   {app.cloudflare_fqdn
-                    ? "Routed via Cloudflare DNS · Let's Encrypt SSL"
-                    : (app.primary_url || "").includes("sslip.io")
-                      ? "Fallback domain — claim a real Cloudflare subdomain below."
-                      : "No subdomain assigned yet."}
+                    ? "Routed via DNS · Let's Encrypt SSL"
+                    : "No managed subdomain assigned yet — claim one below or add a custom domain."}
                 </div>
               </div>
               {!app.cloudflare_fqdn && (
@@ -676,7 +674,7 @@ export default function AppDetail() {
                   className="inline-flex items-center gap-2 px-3 py-2 text-xs font-mono border border-brand text-brand hover:bg-brand hover:text-brand-fg disabled:opacity-50 transition-colors"
                   data-testid="reclaim-cf-subdomain"
                 >
-                  {reclaimBusy ? "Provisioning…" : "Use Cloudflare subdomain"}
+                  {reclaimBusy ? "Provisioning…" : "Claim managed subdomain"}
                 </button>
               )}
             </div>

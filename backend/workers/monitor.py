@@ -311,15 +311,32 @@ async def sync_deployments():
         elif is_currently_failed and not cool_status:
             # Coolify reports no status at all → keep the failed marker
             continue
-        # No state change → skip the write.
+        # Legacy cleanup: rewrite any stored sslip URLs on every sync so the
+        # platform never exposes the build-engine fallback domain.
+        legacy = a.get("primary_url") or ""
+        legacy_cleanup = {}
+        if "sslip.io" in legacy:
+            if a.get("cloudflare_fqdn"):
+                legacy_cleanup["primary_url"] = f"https://{a['cloudflare_fqdn']}"
+            else:
+                legacy_cleanup["primary_url"] = None
+        # No state change → still flush legacy cleanup if needed, then skip.
         if new_status == a.get("status"):
+            if legacy_cleanup:
+                await db.apps.update_one({"id": a["id"]}, {"$set": legacy_cleanup})
             continue
+        # Build a candidate primary_url from whatever Coolify returns, then
+        # only accept it if it isn't the sslip catch-all (we never want to
+        # surface that to end-users) AND the app doesn't already have a
+        # Cloudflare-issued FQDN (which is always the source of truth).
         fqdn = info.get("fqdn") or info.get("preview_fqdn")
         primary_url = None
         if fqdn:
-            primary_url = fqdn if fqdn.startswith("http") else f"https://{fqdn.split(',')[0]}"
-        update = {"status": new_status}
-        if primary_url:
+            candidate = fqdn if fqdn.startswith("http") else f"https://{fqdn.split(',')[0]}"
+            if "sslip.io" not in candidate and not a.get("cloudflare_fqdn"):
+                primary_url = candidate
+        update = {"status": new_status, **legacy_cleanup}
+        if primary_url and "primary_url" not in update:
             update["primary_url"] = primary_url
         if new_status in ("live", "failed"):
             update["last_deploy_at"] = _now_iso()
