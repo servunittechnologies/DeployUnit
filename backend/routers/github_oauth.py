@@ -34,7 +34,34 @@ def _frontend_origin() -> str:
     return fe.rstrip("/") if fe else ""
 
 
+def _request_origin(request: Request) -> str:
+    """Best-effort recovery of the public origin the user hit us on.
+
+    We trust X-Forwarded-* headers because we always sit behind an ingress.
+    Falls back to the request URL, and finally to FRONTEND_URL.
+    """
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.hostname
+    )
+    proto = (
+        request.headers.get("x-forwarded-proto")
+        or request.url.scheme
+        or "https"
+    )
+    if host:
+        return f"{proto}://{host}".rstrip("/")
+    return _frontend_origin()
+
+
+def _redirect_uri_for(origin: str) -> str:
+    """OAuth callback URL bound to the given origin (preview, prod, or custom domain)."""
+    return f"{origin.rstrip('/')}/api/auth/github/callback"
+
+
 def _redirect_uri() -> str:
+    # Static default for legacy callers; prefer _redirect_uri_for(origin).
     return os.environ.get(
         "GITHUB_OAUTH_REDIRECT_URI",
         f"{_frontend_origin()}/api/auth/github/callback",
@@ -71,12 +98,20 @@ async def github_start(request: Request, redirect_to: Optional[str] = None, link
 
     state = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
+    # Bind this OAuth round-trip to the origin the user is on RIGHT NOW
+    # (preview, production, or any future custom domain). The callback will
+    # use the same values so the GitHub token exchange's redirect_uri matches
+    # and the final RedirectResponse lands on the correct frontend.
+    origin = _request_origin(request)
+    redirect_uri = _redirect_uri_for(origin)
     await db.oauth_states.insert_one(
         {
             "id": str(uuid.uuid4()),
             "state": state,
             "redirect_to": redirect_to or "app",
             "link_user_id": link_user_id,
+            "origin": origin,
+            "redirect_uri": redirect_uri,
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(minutes=10)).isoformat(),
         }
@@ -84,7 +119,7 @@ async def github_start(request: Request, redirect_to: Optional[str] = None, link
 
     params = {
         "client_id": cid,
-        "redirect_uri": _redirect_uri(),
+        "redirect_uri": redirect_uri,
         "scope": GITHUB_SCOPES,
         "state": state,
         "allow_signup": "true",
@@ -92,7 +127,7 @@ async def github_start(request: Request, redirect_to: Optional[str] = None, link
     return JSONResponse({"authorization_url": f"{GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"})
 
 
-async def _exchange_code(code: str) -> str:
+async def _exchange_code(code: str, redirect_uri: str) -> str:
     cid, secret = _client_credentials()
     async with httpx.AsyncClient(timeout=15.0) as cli:
         r = await cli.post(
@@ -101,7 +136,7 @@ async def _exchange_code(code: str) -> str:
                 "client_id": cid,
                 "client_secret": secret,
                 "code": code,
-                "redirect_uri": _redirect_uri(),
+                "redirect_uri": redirect_uri,
             },
             headers={"Accept": "application/json"},
         )
@@ -152,11 +187,18 @@ def _bootstrap_workspace_payload(name: str, owner_id: str) -> dict:
 
 
 @router.get("/callback")
-async def github_callback(code: str, state: str):
+async def github_callback(code: str, state: str, request: Request):
     db = get_db()
-    fe = _frontend_origin()
 
     state_doc = await db.oauth_states.find_one({"state": state})
+    # Resolve the origin we should redirect the user back to. Prefer the
+    # origin captured at /start (so prod stays prod, preview stays preview),
+    # fall back to the current request, and finally to FRONTEND_URL.
+    if state_doc and state_doc.get("origin"):
+        fe = state_doc["origin"].rstrip("/")
+    else:
+        fe = _request_origin(request) or _frontend_origin()
+
     if not state_doc:
         return RedirectResponse(url=f"{fe}/login?error=oauth_invalid_state", status_code=302)
     expires_at = state_doc.get("expires_at")
@@ -165,8 +207,10 @@ async def github_callback(code: str, state: str):
         return RedirectResponse(url=f"{fe}/login?error=oauth_state_expired", status_code=302)
     await db.oauth_states.delete_one({"state": state})
 
+    redirect_uri = state_doc.get("redirect_uri") or _redirect_uri_for(fe)
+
     try:
-        token = await _exchange_code(code)
+        token = await _exchange_code(code, redirect_uri)
         gh_user = await _fetch_github_user(token)
     except HTTPException:
         return RedirectResponse(url=f"{fe}/login?error=oauth_failed", status_code=302)
