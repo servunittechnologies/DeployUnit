@@ -72,6 +72,20 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Pre-warmed Cloudflare DNS pool (Instant URLs P0 COMPLETE — 13/13 backend, UI testids green)**
+  - **Probleem**: Nieuw aangemaakte apps kregen een random `{slug}.deployunit.app` toegewezen, maar het Cloudflare DNS-record was nét aangemaakt → resolvers wereldwijd hadden de record nog niet → eerste paar minuten resulteerde elke klik op de app-URL in een dode link of NXDOMAIN.
+  - **Fix** — `services/subdomains.py`: nieuwe collection `cloudflare_subdomain_pool` met N **pre-aangemaakte** DNS records. Bij app-creatie doet `provision_subdomain(app)` een atomic `find_one_and_update({status:"free"}, ...)` (FIFO, oudste eerst → meest gepropageerd) en heeft de gebruiker een URL die wereldwijd al resolvet vanaf seconde 0. Pool-empty fallback maakt on-demand een record (degraded — propagatie nodig).
+  - **Scheduler** (`server.py`): `refill_pool` job elke 3 min houdt de pool op target. Initial fill bij lifespan startup via `asyncio.create_task` zodat de eerste deploy na een restart niet hoeft te wachten.
+  - **Admin tunable**: nieuw veld `subdomain_pool_target` in `platform_settings` (default 10, clamp `[0, 50]`). 0 schakelt de pool uit. Read-side clamp in `_pool_target()` zodat slechte input (999, -5) niet de Cloudflare-quota brandt. Pydantic `int | None` valideert type-strict → 422 op `"abc"`.
+  - **Admin endpoints**:
+    - `GET /api/admin/subdomain-pool` → `{free, claimed, target, hard_max:50, cloudflare_ready, zone_name, upcoming[]}` voor diagnostics
+    - `POST /api/admin/subdomain-pool/refill` → handmatige refill, returns `{added, ...stats}`
+  - **Frontend** (`pages/dashboard/Admin.jsx`): nieuwe `SubdomainPoolWidget` sectie in Platform Domain tab — 3 KPI cards (free/target met progress bar, claimed counter, health pill), target-input (0–50), "Refill now" knop (disabled als `cloudflare_ready=false`), live "Next in line" FIFO preview van komende 5 free FQDNs. Polls elke 15s. Toast feedback op refill (success met aantal toegevoegd, error als CF niet geconfigureerd, info als pool al vol).
+  - **Graceful degradation**: in preview env (geen CF token) blijft alles werken — refill is no-op, widget toont "Cloudflare not configured", apps kunnen alsnog deployed worden zonder pooled URL.
+  - **Tests**: 13/13 backend pytest green (`/app/backend/tests/test_subdomain_pool.py`), 401/403/200 RBAC, clamp behaviour, persistence, regression op andere admin endpoints. Frontend testids `admin-subdomain-pool`, `pool-free-count`, `pool-health-label`, `admin-pool-target`, `admin-pool-refill` geverifieerd. Pool target persistentie via reload bevestigd.
+  - **Files**: `services/subdomains.py` (rewrite — pool collection, FIFO claim, admin-tunable target), `routers/admin.py` (+`subdomain_pool_target` field, +2 endpoints), `server.py` (refill_pool scheduler + initial fill), `pages/dashboard/Admin.jsx` (SubdomainPoolWidget component).
+
+
 - **2026-05-12 — Mobile-friendly nav + dashboard drawer**
   - **Marketing**: `MarketingNav` (About/Contact/Support pages) en de eigen `Nav` op `Landing.jsx` hebben nu een hamburger-knop (`md:hidden`) die een fullscreen overlay-drawer opent met grote tap-targets (text-xl). Body-scroll lock terwijl open, auto-sluit op route-change, CTA "Deploy now" prominent onderaan in de drawer.
   - **Dashboard**: `DashboardLayout` heeft een hamburger-knop linksboven in de topbar (`lg:hidden`) die een slide-in drawer opent met de volledige zijbalk (workspace switcher + alle nav-items + admin-link). Backdrop-tap én elke nav-tap sluit de drawer automatisch. Sidebar `SidebarContent` is geëxtraheerd zodat dezelfde content op desktop én in de mobile drawer gebruikt wordt — één bron van waarheid.
