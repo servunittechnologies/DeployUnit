@@ -215,10 +215,15 @@ class CoolifyClient:
             body["domains"] = body.pop("fqdn")
         return await self._request("PATCH", f"/applications/{app_uuid}", json=body)
 
-    async def set_domains(self, app_uuid: str, domains: str | list[str]) -> Optional[dict]:
-        """Set the application's public domains. Accepts a single string with
-        commas, a list of strings, or a single FQDN. Each entry should include
-        the scheme (https://) — Coolify uses it to decide whether to issue SSL.
+    async def set_domains(self, app_uuid: str, domains: str | list[str], *, force_https: bool = True) -> Optional[dict]:
+        """Set the application's public domains AND turn on Force HTTPS in
+        one call. Coolify v4 needs both signals to:
+          1) Route the FQDN through Traefik (`domains` with https:// prefix)
+          2) Request a Let's Encrypt cert + redirect HTTP→HTTPS (`force_https`)
+
+        Without `force_https` Coolify will still SERVE the domain over plain
+        HTTP and never request a cert — the user sees the Traefik default
+        self-signed cert forever.
         """
         if isinstance(domains, list):
             csv = ",".join(d.strip() for d in domains if d and d.strip())
@@ -226,7 +231,13 @@ class CoolifyClient:
             csv = (domains or "").strip()
         if not csv:
             return None
-        return await self._request("PATCH", f"/applications/{app_uuid}", json={"domains": csv})
+        body: dict = {"domains": csv}
+        if force_https:
+            # Coolify uses two fields for the same concept across versions;
+            # send both so we work on v4.x regardless.
+            body["force_https"] = True
+            body["is_https_forced"] = True
+        return await self._request("PATCH", f"/applications/{app_uuid}", json=body)
 
     async def restart(self, app_uuid: str) -> Optional[dict]:
         """Restart the application container. Coolify v4 uses POST for this

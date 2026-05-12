@@ -429,6 +429,8 @@ async def admin_inspect_routing(fqdn: str, request: Request):
                 "is_running": info.get("is_running"),
                 "is_static": info.get("is_static"),
                 "is_http_basic_auth_enabled": info.get("is_http_basic_auth_enabled"),
+                "force_https": info.get("force_https"),
+                "is_https_forced": info.get("is_https_forced"),
                 "redirect": info.get("redirect"),
             }
         else:

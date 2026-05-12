@@ -72,6 +72,23 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Auto-SSL trigger via `force_https` flag (Coolify v4)**
+  - **Symptoom na vorige fix**: Traefik-route werkte na force-redeploy (route OK, app bereikbaar), maar **Let's Encrypt cert werd niet uitgegeven** → browser bleef "TRAEFIK DEFAULT CERT" laten zien. Voorzijde leek werkend, maar HTTPS gaf certwaarschuwing.
+  - **Root cause**: Coolify v4 vereist een **expliciete `force_https: true` flag** in de PATCH body om de Traefik labels te voorzien van `tls.certresolver=letsencrypt` + HTTP→HTTPS redirect. Zonder die flag genereert Coolify alleen een HTTP-router en wordt het cert nooit aangevraagd. Bron: [coollabsio/coolify#1880](https://github.com/coollabsio/coolify/issues/1880).
+  - **Fix** — `clients/coolify.py::set_domains()`: stuurt nu ZOWEL `force_https:true` ALS `is_https_forced:true` (Coolify v4.x heeft twee veldnamen voor hetzelfde concept tussen patchversies — beide tegelijk sturen werkt op alle subversies). Het effect:
+    1. `domains` met `https://` prefix → Traefik krijgt HTTPS-router
+    2. `force_https:true` → Traefik labels krijgen `tls.certresolver=letsencrypt` → cert wordt aangevraagd
+    3. HTTP-router krijgt automatisch een 308-redirect naar HTTPS
+  - **Update flow**: zowel de create flow (`routers/apps.py`) als de healer (`services/routing_healer.py`) gebruiken nu `set_domains()` → SSL wordt voortaan altijd auto-aangevraagd voor elke nieuwe + elke gehealde app.
+  - **Inspect endpoint uitgebreid**: `/api/admin/routing/inspect?fqdn=...` toont nu ook `force_https` + `is_https_forced` + `redirect` velden zodat in één call zichtbaar is of de flags correct gezet zijn.
+  - **Required infra-check** (eenmalig, in Coolify UI op de server zelf): Settings → Servers → [your server] → Proxy → "Generate Let's Encrypt SSL" moet AAN staan. Als dit uit staat zal NIETS van bovenstaande werken — Traefik heeft dan geen ACME-resolver geconfigureerd. Dit is de enige stap die op server-niveau moet en niet via de DeployUnit API te zetten is.
+  - **Resultaat**: na de volgende redeploy van productie worden alle nieuwe deploys + elke "Heal routing"-actie voorzien van:
+    - HTTPS-router in Traefik (✓)
+    - Let's Encrypt cert resolver (✓ — `force_https` flag)
+    - 308-redirect HTTP → HTTPS (✓ — automatisch)
+    - Cert wordt uitgegeven in 30-90s na deploy (✓ — ACME HTTP-01 challenge)
+
+
 - **2026-05-12 — Routing healer v2: ECHTE fix na Coolify v4 quirk + probe blind spot**
   - **Bug 1 — fout PATCH veld**: `coolify.update_application({fqdn: "https://..."})` werd door Coolify v4 **stilletjes genegeerd**. Coolify v4 verwacht **`domains`** (komma-gescheiden, met `https://` prefix), zie [coollabsio/coolify#6281](https://github.com/coollabsio/coolify/issues/6281). De PATCH gaf 200 OK terug maar `fqdn` werd niet opgeslagen → Traefik kreeg nooit een route. Fix: nieuwe `coolify.set_domains(uuid, fqdn)` helper + auto-vertaling `{fqdn}` → `{domains}` in `update_application` voor backwards-compat.
   - **Bug 2 — restart regenereert geen labels**: Coolify slaat Traefik labels op als base64-encoded blob in de DB (`custom_labels`). Een container-restart leest de OUDE labels van de DB → Traefik blijft de oude (lege) route serveren. Pas een **`deploy(force=true)`** triggert Coolify om labels te regenereren vanuit de nieuwe `domains`. Healer doet nu force-redeploy i.p.v. restart.
