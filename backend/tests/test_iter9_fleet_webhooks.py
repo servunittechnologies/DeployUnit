@@ -19,7 +19,7 @@ import requests
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or
             os.environ.get("FRONTEND_URL") or
-            "https://help-desk-151.preview.emergentagent.com").strip().strip('"').rstrip("/")
+            "https://coolify-sandbox.preview.emergentagent.com").strip().strip('"').rstrip("/")
 DEMO_EMAIL = "demo@deployunit.com"
 DEMO_PASS = "demo1234"
 DEMO_WS_ID = "ee9ace3a-0b82-4df5-9dd7-d543c1e0c022"
