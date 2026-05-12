@@ -10,6 +10,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -50,16 +51,42 @@ async def credits_packs():
 
 class CreditCheckoutIn(BaseModel):
     workspace_id: str
-    pack: str  # "small" | "medium" | "large"
+    pack: Optional[str] = None         # preset: "small" | "medium" | "large"
+    custom_credits: Optional[int] = None  # OR custom amount (min 10)
+
+
+# Custom top-up pricing: flat €0.10/credit, same rate as the smallest pack.
+CUSTOM_RATE_EUR = 0.10
+CUSTOM_MIN_CREDITS = 10
+CUSTOM_MAX_CREDITS = 10000
 
 
 @router.post("/credits/checkout")
 async def credits_checkout(payload: CreditCheckoutIn, request: Request):
     user = await get_current_user(request)
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "billing"])
-    pack = get_pack(payload.pack)
-    if not pack:
-        raise HTTPException(status_code=400, detail="unknown pack")
+
+    # Resolve either a preset pack or a custom amount into a single
+    # `pack`-shaped dict so the rest of the flow is identical.
+    if payload.pack:
+        pack = get_pack(payload.pack)
+        if not pack:
+            raise HTTPException(status_code=400, detail="unknown pack")
+    elif payload.custom_credits is not None:
+        n = int(payload.custom_credits)
+        if n < CUSTOM_MIN_CREDITS or n > CUSTOM_MAX_CREDITS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"custom amount must be between {CUSTOM_MIN_CREDITS} and {CUSTOM_MAX_CREDITS} credits",
+            )
+        pack = {
+            "id": "custom",
+            "label": f"Custom · {n} credits",
+            "credits": n,
+            "price_eur": round(n * CUSTOM_RATE_EUR, 2),
+        }
+    else:
+        raise HTTPException(status_code=400, detail="pack or custom_credits required")
     if not mollie.configured:
         raise HTTPException(status_code=503, detail="payments are not configured")
 

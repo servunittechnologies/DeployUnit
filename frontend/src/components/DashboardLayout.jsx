@@ -182,7 +182,7 @@ function CreditsPill() {
   const low = (credits.balance ?? 0) < 10;
   return (
     <button
-      onClick={() => navigate("/app/account#credits")}
+      onClick={() => navigate("/app/credits")}
       className={`hidden md:inline-flex items-center gap-2 px-3 py-1.5 border text-xs font-mono transition-colors group
         ${low ? "border-signal-queued/40 text-signal-queued hover:border-signal-queued" : "border-white/10 text-zinc-300 hover:border-brand/50 hover:text-brand"}`}
       data-testid="topbar-credits"

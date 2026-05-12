@@ -29,6 +29,7 @@ import AuditLog from "./pages/dashboard/AuditLog";
 import Databases from "./pages/dashboard/Databases";
 import Roadmap from "./pages/dashboard/Roadmap";
 import Tickets from "./pages/dashboard/Tickets";
+import CreditsTopup from "./pages/dashboard/CreditsTopup";
 import Status from "./pages/Status";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -87,6 +88,7 @@ function App() {
                 <Route path="roadmap" element={<Roadmap />} />
                 <Route path="tickets" element={<Tickets />} />
                 <Route path="tickets/:id" element={<Tickets />} />
+                <Route path="credits" element={<CreditsTopup />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -58,13 +58,13 @@ export default function UsageStrip({ workspaceId }) {
           {rows.map((r) => (
             <UsageBar key={r.key} {...r} />
           ))}
-          {credits && credits.monthly_grant > 0 && (
-            <div className={`flex items-center gap-1.5 text-xs font-mono ${creditsLow ? "text-signal-queued" : "text-zinc-300"}`} data-testid="usage-credits">
+          {credits && (
+            <Link to="/app/credits" className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${creditsLow ? "text-signal-queued hover:text-signal-queued/80" : "text-zinc-300 hover:text-brand"}`} data-testid="usage-credits">
               <Sparkles className={`h-3 w-3 ${creditsLow ? "text-signal-queued" : "text-brand"}`} />
               <span className="text-zinc-500">credits</span>
-              <span>{credits.balance}/{credits.monthly_grant}</span>
+              <span className="tabular-nums">{credits.balance ?? 0}</span>
               {creditsLow && <AlertTriangle className="h-3 w-3 text-signal-queued" />}
-            </div>
+            </Link>
           )}
         </div>
         {(anyMaxed || isFree) && (
@@ -78,7 +78,7 @@ export default function UsageStrip({ workspaceId }) {
         )}
         {creditsLow && (
           <Link
-            to="/app/billing#credits"
+            to="/app/credits"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-brand/40 text-brand hover:bg-brand/10 transition-colors"
             data-testid="usage-buy-credits"
           >
