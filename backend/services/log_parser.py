@@ -68,6 +68,41 @@ def parse_log_lines(lines: list[str]) -> list[dict]:
 _FAIL_BLOCK = re.compile(r"(?:^|\n)([^\n]*(?:fatal|failed|error)[^\n]*)", re.I)
 
 
+# Errors that are NOT the user's fault — typically Docker/Coolify race conditions
+# during cleanup. Surface a clearer message AND signal that a retry is safe.
+_TRANSIENT_PATTERNS = [
+    re.compile(r"No such container:\s*([a-zA-Z0-9]+)"),
+    re.compile(r"network .+ not found", re.I),
+    re.compile(r"failed to remove network", re.I),
+    re.compile(r"context canceled", re.I),
+    re.compile(r"connection refused.*coolify", re.I),
+]
+
+
+def classify_failure(lines: list[str]) -> dict:
+    """Return {summary: str | None, transient: bool}.
+
+    `transient=True` means the failure is a known build-engine race condition
+    and the caller should consider auto-retrying instead of surfacing as an
+    error to the user.
+    """
+    if not lines:
+        return {"summary": None, "transient": False}
+    joined = "\n".join(lines[-150:])
+
+    for pat in _TRANSIENT_PATTERNS:
+        if pat.search(joined):
+            return {
+                "summary": (
+                    "Build-engine glitch (transient container/network error). "
+                    "Auto-retrying — no action needed."
+                ),
+                "transient": True,
+            }
+
+    return {"summary": extract_failure_summary(lines), "transient": False}
+
+
 def extract_failure_summary(lines: list[str]) -> str | None:
     """Return the most useful failure message from a build log."""
     if not lines:

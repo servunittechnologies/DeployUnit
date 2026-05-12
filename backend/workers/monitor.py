@@ -13,7 +13,7 @@ import httpx
 
 from db import get_db
 from clients.coolify import coolify
-from services.log_parser import extract_failure_summary
+from services.log_parser import extract_failure_summary, classify_failure
 from services.whitelabel import sanitize, sanitize_lines
 
 logger = logging.getLogger(__name__)
@@ -194,6 +194,56 @@ async def deployment_watchdog():
             await db.deployments.update_one({"id": dep["id"]}, patch)
 
 
+async def _retry_transient_deployment(db, app: dict) -> None:
+    """Re-trigger the most recent failed deployment when the failure was a
+    known build-engine race condition (Docker 'No such container', network
+    cleanup glitches, etc). Capped at 1 auto-retry per row to prevent loops.
+    """
+    failed = await db.deployments.find_one(
+        {"app_id": app["id"], "status": "failed"},
+        {"_id": 0, "id": 1, "auto_retry_count": 1},
+        sort=[("started_at", -1)],
+    )
+    if not failed:
+        return
+    if int(failed.get("auto_retry_count") or 0) >= 1:
+        # Already retried once — don't loop. Surface the failure for real.
+        return
+    coolify_uuid = app.get("coolify_app_uuid")
+    if not coolify_uuid:
+        return
+    logger.info(
+        "auto-retry: transient failure on app=%s deployment=%s — retriggering build engine",
+        app["id"], failed["id"],
+    )
+    await db.deployments.update_one(
+        {"id": failed["id"]},
+        {
+            "$set": {"status": "building", "finished_at": None, "failure_transient": True},
+            "$inc": {"auto_retry_count": 1},
+            "$push": {"logs": "[AUTO-RETRY] transient build-engine error — retrying"},
+        },
+    )
+    try:
+        res = await coolify.deploy(coolify_uuid, force=True)
+        new_uuid = (res or {}).get("deployment_uuid") or (res or {}).get("uuid")
+        if new_uuid:
+            await db.deployments.update_one(
+                {"id": failed["id"]},
+                {"$set": {"coolify_deployment_uuid": new_uuid}},
+            )
+    except Exception as e:
+        logger.warning("auto-retry failed for app=%s: %s", app["id"], e)
+        await db.deployments.update_one(
+            {"id": failed["id"]},
+            {"$set": {"status": "failed",
+                      "failure_summary": f"Auto-retry failed: {str(e)[:160]}"},
+             "$push": {"logs": f"[AUTO-RETRY] failed: {e}"}},
+        )
+
+
+
+
 async def sync_deployments():
     """Reconcile in-flight deployments with Coolify (or stub-complete when no Coolify uuid)."""
     db = get_db()
@@ -326,14 +376,22 @@ async def sync_deployments():
         if cool_deploy_uuid:
             deploy_update["coolify_deployment_uuid"] = cool_deploy_uuid
         if new_status == "failed":
-            summary = extract_failure_summary(cool_log_lines)
-            if summary:
-                deploy_update["failure_summary"] = sanitize(summary)
+            cls = classify_failure(cool_log_lines)
+            if cls["summary"]:
+                deploy_update["failure_summary"] = sanitize(cls["summary"])
+            deploy_update["failure_transient"] = cls["transient"]
 
         await db.deployments.update_many(
             {"app_id": a["id"], "status": {"$in": ["queued", "building"]}},
             {"$set": deploy_update},
         )
+
+        # Auto-retry transient build-engine glitches — bounded to 1 retry per
+        # deployment row to prevent loops. Picks up the current failed row(s)
+        # and re-triggers Coolify silently. The user just sees a brief "failed"
+        # blip followed by a new "building" record.
+        if new_status == "failed" and deploy_update.get("failure_transient"):
+            await _retry_transient_deployment(db, a)
 
     # 3) Backfill: any deployment that's already 'failed' but has no failure_summary
     # — pull logs from Coolify if possible. Handles two cases:
