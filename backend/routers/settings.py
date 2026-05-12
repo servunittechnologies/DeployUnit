@@ -5,7 +5,7 @@ from db import get_db
 from auth_utils import get_current_user, hash_password, verify_password
 from models import UserUpdateIn, ChangePasswordIn
 from clients.coolify import coolify
-from clients.twilio import configured as twilio_configured
+from clients.smstools import configured as sms_configured
 
 router = APIRouter(tags=["settings"])
 
@@ -39,8 +39,8 @@ async def change_password(payload: ChangePasswordIn, request: Request):
 @router.get("/integrations/health")
 async def integrations_health(request: Request):
     await get_current_user(request)
-    tw_ok = await twilio_configured()
+    sms_ok = await sms_configured()
     return {
         "coolify": await coolify.health(),
-        "twilio": {"configured": tw_ok, "ok": tw_ok},
+        "smstools": {"configured": sms_ok, "ok": sms_ok},
     }

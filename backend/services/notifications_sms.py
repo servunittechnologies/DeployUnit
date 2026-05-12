@@ -2,8 +2,11 @@
 
 Single entrypoint `send_alert(workspace_id, user, channels, title, body)` —
 fans out to enabled channels, deducts credits, logs to
-`notification_sends`. If Twilio rejects (network/account error) the credit
-is refunded so customers don't pay for our outages.
+`notification_sends`. If the SMS provider rejects (network/account error)
+the credit is refunded so customers don't pay for our outages.
+
+Provider: SMSTools (EU-based, GDPR-compliant). Replaces Twilio. See
+`clients/smstools.py` for the wire-level details.
 
 User preferences live on `users.notification_prefs`:
     {
@@ -22,9 +25,9 @@ from typing import Optional
 
 from db import get_db
 from services.credits import consume_credits, grant_credits
-from clients.twilio import (
-    send_sms, send_whatsapp, configured as twilio_configured,
-    cost_for_sms, WHATSAPP_COST, TwilioError,
+from clients.smstools import (
+    send_sms, send_whatsapp, configured as sms_configured,
+    cost_for_sms, WHATSAPP_COST, SMSToolsError,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,7 +51,7 @@ def _now_iso() -> str:
 
 async def _log_send(*, workspace_id: str, user_id: str, channel: str, event_type: str,
                     to: str, body: str, status: str, cost: int,
-                    twilio_sid: Optional[str] = None, error: Optional[str] = None) -> str:
+                    provider_message_id: Optional[str] = None, error: Optional[str] = None) -> str:
     db = get_db()
     send_id = str(uuid.uuid4())
     await db.notification_sends.insert_one({
@@ -61,7 +64,8 @@ async def _log_send(*, workspace_id: str, user_id: str, channel: str, event_type
         "body": body[:500],
         "status": status,
         "cost_credits": cost,
-        "twilio_sid": twilio_sid,
+        "provider": "smstools",
+        "provider_message_id": provider_message_id,
         "error": (error or "")[:300] if error else None,
         "created_at": _now_iso(),
     })
@@ -98,16 +102,16 @@ async def send_alert(
 
     sms_message = f"[{title}] {body}" if title else body
     results = []
-    twilio_ok = await twilio_configured()
+    sms_ok = await sms_configured()
 
     for ch in available:
         if ch == "sms":
-            if not phone or not twilio_ok:
+            if not phone or not sms_ok:
                 await _log_send(
                     workspace_id=workspace_id, user_id=user["id"], channel="sms",
                     event_type=event_type, to=phone or "—", body=sms_message,
                     status="skipped", cost=0,
-                    error="no phone" if not phone else "twilio not configured",
+                    error="no phone" if not phone else "sms provider not configured",
                 )
                 results.append({"channel": "sms", "status": "skipped"})
                 continue
@@ -132,10 +136,11 @@ async def send_alert(
                 await _log_send(
                     workspace_id=workspace_id, user_id=user["id"], channel="sms",
                     event_type=event_type, to=phone, body=sms_message,
-                    status="sent", cost=cost, twilio_sid=resp.get("sid"),
+                    status="sent", cost=cost,
+                    provider_message_id=resp.get("messageid") or resp.get("message_id"),
                 )
                 results.append({"channel": "sms", "status": "sent", "cost": cost})
-            except TwilioError as e:
+            except SMSToolsError as e:
                 # Refund — our integration failed, not the customer's fault.
                 await grant_credits(
                     workspace_id, cost,
@@ -150,12 +155,12 @@ async def send_alert(
                 results.append({"channel": "sms", "status": "failed", "error": str(e)})
 
         elif ch == "whatsapp":
-            if not phone or not twilio_ok:
+            if not phone or not sms_ok:
                 await _log_send(
                     workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
                     event_type=event_type, to=phone or "—", body=sms_message,
                     status="skipped", cost=0,
-                    error="no phone" if not phone else "twilio not configured",
+                    error="no phone" if not phone else "sms provider not configured",
                 )
                 results.append({"channel": "whatsapp", "status": "skipped"})
                 continue
@@ -172,10 +177,11 @@ async def send_alert(
                 await _log_send(
                     workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
                     event_type=event_type, to=phone, body=sms_message,
-                    status="sent", cost=cost, twilio_sid=resp.get("sid"),
+                    status="sent", cost=cost,
+                    provider_message_id=resp.get("messageid") or resp.get("message_id"),
                 )
                 results.append({"channel": "whatsapp", "status": "sent", "cost": cost})
-            except TwilioError as e:
+            except SMSToolsError as e:
                 await grant_credits(workspace_id, cost,
                                     reason=f"refund: WhatsApp {event_type} failed",
                                     type_="refund")
@@ -248,25 +254,34 @@ async def send_alert(
     return results
 
 
-async def handle_twilio_status(payload: dict) -> None:
-    """Webhook hook — Twilio posts delivery status. Refund credits on permanent
-    failures (undelivered, failed). Status values: queued, sending, sent,
-    delivered, undelivered, failed.
+async def handle_smstools_status(payload: dict) -> None:
+    """Webhook hook — SMSTools posts delivery status. Refund credits on
+    permanent failures (undelivered, failed). SMSTools status values vary
+    slightly per channel but we normalize to: queued, sent, delivered,
+    failed, undelivered.
+
+    Expected payload shape (from smstools webhook config):
+        {"messageid": "h2md1ewkyzjkuyn9...", "status": "delivered", ...}
     """
-    sid = payload.get("MessageSid") or payload.get("SmsSid")
-    status = (payload.get("MessageStatus") or "").lower()
+    sid = payload.get("messageid") or payload.get("message_id")
+    status = (payload.get("status") or payload.get("delivery_status") or "").lower()
     if not sid:
         return
     db = get_db()
-    send = await db.notification_sends.find_one({"twilio_sid": sid}, {"_id": 0})
+    # Match either the new `provider_message_id` field OR the legacy
+    # `twilio_sid` field so historical records keep working during migration.
+    send = await db.notification_sends.find_one(
+        {"$or": [{"provider_message_id": sid}, {"twilio_sid": sid}]},
+        {"_id": 0},
+    )
     if not send:
         return
     new_status = status
     await db.notification_sends.update_one(
-        {"twilio_sid": sid},
+        {"id": send["id"]},
         {"$set": {"status": new_status, "updated_at": _now_iso()}},
     )
-    if status in ("undelivered", "failed") and send.get("cost_credits", 0) > 0:
+    if status in ("undelivered", "failed", "rejected") and send.get("cost_credits", 0) > 0 and not send.get("refunded"):
         # Refund — message never reached the recipient.
         try:
             await grant_credits(
@@ -275,10 +290,10 @@ async def handle_twilio_status(payload: dict) -> None:
                 reason=f"refund: {send['channel']} {status} for {send.get('event_type')}",
                 type_="refund",
                 ref_id=sid,
-                ref_type="twilio_status",
+                ref_type="smstools_status",
             )
             await db.notification_sends.update_one(
-                {"twilio_sid": sid},
+                {"id": send["id"]},
                 {"$set": {"refunded": True}},
             )
         except Exception as e:

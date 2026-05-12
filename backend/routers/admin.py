@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from db import get_db
 from auth_utils import get_current_user
 from crypto_utils import encrypt_token, decrypt_token
+from services.audit import log as audit_log
 from clients.coolify import coolify
 from clients.mollie import mollie
 from services.vat import validate_vies, EU_VAT_RATES, home_country, effective_home_country
@@ -55,7 +56,12 @@ def _redact_settings(doc: dict) -> dict:
     out = dict(doc)
     # Never leak the encrypted tokens — just tell the UI whether one is configured.
     out["cloudflare_api_token_set"] = bool(out.pop("cloudflare_api_token_enc", None))
-    out["twilio_auth_token_set"] = bool(out.pop("twilio_auth_token_enc", None))
+    out["smstools_client_secret_set"] = bool(out.pop("smstools_client_secret_enc", None))
+    # Strip legacy Twilio fields so the UI doesn't try to render them.
+    for legacy in ("twilio_account_sid", "twilio_auth_token_enc", "twilio_messaging_service_sid",
+                   "twilio_from_number", "twilio_whatsapp_from", "twilio_status_callback",
+                   "twilio_test_mode"):
+        out.pop(legacy, None)
     out["mailersend_api_key_set"] = bool(out.pop("mailersend_api_key_enc", None))
     out.pop("_id", None)
     return out
@@ -87,9 +93,13 @@ async def integrations(request: Request):
             and (os.environ.get("GITHUB_CLIENT_SECRET") or os.environ.get("GITHUB_OAUTH_CLIENT_SECRET"))
         ),
     }
-    # Twilio status (creds in DB platform_settings, Fernet-encrypted)
-    from clients.twilio import configured as twilio_ok
-    tw = {"configured": await twilio_ok()}
+    # SMSTools status (creds in DB platform_settings, Fernet-encrypted)
+    from clients.smstools import configured as sms_ok, get_balance
+    sms = {"configured": await sms_ok()}
+    if sms["configured"]:
+        bal = await get_balance()
+        if bal is not None:
+            sms["balance"] = bal
     # MailerSend status
     from clients.mailersend import configured as ms_ok
     ms = {"configured": await ms_ok()}
@@ -98,7 +108,8 @@ async def integrations(request: Request):
         "coolify": cool,  # legacy alias for older clients — DEPRECATED
         "mollie": moll,
         "github_oauth": gh,
-        "twilio": tw,
+        "smstools": sms,
+        "twilio": sms,  # legacy alias so older UI builds don't crash — DEPRECATED
         "mailersend": ms,
         "company_country": await effective_home_country(),
         "eu_vat_countries": len(EU_VAT_RATES),
@@ -127,14 +138,15 @@ class PlatformSettingsUpdate(BaseModel):
     company_city: str | None = None
     company_vat_id: str | None = None
     invoice_series_prefix: str | None = None  # e.g. "2026"
-    # Twilio (SMS + WhatsApp). The auth token is encrypted at rest.
-    twilio_account_sid: str | None = None
-    twilio_auth_token: str | None = None       # plaintext from form; "" → clear
-    twilio_messaging_service_sid: str | None = None
-    twilio_from_number: str | None = None      # E.164 fallback when no MSG service
-    twilio_whatsapp_from: str | None = None    # e.g. "whatsapp:+14155238886"
-    twilio_status_callback: str | None = None  # webhook URL for delivery status
-    twilio_test_mode: bool | None = None
+    # SMSTools (EU-based SMS + WhatsApp gateway — replaces Twilio).
+    # The client secret is encrypted at rest with the same Fernet key as the
+    # other provider tokens.
+    smstools_client_id: str | None = None
+    smstools_client_secret: str | None = None     # plaintext from form; "" → clear
+    smstools_sender_id: str | None = None         # alphanumeric ≤11 OR digits ≤14
+    smstools_whatsapp_sender: str | None = None   # E.164 of your WA Business number
+    smstools_test_mode: bool | None = None
+    smstools_webhook_url: str | None = None       # we tell SMSTools to call this back
     # MailerSend transactional email. API key encrypted at rest.
     mailersend_api_key: str | None = None       # plaintext from form; "" → clear
     mailersend_from_email: str | None = None    # must be on a verified domain
@@ -157,13 +169,13 @@ async def update_platform_settings(payload: PlatformSettingsUpdate, request: Req
         else:
             current.pop("cloudflare_api_token_enc", None)
 
-    # Handle Twilio auth token: encrypt + persist; "" means "clear".
-    if "twilio_auth_token" in data:
-        tok = (data.pop("twilio_auth_token") or "").strip()
+    # Handle SMSTools client secret: encrypt + persist; "" means "clear".
+    if "smstools_client_secret" in data:
+        tok = (data.pop("smstools_client_secret") or "").strip()
         if tok:
-            current["twilio_auth_token_enc"] = encrypt_token(tok)
+            current["smstools_client_secret_enc"] = encrypt_token(tok)
         else:
-            current.pop("twilio_auth_token_enc", None)
+            current.pop("smstools_client_secret_enc", None)
 
     # MailerSend API key: encrypt + persist; "" means "clear".
     if "mailersend_api_key" in data:
@@ -451,3 +463,35 @@ async def admin_inspect_routing(fqdn: str, request: Request):
         out["coolify"] = None
 
     return out
+
+
+
+# ─────────────── SMSTools test send ────────────────────────────────────────
+class _SmsTestPayload(BaseModel):
+    to: str  # E.164, e.g. "+316XXXXXXXX"
+    message: str | None = None
+    channel: str = "sms"  # "sms" or "whatsapp"
+
+
+@router.post("/admin/smstools/test")
+async def admin_smstools_test(payload: _SmsTestPayload, request: Request):
+    """Send a one-off SMS/WhatsApp from the configured SMSTools creds so the
+    admin can verify the integration works end-to-end without waiting for a
+    real alert. Does NOT charge credits — uses the platform balance directly.
+    """
+    user = await _require_admin(request)
+    from clients.smstools import send_sms as _send_sms, send_whatsapp as _send_whatsapp, SMSToolsError, configured as _ok
+    if not await _ok():
+        raise HTTPException(status_code=400, detail="SMSTools is not configured. Save Client ID + Secret first.")
+    body = (payload.message or "DeployUnit test — your SMSTools integration is working ✓").strip()
+    try:
+        if payload.channel == "whatsapp":
+            resp = await _send_whatsapp(payload.to, body)
+        else:
+            resp = await _send_sms(payload.to, body)
+    except SMSToolsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    audit_log(action="admin.smstools_test", actor=user,
+              resource_type="platform", resource_id="smstools",
+              meta={"to": payload.to[-4:].rjust(len(payload.to), "*"), "channel": payload.channel}, request=request)
+    return {"ok": True, "message_id": resp.get("messageid") or resp.get("message_id"), "raw": resp}

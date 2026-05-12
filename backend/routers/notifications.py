@@ -46,7 +46,7 @@ async def mark_all_read(workspace_id: str, request: Request):
 # ─────────────────────── User notification preferences ───────────────────────
 from pydantic import BaseModel  # noqa: E402
 from services.notifications_sms import (  # noqa: E402
-    handle_twilio_status, send_alert, SUPPORTED_EVENT_TYPES,
+    handle_smstools_status, send_alert, SUPPORTED_EVENT_TYPES,
 )
 
 
@@ -131,10 +131,14 @@ async def test_send(payload: SendTestIn, request: Request):
     return {"results": results}
 
 
-@router.post("/notifications/twilio/status")
-async def twilio_status_webhook(request: Request):
-    """Twilio posts URL-encoded form data here on status changes."""
-    form = await request.form()
-    payload = {k: v for k, v in form.items()}
-    await handle_twilio_status(payload)
+@router.post("/notifications/smstools/status")
+async def smstools_status_webhook(request: Request):
+    """SMSTools posts JSON to this endpoint when delivery status changes.
+    Supports both form-encoded and JSON bodies."""
+    try:
+        payload = await request.json()
+    except Exception:
+        form = await request.form()
+        payload = {k: v for k, v in form.items()}
+    await handle_smstools_status(payload)
     return {"ok": True}

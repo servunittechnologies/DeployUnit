@@ -167,13 +167,16 @@ function IntegrationsTab() {
       </Section>
 
       <Section
-        title="Twilio (SMS + WhatsApp)"
-        description="Used to send customer notification alerts (billed from each Workspace's credit wallet)."
+        title="SMSTools (EU SMS + WhatsApp)"
+        description="GDPR-compliant European SMS provider. Used for customer alert notifications, billed from each workspace's credit wallet."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
           <div>
             <div className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 mb-1">status</div>
-            <StatusPill ok={data.twilio?.configured} label={data.twilio?.configured ? "connected" : "not configured — add credentials below in Platform Domain → Twilio"} />
+            <StatusPill ok={data.smstools?.configured} label={data.smstools?.configured ? "connected" : "not configured — add credentials below in Platform Domain → SMSTools"} />
+            {data.smstools?.balance !== undefined && (
+              <div className="mt-2 text-zinc-400 text-xs">Balance: <span className="text-zinc-200">€ {Number(data.smstools.balance).toFixed(2)}</span></div>
+            )}
           </div>
         </div>
       </Section>
@@ -606,6 +609,65 @@ function ResourcesTab() {
 }
 
 
+/* ──────────────────── SMSTools test-send mini-widget ──────────────────── */
+function SMSToolsTestSend() {
+  const [to, setTo] = useState("");
+  const [channel, setChannel] = useState("sms");
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    if (!to.trim()) { toast.error("Enter a recipient (E.164 format, e.g. +32475123456)"); return; }
+    setSending(true);
+    try {
+      const r = await api.post("/admin/smstools/test", { to: to.trim(), channel });
+      toast.success(`Sent ✓ message id: ${r.data.message_id || "—"}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 pt-5 border-t border-white/[0.04]">
+      <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-3">Send test message</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <Field label="Recipient (E.164)">
+          <Input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="+32475123456"
+            data-testid="admin-smstools-test-to"
+          />
+        </Field>
+        <Field label="Channel">
+          <select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+            className="w-full px-3 py-2 bg-black/40 border border-white/10 text-sm font-mono text-zinc-200 focus:outline-none focus:border-brand"
+            data-testid="admin-smstools-test-channel"
+          >
+            <option value="sms">SMS</option>
+            <option value="whatsapp">WhatsApp</option>
+          </select>
+        </Field>
+        <button
+          onClick={send}
+          disabled={sending}
+          className="px-4 py-2 border border-brand text-brand hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+          data-testid="admin-smstools-test-send"
+        >
+          {sending ? "Sending…" : "Send test"}
+        </button>
+      </div>
+      <div className="mt-2 text-[11px] font-mono text-zinc-500">
+        Uses the platform's SMSTools balance directly — no workspace credits charged.
+      </div>
+    </div>
+  );
+}
+
+
 /* ─────────────────────── Platform Domain + Cloudflare ─────────────────────── */
 function SubdomainPoolWidget({ target, onTargetChange, proxied, onProxiedChange }) {
   const [stats, setStats] = useState(null);
@@ -878,14 +940,13 @@ function PlatformTab() {
     company_postcode: "",
     company_city: "",
     company_vat_id: "",
-    // Twilio (SMS + WhatsApp). Auth token stored Fernet-encrypted server-side.
-    twilio_account_sid: "",
-    twilio_auth_token: "",
-    twilio_messaging_service_sid: "",
-    twilio_from_number: "",
-    twilio_whatsapp_from: "",
-    twilio_status_callback: "",
-    twilio_test_mode: false,
+    // SMSTools (EU SMS + WhatsApp). Client secret stored Fernet-encrypted server-side.
+    smstools_client_id: "",
+    smstools_client_secret: "",
+    smstools_sender_id: "",
+    smstools_whatsapp_sender: "",
+    smstools_webhook_url: "",
+    smstools_test_mode: false,
     // MailerSend
     mailersend_api_key: "",
     mailersend_from_email: "",
@@ -913,13 +974,12 @@ function PlatformTab() {
         company_postcode: r.data.company_postcode || "",
         company_city: r.data.company_city || "",
         company_vat_id: r.data.company_vat_id || "",
-        twilio_account_sid: r.data.twilio_account_sid || "",
-        twilio_auth_token: "", // never round-trip; backend redacts
-        twilio_messaging_service_sid: r.data.twilio_messaging_service_sid || "",
-        twilio_from_number: r.data.twilio_from_number || "",
-        twilio_whatsapp_from: r.data.twilio_whatsapp_from || "",
-        twilio_status_callback: r.data.twilio_status_callback || "",
-        twilio_test_mode: !!r.data.twilio_test_mode,
+        smstools_client_id: r.data.smstools_client_id || "",
+        smstools_client_secret: "", // never round-trip; backend redacts
+        smstools_sender_id: r.data.smstools_sender_id || "",
+        smstools_whatsapp_sender: r.data.smstools_whatsapp_sender || "",
+        smstools_webhook_url: r.data.smstools_webhook_url || "",
+        smstools_test_mode: !!r.data.smstools_test_mode,
         mailersend_api_key: "",
         mailersend_from_email: r.data.mailersend_from_email || "",
         mailersend_from_name: r.data.mailersend_from_name || "",
@@ -937,12 +997,12 @@ function PlatformTab() {
       const payload = {};
       Object.entries(form).forEach(([k, v]) => {
         // Only send tokens if user typed a new value (avoid clearing by empty string)
-        if ((k === "cloudflare_api_token" || k === "twilio_auth_token" || k === "mailersend_api_key") && v === "") return;
+        if ((k === "cloudflare_api_token" || k === "smstools_client_secret" || k === "mailersend_api_key") && v === "") return;
         payload[k] = v;
       });
       const r = await api.put("/admin/platform-settings", payload);
       setS(r.data);
-      setForm((f) => ({ ...f, cloudflare_api_token: "", twilio_auth_token: "", mailersend_api_key: "" }));
+      setForm((f) => ({ ...f, cloudflare_api_token: "", smstools_client_secret: "", mailersend_api_key: "" }));
       toast.success("Platform settings saved");
     } catch (e) {
       toast.error("Save failed: " + (e?.response?.data?.detail || e.message));
@@ -1071,72 +1131,65 @@ function PlatformTab() {
       />
 
       <Section
-        title="Twilio (SMS + WhatsApp alerts)"
-        description="Used to send customer notifications (billed from credit wallet). Get credentials at twilio.com → Console → Account."
+        title="SMSTools (EU SMS + WhatsApp gateway)"
+        description="GDPR-compliant European SMS provider for customer alerts. Get credentials at smstools.com → Account → Developers → API & Webhooks."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Field label="Account SID" hint="Find in Twilio Console → Account → API keys & tokens">
+          <Field label="Client ID" hint="SMSTools Dashboard → Developers → API & Webhooks → API keys.">
             <Input
-              value={form.twilio_account_sid}
-              onChange={(e) => setForm({ ...form, twilio_account_sid: e.target.value })}
-              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              data-testid="admin-twilio-sid"
+              value={form.smstools_client_id}
+              onChange={(e) => setForm({ ...form, smstools_client_id: e.target.value })}
+              placeholder="paste client_id here"
+              data-testid="admin-smstools-client-id"
             />
           </Field>
-          <Field label="Auth Token" hint={s.twilio_auth_token_set ? "A token is already saved. Leave blank to keep it." : "Same page as Account SID in Twilio Console."}>
+          <Field label="Client Secret" hint={s.smstools_client_secret_set ? "A secret is already saved. Leave blank to keep it." : "Same page as Client ID. Stored Fernet-encrypted server-side."}>
             <Input
               type="password"
-              value={form.twilio_auth_token}
-              onChange={(e) => setForm({ ...form, twilio_auth_token: e.target.value })}
-              placeholder={s.twilio_auth_token_set ? "•••••••• (saved)" : "paste token here"}
-              data-testid="admin-twilio-token"
+              value={form.smstools_client_secret}
+              onChange={(e) => setForm({ ...form, smstools_client_secret: e.target.value })}
+              placeholder={s.smstools_client_secret_set ? "•••••••• (saved)" : "paste secret here"}
+              data-testid="admin-smstools-client-secret"
             />
           </Field>
-          <Field label="From phone (E.164)" hint="Twilio number for SMS, e.g. +14155551234. Required if no Messaging Service SID.">
+          <Field label="Sender ID" hint="Brand name (≤11 alphanumeric chars) OR digits (≤14). Pre-register your brand with SMSTools for EU carrier acceptance.">
             <Input
-              value={form.twilio_from_number}
-              onChange={(e) => setForm({ ...form, twilio_from_number: e.target.value })}
-              placeholder="+14155551234"
-              data-testid="admin-twilio-from"
+              value={form.smstools_sender_id}
+              onChange={(e) => setForm({ ...form, smstools_sender_id: e.target.value })}
+              placeholder="DeployUnit"
+              data-testid="admin-smstools-sender"
             />
           </Field>
-          <Field label="Messaging Service SID (optional)" hint="If you use Twilio Messaging Services for routing. Leave blank to use From phone.">
+          <Field label="WhatsApp sender (E.164, optional)" hint="Your WhatsApp Business number — required only if you want to send via WhatsApp.">
             <Input
-              value={form.twilio_messaging_service_sid}
-              onChange={(e) => setForm({ ...form, twilio_messaging_service_sid: e.target.value })}
-              placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              data-testid="admin-twilio-msg-service"
+              value={form.smstools_whatsapp_sender}
+              onChange={(e) => setForm({ ...form, smstools_whatsapp_sender: e.target.value })}
+              placeholder="+32475123456"
+              data-testid="admin-smstools-whatsapp-sender"
             />
           </Field>
-          <Field label="WhatsApp sender" hint="Approved WhatsApp Business sender, e.g. whatsapp:+14155238886">
+          <Field label="Delivery webhook URL (optional)" hint="Have SMSTools call back here when a message status changes — used to refund failed sends. Recommended.">
             <Input
-              value={form.twilio_whatsapp_from}
-              onChange={(e) => setForm({ ...form, twilio_whatsapp_from: e.target.value })}
-              placeholder="whatsapp:+14155238886"
-              data-testid="admin-twilio-whatsapp-from"
-            />
-          </Field>
-          <Field label="Status callback URL (optional)" hint="Webhook for delivery receipts. Defaults to /api/notifications/twilio/status.">
-            <Input
-              value={form.twilio_status_callback}
-              onChange={(e) => setForm({ ...form, twilio_status_callback: e.target.value })}
-              placeholder="https://yourapp.com/api/notifications/twilio/status"
-              data-testid="admin-twilio-callback"
+              value={form.smstools_webhook_url}
+              onChange={(e) => setForm({ ...form, smstools_webhook_url: e.target.value })}
+              placeholder="https://deployunit.com/api/notifications/smstools/status"
+              data-testid="admin-smstools-webhook"
             />
           </Field>
           <div className="md:col-span-2 flex items-center gap-2 pt-1">
             <input
-              id="twilio_test_mode"
+              id="smstools_test_mode"
               type="checkbox"
-              checked={form.twilio_test_mode}
-              onChange={(e) => setForm({ ...form, twilio_test_mode: e.target.checked })}
-              data-testid="admin-twilio-test-mode"
+              checked={form.smstools_test_mode}
+              onChange={(e) => setForm({ ...form, smstools_test_mode: e.target.checked })}
+              data-testid="admin-smstools-test-mode"
             />
-            <label htmlFor="twilio_test_mode" className="text-xs font-mono text-zinc-400 cursor-pointer">
-              Test mode (use Twilio test credentials — no real messages sent, no charges)
+            <label htmlFor="smstools_test_mode" className="text-xs font-mono text-zinc-400 cursor-pointer">
+              Test mode (validate payload, but don't deliver or charge — useful for first-time setup)
             </label>
           </div>
         </div>
+        <SMSToolsTestSend />
       </Section>
 
       <Section
