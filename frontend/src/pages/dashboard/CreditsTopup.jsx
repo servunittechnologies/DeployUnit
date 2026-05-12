@@ -83,7 +83,7 @@ export default function CreditsTopup() {
         <h1 className="font-display text-2xl sm:text-3xl tracking-tighter">Top up credits</h1>
       </div>
       <p className="text-sm text-zinc-400 mb-6">
-        Credits power SMS, WhatsApp alerts and build overages. Add more whenever you want — no limits, no expiration.
+        Credits power SMS alerts and build overages. Add more whenever you want — no limits, no expiration.
       </p>
 
       {/* Balance card */}

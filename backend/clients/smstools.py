@@ -1,8 +1,9 @@
-"""Async SMSTools client — EU-based SMS + WhatsApp gateway.
+"""Async SMSTools client — EU-based SMS gateway.
 
-Replaces Twilio for SMS/WhatsApp alerts. Same public surface (send_sms,
-send_whatsapp, configured, cost_for_sms, WHATSAPP_COST, SMSToolsError) so the
-notifications service barely had to change.
+Replaces Twilio for SMS alerts. Same public surface (send_sms, configured,
+cost_for_sms, SMSToolsError) so the notifications service barely had to
+change. WhatsApp support was deliberately dropped — alerting now goes via
+SMS / Email / Slack / Discord only.
 
 API docs: https://www.smstools.com/en/sms-gateway-api
 Endpoint: POST https://api.smsgatewayapi.com/v1/message/send
@@ -52,9 +53,6 @@ class SMSToolsConfig:
             # practice: pre-register your brand name with SMSTools so
             # carriers accept it.
             "sender": (doc.get("smstools_sender_id") or "").strip() or None,
-            # The phone number for WhatsApp Business (E.164). SMSTools routes
-            # WhatsApp via the same endpoint but uses `channel` to select.
-            "whatsapp_sender": (doc.get("smstools_whatsapp_sender") or "").strip() or None,
             "test_mode": bool(doc.get("smstools_test_mode")),
             # Webhook URL we tell SMSTools to call back with delivery status
             # so we can refund failed credits.
@@ -78,29 +76,25 @@ _ERROR_MESSAGES = {
 }
 
 
-async def _post_message(cfg: dict, *, to: str, body: str, channel: str = "sms", reference: str | None = None) -> dict:
-    """Send a message via SMSTools. Returns the JSON response. Raises
+async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None = None) -> dict:
+    """Send an SMS via SMSTools. Returns the JSON response. Raises
     SMSToolsError on HTTP/business failures so the caller can decide to
     refund credits (handled upstream)."""
     # Strip the leading + so SMSTools accepts it (their API wants the digits
     # only, no '+'). E.164 → "+316XXXXXXXX" → "316XXXXXXXX".
-    digits = (to or "").lstrip("+").replace("whatsapp:", "")
+    digits = (to or "").lstrip("+")
     if not digits:
         raise SMSToolsError("recipient is empty")
 
     payload: dict = {
         "message": body,
         "to": digits,
-        "sender": cfg.get("sender") if channel == "sms" else (cfg.get("whatsapp_sender") or cfg.get("sender")),
+        "sender": cfg.get("sender"),
     }
     if reference:
         payload["reference"] = reference[:255]
     if cfg.get("test_mode"):
         payload["test"] = True
-    # SMSTools also lets you specify a different channel on the unified
-    # endpoint — pass through when the caller asked for WhatsApp.
-    if channel == "whatsapp":
-        payload["channel"] = "whatsapp"
 
     headers = {
         "X-Client-Id": cfg["client_id"],
@@ -133,18 +127,7 @@ async def send_sms(to_e164: str, body: str, *, reference: str | None = None) -> 
     cfg = await SMSToolsConfig.load()
     if not cfg:
         raise SMSToolsError("SMSTools is not configured. Set Client ID + Secret in Admin → Platform Domain.")
-    return await _post_message(cfg, to=to_e164, body=body, channel="sms", reference=reference)
-
-
-async def send_whatsapp(to_e164: str, body: str, *, reference: str | None = None) -> dict:
-    """to_e164 must be a real E.164 (e.g. +32475123456). The leading + is
-    stripped before sending — SMSTools wants digits only."""
-    cfg = await SMSToolsConfig.load()
-    if not cfg:
-        raise SMSToolsError("SMSTools is not configured.")
-    if not cfg.get("whatsapp_sender"):
-        raise SMSToolsError("WhatsApp sender is not configured.")
-    return await _post_message(cfg, to=to_e164, body=body, channel="whatsapp", reference=reference)
+    return await _post_message(cfg, to=to_e164, body=body, reference=reference)
 
 
 async def configured() -> bool:
@@ -192,6 +175,3 @@ def cost_for_sms(to_e164: str) -> int:
     if p.startswith("1"):  # US / Canada
         return 2
     return 2  # rest of world
-
-
-WHATSAPP_COST = 1

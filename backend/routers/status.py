@@ -106,8 +106,9 @@ async def check_mailersend() -> dict:
     return await _http_check("https://api.mailersend.com/v1/", timeout=5)
 
 
-async def check_twilio() -> dict:
-    return await _http_check("https://status.twilio.com/api/v2/status.json", timeout=5)
+async def check_smstools() -> dict:
+    # SMSTools status page — fast HEAD on the API base.
+    return await _http_check("https://api.smsgatewayapi.com/v1/", timeout=5)
 
 
 async def check_self(url: str) -> dict:
@@ -124,7 +125,7 @@ COMPONENTS = [
     {"id": "cloudflare", "name": "DNS provider",       "desc": "Custom domains + DNS automation",         "group": "Integrations"},
     {"id": "mollie",     "name": "Payments",           "desc": "Subscriptions + EU VAT",                  "group": "Integrations"},
     {"id": "mailersend", "name": "Email delivery",     "desc": "Transactional email",                     "group": "Integrations"},
-    {"id": "twilio",     "name": "SMS & WhatsApp",     "desc": "Alert channel",                           "group": "Integrations"},
+    {"id": "smstools",   "name": "SMS",                  "desc": "Alert channel",                           "group": "Integrations"},
 ]
 
 
@@ -140,7 +141,7 @@ def _checks_map(public_base: str) -> dict[str, Callable[[], Awaitable[dict]]]:
         "cloudflare": check_cloudflare,
         "mollie":     check_mollie,
         "mailersend": check_mailersend,
-        "twilio":     check_twilio,
+        "smstools":   check_smstools,
     }
 
 

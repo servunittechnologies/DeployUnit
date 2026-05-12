@@ -52,7 +52,7 @@ from services.notifications_sms import (  # noqa: E402
 
 class NotificationPrefsIn(BaseModel):
     phone_e164: str | None = None
-    channels: dict  # {"sms": [...], "whatsapp": [...], "email": [...], "slack": [...], "discord": [...]}
+    channels: dict  # {"sms": [...], "email": [...], "slack": [...], "discord": [...]}
     slack_webhook_url: str | None = None
     discord_webhook_url: str | None = None
 
@@ -61,13 +61,17 @@ class NotificationPrefsIn(BaseModel):
 async def get_prefs(request: Request):
     user = await get_current_user(request)
     prefs = user.get("notification_prefs") or {}
+    channels = prefs.get("channels") or {}
+    # Strip legacy "whatsapp" entries — feature retired. Keep the read path
+    # silent so old records don't break the UI.
+    channels = {k: v for k, v in channels.items() if k != "whatsapp"}
     return {
         "phone_e164": prefs.get("phone_e164"),
-        "channels": prefs.get("channels") or {},
+        "channels": channels,
         "slack_webhook_url": prefs.get("slack_webhook_url"),
         "discord_webhook_url": prefs.get("discord_webhook_url"),
         "supported_events": sorted(list(SUPPORTED_EVENT_TYPES)),
-        "supported_channels": ["sms", "whatsapp", "email", "slack", "discord"],
+        "supported_channels": ["sms", "email", "slack", "discord"],
     }
 
 
@@ -84,11 +88,14 @@ async def set_prefs(payload: NotificationPrefsIn, request: Request):
     discord_url = (payload.discord_webhook_url or "").strip()
     if discord_url and not discord_url.startswith("https://discord.com/api/webhooks/"):
         raise HTTPException(status_code=400, detail="discord webhook must start with https://discord.com/api/webhooks/")
+    # Silently drop any legacy "whatsapp" channel keys that older clients
+    # might still send while caches roll over.
+    incoming = {k: v for k, v in (payload.channels or {}).items() if k != "whatsapp"}
     await db.users.update_one(
         {"id": user["id"]},
         {"$set": {"notification_prefs": {
             "phone_e164": phone or None,
-            "channels": payload.channels or {},
+            "channels": incoming,
             "slack_webhook_url": slack_url or None,
             "discord_webhook_url": discord_url or None,
         }}},
@@ -98,7 +105,7 @@ async def set_prefs(payload: NotificationPrefsIn, request: Request):
 
 class SendTestIn(BaseModel):
     workspace_id: str
-    channel: str  # "sms" | "whatsapp" | "email" | "slack" | "discord"
+    channel: str  # "sms" | "email" | "slack" | "discord"
 
 
 @router.post("/notifications/test")
@@ -108,8 +115,8 @@ async def test_send(payload: SendTestIn, request: Request):
     consumes credits like a real send."""
     user = await get_current_user(request)
     await require_workspace_member(payload.workspace_id, user)
-    if payload.channel not in ("sms", "whatsapp", "email", "slack", "discord"):
-        raise HTTPException(status_code=400, detail="channel must be sms, whatsapp, email, slack or discord")
+    if payload.channel not in ("sms", "email", "slack", "discord"):
+        raise HTTPException(status_code=400, detail="channel must be sms, email, slack or discord")
     # Inject a temporary pref so send_alert dispatches this channel for the
     # synthetic event_type below.
     test_event = "deploy_succeeded"

@@ -1,20 +1,21 @@
-"""SMS + WhatsApp notification dispatcher with credit accounting.
+"""SMS / Email / Slack / Discord notification dispatcher with credit accounting.
 
 Single entrypoint `send_alert(workspace_id, user, channels, title, body)` —
 fans out to enabled channels, deducts credits, logs to
 `notification_sends`. If the SMS provider rejects (network/account error)
 the credit is refunded so customers don't pay for our outages.
 
-Provider: SMSTools (EU-based, GDPR-compliant). Replaces Twilio. See
-`clients/smstools.py` for the wire-level details.
+SMS provider: SMSTools (EU-based, GDPR-compliant). WhatsApp was deliberately
+dropped — alerting goes via SMS / Email / Slack / Discord only.
 
 User preferences live on `users.notification_prefs`:
     {
         "phone_e164": "+32475123456",
         "channels": {
             "sms": ["deploy_failed", "app_down"],
-            "whatsapp": ["app_down"],
-            "email": ["deploy_failed", "deploy_succeeded", "app_down"]
+            "email": ["deploy_failed", "deploy_succeeded", "app_down"],
+            "slack": ["app_down"],
+            "discord": ["app_down"]
         }
     }
 """
@@ -26,8 +27,8 @@ from typing import Optional
 from db import get_db
 from services.credits import consume_credits, grant_credits
 from clients.smstools import (
-    send_sms, send_whatsapp, configured as sms_configured,
-    cost_for_sms, WHATSAPP_COST, SMSToolsError,
+    send_sms, configured as sms_configured,
+    cost_for_sms, SMSToolsError,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ SUPPORTED_EVENT_TYPES = {
 
 # Single source of truth for the channel list. Mirrored in
 # routers/notifications.py::get_prefs.supported_channels — keep in sync.
-SUPPORTED_CHANNELS = ("sms", "whatsapp", "email", "slack", "discord")
+SUPPORTED_CHANNELS = ("sms", "email", "slack", "discord")
 
 
 def _now_iso() -> str:
@@ -153,44 +154,6 @@ async def send_alert(
                     status="failed", cost=0, error=str(e),
                 )
                 results.append({"channel": "sms", "status": "failed", "error": str(e)})
-
-        elif ch == "whatsapp":
-            if not phone or not sms_ok:
-                await _log_send(
-                    workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
-                    event_type=event_type, to=phone or "—", body=sms_message,
-                    status="skipped", cost=0,
-                    error="no phone" if not phone else "sms provider not configured",
-                )
-                results.append({"channel": "whatsapp", "status": "skipped"})
-                continue
-            cost = WHATSAPP_COST
-            try:
-                await consume_credits(workspace_id, cost,
-                                      reason=f"WhatsApp alert: {event_type}",
-                                      ref_type="whatsapp")
-            except Exception:
-                results.append({"channel": "whatsapp", "status": "insufficient_credits"})
-                continue
-            try:
-                resp = await send_whatsapp(phone, sms_message)
-                await _log_send(
-                    workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
-                    event_type=event_type, to=phone, body=sms_message,
-                    status="sent", cost=cost,
-                    provider_message_id=resp.get("messageid") or resp.get("message_id"),
-                )
-                results.append({"channel": "whatsapp", "status": "sent", "cost": cost})
-            except SMSToolsError as e:
-                await grant_credits(workspace_id, cost,
-                                    reason=f"refund: WhatsApp {event_type} failed",
-                                    type_="refund")
-                await _log_send(
-                    workspace_id=workspace_id, user_id=user["id"], channel="whatsapp",
-                    event_type=event_type, to=phone, body=sms_message,
-                    status="failed", cost=0, error=str(e),
-                )
-                results.append({"channel": "whatsapp", "status": "failed", "error": str(e)})
 
         elif ch == "email":
             # Always write the in-app notification (free, always available)

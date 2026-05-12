@@ -21,7 +21,6 @@ const EVENT_LABELS = {
 };
 const CHANNEL_META = {
   sms: { label: "SMS", icon: Phone },
-  whatsapp: { label: "WhatsApp", icon: MessageSquare },
   email: { label: "Email", icon: Mail },
   slack: { label: "Slack", icon: MessageSquare },
   discord: { label: "Discord", icon: MessageSquare },
@@ -120,7 +119,7 @@ export default function Account() {
       setSlackUrl(np.slack_webhook_url || "");
       setDiscordUrl(np.discord_webhook_url || "");
       setSupportedEvents(np.supported_events || []);
-      setSupportedChannels(np.supported_channels || ["sms", "whatsapp", "email"]);
+      setSupportedChannels(np.supported_channels || ["sms", "email"]);
       const channels = np.channels || {};
       const matrix = {};
       (np.supported_events || []).forEach((ev) => {
@@ -421,7 +420,7 @@ export default function Account() {
           {/* Credits */}
           <section className="border border-white/[0.06] p-6 space-y-5" data-testid="section-credits">
             <SectionHeader id="credits" icon={Wallet} title="Credits wallet"
-              subtitle="Used for SMS, WhatsApp alerts, build overages. Shared across Workspaces. Free email + in-app alerts." />
+              subtitle="Used for SMS alerts and build overages. Shared across Workspaces. Free email + in-app alerts." />
 
             <div className="bg-elevated/30 border border-white/[0.06] p-5 grid grid-cols-12 gap-4">
               <div className="col-span-12 md:col-span-6">
@@ -537,7 +536,7 @@ export default function Account() {
           {/* Notifications */}
           <section className="border border-white/[0.06] p-6 space-y-5" data-testid="section-notifications">
             <SectionHeader id="notifications" icon={Bell} title="Notification preferences"
-              subtitle="Where DeployUnit pings you when things break. SMS & WhatsApp use credits; email & in-app are free." />
+              subtitle="Where DeployUnit pings you when things break. SMS uses credits; email, Slack & Discord are free." />
 
             <Field label="Phone (E.164, e.g. +32475123456)" v={phoneE164} on={setPhoneE164} testId="notif-phone" />
 
@@ -591,7 +590,7 @@ export default function Account() {
               <button onClick={savePrefs} className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg font-medium hover:bg-brand/90" data-testid="notif-save">
                 <Save className="h-4 w-4" /> Save preferences
               </button>
-              {["sms", "whatsapp", "slack", "discord"].map((c) => (
+              {["sms", "slack", "discord"].map((c) => (
                 <button
                   key={c}
                   onClick={() => sendTest(c)}

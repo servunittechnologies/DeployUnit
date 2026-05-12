@@ -144,7 +144,6 @@ class PlatformSettingsUpdate(BaseModel):
     smstools_client_id: str | None = None
     smstools_client_secret: str | None = None     # plaintext from form; "" → clear
     smstools_sender_id: str | None = None         # alphanumeric ≤11 OR digits ≤14
-    smstools_whatsapp_sender: str | None = None   # E.164 of your WA Business number
     smstools_test_mode: bool | None = None
     smstools_webhook_url: str | None = None       # we tell SMSTools to call this back
     # MailerSend transactional email. API key encrypted at rest.
@@ -470,28 +469,23 @@ async def admin_inspect_routing(fqdn: str, request: Request):
 class _SmsTestPayload(BaseModel):
     to: str  # E.164, e.g. "+316XXXXXXXX"
     message: str | None = None
-    channel: str = "sms"  # "sms" or "whatsapp"
 
 
 @router.post("/admin/smstools/test")
 async def admin_smstools_test(payload: _SmsTestPayload, request: Request):
-    """Send a one-off SMS/WhatsApp from the configured SMSTools creds so the
-    admin can verify the integration works end-to-end without waiting for a
-    real alert. Does NOT charge credits — uses the platform balance directly.
-    """
+    """Send a one-off SMS from the configured SMSTools creds so the admin
+    can verify the integration works end-to-end without waiting for a real
+    alert. Does NOT charge credits — uses the platform balance directly."""
     user = await _require_admin(request)
-    from clients.smstools import send_sms as _send_sms, send_whatsapp as _send_whatsapp, SMSToolsError, configured as _ok
+    from clients.smstools import send_sms as _send_sms, SMSToolsError, configured as _ok
     if not await _ok():
         raise HTTPException(status_code=400, detail="SMSTools is not configured. Save Client ID + Secret first.")
     body = (payload.message or "DeployUnit test — your SMSTools integration is working ✓").strip()
     try:
-        if payload.channel == "whatsapp":
-            resp = await _send_whatsapp(payload.to, body)
-        else:
-            resp = await _send_sms(payload.to, body)
+        resp = await _send_sms(payload.to, body)
     except SMSToolsError as e:
         raise HTTPException(status_code=502, detail=str(e))
     audit_log(action="admin.smstools_test", actor=user,
               resource_type="platform", resource_id="smstools",
-              meta={"to": payload.to[-4:].rjust(len(payload.to), "*"), "channel": payload.channel}, request=request)
+              meta={"to": payload.to[-4:].rjust(len(payload.to), "*")}, request=request)
     return {"ok": True, "message_id": resp.get("messageid") or resp.get("message_id"), "raw": resp}

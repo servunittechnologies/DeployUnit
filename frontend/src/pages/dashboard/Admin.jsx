@@ -167,7 +167,7 @@ function IntegrationsTab() {
       </Section>
 
       <Section
-        title="SMSTools (EU SMS + WhatsApp)"
+        title="SMSTools (EU SMS)"
         description="GDPR-compliant European SMS provider. Used for customer alert notifications, billed from each workspace's credit wallet."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
@@ -612,14 +612,13 @@ function ResourcesTab() {
 /* ──────────────────── SMSTools test-send mini-widget ──────────────────── */
 function SMSToolsTestSend() {
   const [to, setTo] = useState("");
-  const [channel, setChannel] = useState("sms");
   const [sending, setSending] = useState(false);
 
   const send = async () => {
     if (!to.trim()) { toast.error("Enter a recipient (E.164 format, e.g. +32475123456)"); return; }
     setSending(true);
     try {
-      const r = await api.post("/admin/smstools/test", { to: to.trim(), channel });
+      const r = await api.post("/admin/smstools/test", { to: to.trim() });
       toast.success(`Sent ✓ message id: ${r.data.message_id || "—"}`);
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
@@ -630,7 +629,7 @@ function SMSToolsTestSend() {
 
   return (
     <div className="mt-5 pt-5 border-t border-white/[0.04]">
-      <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-3">Send test message</div>
+      <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-3">Send test SMS</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
         <Field label="Recipient (E.164)">
           <Input
@@ -640,25 +639,16 @@ function SMSToolsTestSend() {
             data-testid="admin-smstools-test-to"
           />
         </Field>
-        <Field label="Channel">
-          <select
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-            className="w-full px-3 py-2 bg-black/40 border border-white/10 text-sm font-mono text-zinc-200 focus:outline-none focus:border-brand"
-            data-testid="admin-smstools-test-channel"
+        <div className="md:col-span-2 flex justify-end">
+          <button
+            onClick={send}
+            disabled={sending}
+            className="px-4 py-2 border border-brand text-brand hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+            data-testid="admin-smstools-test-send"
           >
-            <option value="sms">SMS</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
-        </Field>
-        <button
-          onClick={send}
-          disabled={sending}
-          className="px-4 py-2 border border-brand text-brand hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
-          data-testid="admin-smstools-test-send"
-        >
-          {sending ? "Sending…" : "Send test"}
-        </button>
+            {sending ? "Sending…" : "Send test SMS"}
+          </button>
+        </div>
       </div>
       <div className="mt-2 text-[11px] font-mono text-zinc-500">
         Uses the platform's SMSTools balance directly — no workspace credits charged.
@@ -940,11 +930,10 @@ function PlatformTab() {
     company_postcode: "",
     company_city: "",
     company_vat_id: "",
-    // SMSTools (EU SMS + WhatsApp). Client secret stored Fernet-encrypted server-side.
+    // SMSTools (EU SMS). Client secret stored Fernet-encrypted server-side.
     smstools_client_id: "",
     smstools_client_secret: "",
     smstools_sender_id: "",
-    smstools_whatsapp_sender: "",
     smstools_webhook_url: "",
     smstools_test_mode: false,
     // MailerSend
@@ -977,7 +966,6 @@ function PlatformTab() {
         smstools_client_id: r.data.smstools_client_id || "",
         smstools_client_secret: "", // never round-trip; backend redacts
         smstools_sender_id: r.data.smstools_sender_id || "",
-        smstools_whatsapp_sender: r.data.smstools_whatsapp_sender || "",
         smstools_webhook_url: r.data.smstools_webhook_url || "",
         smstools_test_mode: !!r.data.smstools_test_mode,
         mailersend_api_key: "",
@@ -1131,7 +1119,7 @@ function PlatformTab() {
       />
 
       <Section
-        title="SMSTools (EU SMS + WhatsApp gateway)"
+        title="SMSTools (EU SMS gateway)"
         description="GDPR-compliant European SMS provider for customer alerts. Get credentials at smstools.com → Account → Developers → API & Webhooks."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1158,14 +1146,6 @@ function PlatformTab() {
               onChange={(e) => setForm({ ...form, smstools_sender_id: e.target.value })}
               placeholder="DeployUnit"
               data-testid="admin-smstools-sender"
-            />
-          </Field>
-          <Field label="WhatsApp sender (E.164, optional)" hint="Your WhatsApp Business number — required only if you want to send via WhatsApp.">
-            <Input
-              value={form.smstools_whatsapp_sender}
-              onChange={(e) => setForm({ ...form, smstools_whatsapp_sender: e.target.value })}
-              placeholder="+32475123456"
-              data-testid="admin-smstools-whatsapp-sender"
             />
           </Field>
           <Field label="Delivery webhook URL (optional)" hint="Have SMSTools call back here when a message status changes — used to refund failed sends. Recommended.">

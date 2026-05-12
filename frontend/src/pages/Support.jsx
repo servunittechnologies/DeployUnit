@@ -40,7 +40,7 @@ const FAQ = [
   { q: "What happens if I exceed my plan limits?",
     a: "Resource overages (vCPU, RAM, storage) are billed through the credit wallet at transparent per-unit rates — no surprise invoices and no hard cutoffs mid-month." },
   { q: "Do you offer Slack / Discord / SMS alerts?",
-    a: "Yes, on every plan. Wire any combination of channels per app under Notifications. SMS and WhatsApp deductions are credit-billed only when they fire." },
+    a: "Yes, on every plan. Wire any combination of channels per app under Notifications. SMS deductions are credit-billed only when they fire — email, Slack & Discord are free." },
   { q: "How do refunds work?",
     a: "First 14 days are no-questions-asked refundable. After that, contact us — we're reasonable." },
   { q: "Is there a free tier?",

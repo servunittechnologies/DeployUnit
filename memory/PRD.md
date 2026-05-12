@@ -72,6 +72,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — WhatsApp volledig verwijderd uit notification stack**
+  - **User keuze**: alleen **SMS / Email / Slack / Discord** als alerting channels.
+  - **Backend**:
+    - `clients/smstools.py` — `send_whatsapp()`, `WHATSAPP_COST`, `whatsapp_sender` config-veld + alle WhatsApp logic verwijderd. Channel-parameter weg uit `_post_message()` (alleen SMS).
+    - `services/notifications_sms.py` — `SUPPORTED_CHANNELS = ("sms", "email", "slack", "discord")`. WhatsApp dispatch-block in `send_alert()` weggehaald (~40 regels). Module docstring + module-comment bijgewerkt.
+    - `routers/notifications.py` — `supported_channels` response = `["sms", "email", "slack", "discord"]`. `set_prefs()` filtert legacy `whatsapp` keys silently uit zodat oude clients geen 400 krijgen tijdens de rolling deploy. `get_prefs()` filter idem op het read-path. `SendTestIn.channel` validatie laat alleen 4 nieuwe channels toe.
+    - `routers/admin.py` — `smstools_whatsapp_sender` field geschrapt uit settings model. Test endpoint `POST /admin/smstools/test` doet alleen SMS (geen channel-parameter meer).
+    - `routers/status.py` — public status page entry `"SMS & WhatsApp"` → `"SMS"`. Health-check `check_twilio` → `check_smstools` (target nu `api.smsgatewayapi.com/v1/`).
+  - **Frontend**:
+    - `pages/dashboard/Admin.jsx` — SMSTools sectie heet nu **"SMSTools (EU SMS)"**, WhatsApp sender field weggehaald, test-widget heeft geen channel-select meer (alleen "Send test SMS" knop), section title in integratie-overzicht ook bijgewerkt.
+    - `pages/dashboard/Account.jsx` — `CHANNEL_META` keeps alleen sms/email/slack/discord. Notification prefs UI laat alleen die 4 zien. Toelichtende teksten in Wallet + Notifications headers van "SMS & WhatsApp" → "SMS".
+    - `pages/dashboard/CreditsTopup.jsx` + `pages/Support.jsx` — alle copy-strings bijgewerkt.
+  - **Backwards compat**: bestaande user-records met `channels.whatsapp = [...]` worden bij eerstvolgende GET/PUT silently gestript (de UI toont WhatsApp niet meer, dus geen verwarring). De `notification_sends` collection blijft historische records met `channel="whatsapp"` houden voor billing-history.
+  - **Tests** (curl): supported_channels = sms/email/slack/discord, PUT met `whatsapp:[...]` body wordt silent gedropped, test endpoint accepteert geen "whatsapp" meer.
+
+
 - **2026-05-12 — Twilio volledig vervangen door SMSTools (EU SMS provider)**
   - **Reden**: focus op EU-brand → Europese partner voor SMS-communicatie. SMSTools is GDPR-compliant, data stays in EU, sterke EU-operator coverage.
   - **Nieuwe client** (`clients/smstools.py`): REST client voor `https://api.smsgatewayapi.com/v1/`. Auth via `X-Client-Id` + `X-Client-Secret` headers. Dezelfde public surface als de oude Twilio client (`send_sms`, `send_whatsapp`, `configured`, `cost_for_sms`, `WHATSAPP_COST`, `SMSToolsError`) zodat downstream callers minimaal hoefden aan te passen. Extra: `get_balance()` voor admin dashboard, error-code mapping (103/104/106/108/111/118) naar human-readable messages. E.164 normalisatie (strip leading `+`).
