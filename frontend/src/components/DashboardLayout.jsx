@@ -305,35 +305,37 @@ export default function DashboardLayout() {
         <SidebarContent />
       </aside>
 
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-            data-testid="mobile-drawer-backdrop"
-          />
-          <aside
-            className="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-white/[0.06] flex flex-col animate-[slide-in-left_0.18s_ease-out] relative"
-            data-testid="mobile-drawer"
-          >
-            <button
-              onClick={() => setMobileOpen(false)}
-              className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white z-10"
-              aria-label="Close menu"
-              data-testid="mobile-drawer-close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <SidebarContent compact onNavigate={() => setMobileOpen(false)} />
-            {/* Fade hint at bottom — tells the user there's more if list overflows */}
-            <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent"
-              aria-hidden
-            />
-          </aside>
-        </>
-      )}
+      {/* Mobile drawer — always mounted for smooth open & close animation */}
+      <div
+        className={`lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ease-out ${
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden={!mobileOpen}
+        data-testid="mobile-drawer-backdrop"
+      />
+      <aside
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-white/[0.06] flex flex-col transition-transform duration-200 ease-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-hidden={!mobileOpen}
+        data-testid="mobile-drawer"
+      >
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white z-10 transition-colors"
+          aria-label="Close menu"
+          data-testid="mobile-drawer-close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <SidebarContent compact onNavigate={() => setMobileOpen(false)} />
+        {/* Fade hint at bottom — tells the user there's more if list overflows */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent"
+          aria-hidden
+        />
+      </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="glass sticky top-0 z-30 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">

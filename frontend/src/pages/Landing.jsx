@@ -95,7 +95,6 @@ function Nav() {
     ["Pricing",   "/pricing",   false],
     ["Support",   "/support",   false],
     ["Contact",   "/contact",   false],
-    ["Log in",    "/login",     false],
   ];
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-zinc-800">
@@ -125,47 +124,65 @@ function Nav() {
         </div>
       </Container>
 
-      {open && (
-        <div className="md:hidden fixed inset-0 h-screen z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="nav-mobile-drawer">
-          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800 shrink-0">
-            <Link to="/" onClick={() => setOpen(false)}><Logo className="h-7 w-auto" /></Link>
-            <button
+      {/* Mobile drawer — always rendered for smooth open/close animation */}
+      <div
+        className={`md:hidden fixed inset-0 z-[60] flex flex-col h-screen bg-black/95 backdrop-blur-xl transition-all duration-200 ease-out ${
+          open
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 -translate-y-1 pointer-events-none"
+        }`}
+        aria-hidden={!open}
+        data-testid="nav-mobile-drawer"
+      >
+        <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800 shrink-0">
+          <Link to="/" onClick={() => setOpen(false)}><Logo className="h-7 w-auto" /></Link>
+          <button
+            onClick={() => setOpen(false)}
+            className="p-2 -mr-2 text-zinc-300 hover:text-white transition-colors"
+            aria-label="Close menu"
+            data-testid="nav-mobile-close"
+          >
+            <XIcon className="h-6 w-6" />
+          </button>
+        </div>
+        <nav className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
+          {links.map(([label, href, isAnchor]) => {
+            const Comp = isAnchor ? "a" : Link;
+            const props = isAnchor ? { href } : { to: href };
+            return (
+              <Comp
+                key={label}
+                {...props}
+                onClick={() => setOpen(false)}
+                data-testid={`nav-mobile-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                className="py-2.5 text-base font-display font-medium text-zinc-200 hover:text-cyan-400 transition-colors border-b border-zinc-900"
+              >
+                {label}
+              </Comp>
+            );
+          })}
+          {/* Account actions — visually separated from content nav */}
+          <div className="mt-6 pt-5 border-t border-zinc-800 flex flex-col gap-3">
+            <Link
+              to="/login"
               onClick={() => setOpen(false)}
-              className="p-2 -mr-2 text-zinc-300 hover:text-white"
-              aria-label="Close menu"
-              data-testid="nav-mobile-close"
+              data-testid="nav-mobile-log-in"
+              className="inline-flex items-center justify-center gap-2 border border-zinc-700 hover:border-cyan-500 hover:text-cyan-400 text-zinc-200 font-medium px-5 py-2.5 text-sm transition-colors"
             >
-              <XIcon className="h-6 w-6" />
-            </button>
-          </div>
-          <nav className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
-            {links.map(([label, href, isAnchor]) => {
-              const Comp = isAnchor ? "a" : Link;
-              const props = isAnchor ? { href } : { to: href };
-              return (
-                <Comp
-                  key={label}
-                  {...props}
-                  onClick={() => setOpen(false)}
-                  data-testid={`nav-mobile-${label.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="py-2.5 text-base font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
-                >
-                  {label}
-                </Comp>
-              );
-            })}
+              Log in
+            </Link>
             <Link
               to="/register"
               onClick={() => setOpen(false)}
               data-testid="nav-mobile-cta"
-              className="mt-4 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-2.5 transition-colors"
+              className="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-2.5 text-sm transition-colors"
             >
               Deploy now
               <ArrowRight className="h-4 w-4" />
             </Link>
-          </nav>
-        </div>
-      )}
+          </div>
+        </nav>
+      </div>
     </header>
   );
 }
