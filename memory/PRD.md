@@ -72,6 +72,25 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Routing self-healer: permanent fix voor "no available server" / no SSL (11/11 backend green)**
+  - **Probleem in productie**: `8rrwaumc.deployunit.app` (een geclaimde pool-URL) toonde `404 page not found` (Traefik) + `CN=TRAEFIK DEFAULT CERT`. DNS resolveerde correct naar `149.12.246.205`, poorten 80/443 open, Coolify draait — **Traefik miste alleen de route-labels op de container**. Klassiek symptoom: `coolify.update_application({fqdn})` PATCHt het veld in Coolify maar de live container heeft de docker-labels niet bijgewerkt (labels worden enkel bij container-start gelezen).
+  - **Permanente fix** — nieuwe `services/routing_healer.py`:
+    - `_probe_traefik_route(fqdn)` detecteert het symptoom via TLS-handshake peek (`CN=TRAEFIK DEFAULT CERT`) + body-fingerprint (`404 page not found`). Returns `{routed, reason}`.
+    - `_push_fqdn_and_restart(app)` doet PATCH+verify+restart: PATCH `{fqdn}` → GET om te bevestigen dat het landde → `coolify.restart()` zodat de container met de juiste Traefik-labels opnieuw start (de stap die het EIGENLIJK fixt).
+    - `heal_app(app_id)` public entrypoint voor de admin-knop: probe → heal → 6s wachten → re-probe.
+    - `cleanup_orphan_pool_entries()` reapt DNS records van apps die verwijderd zijn (DNS bestaat, geen app meer).
+    - `routing_healer_tick()` scheduler-job: walks alle `status:live` + `cloudflare_fqdn` apps (cap 25/tick), probet parallel, healt sequentieel om Coolify rate-limits te respecteren. 3-retries/uur cap met cooldown.
+  - **Hardening van create-pad** (`routers/apps.py`): na `update_application({fqdn})` doet de code nu een directe `get_application()` om te VERIFIËREN dat de FQDN landde, met re-PATCH bij mismatch. Coolify v4 200't soms op rejected fields stilletjes — dit vangt het.
+  - **Scheduler** (`server.py`): `routing_healer_tick` elke 2 min, `max_instances=1` zodat de healer nooit overlappende ticks heeft.
+  - **Admin endpoints**:
+    - `POST /api/admin/apps/{id}/heal-routing` — handmatige fix voor één app
+    - `POST /api/admin/routing-healer/run` — full sweep nu
+  - **Admin UI**: nieuwe **"Heal routing"** knop (groen, emerald accent) naast "Refill now" in de SubdomainPoolWidget. Toast feedback: `Healer fixed N apps · released M orphan DNS records` / `All N apps routing OK` / `No live apps with managed FQDNs to check`.
+  - **Tests**: 11/11 pytest groen (`/app/backend/tests/test_routing_healer.py`), RBAC (401/403/200), graceful zonder Cloudflare, geseede fake app met fake coolify-UUID crasht niet, regression op pool endpoints. UI integration getest in /app/admin → Platform Domain tab.
+  - **Resultaat voor user**: zodra hij de "Heal routing" knop drukt op productie, scant het systeem alle apps met een managed FQDN, ontdekt `8rrwaumc.deployunit.app` als broken (default cert), herhaalt FQDN-push + container-restart, en Traefik heeft binnen 6s de juiste route + Let's Encrypt-cert flow begint. Vanaf nu loopt dezelfde check ELKE 2 MINUTEN automatisch in de achtergrond — dit kan dus nooit meer kapot blijven.
+  - **Files**: nieuw `services/routing_healer.py`; aangepast `routers/admin.py` (+2 endpoints), `routers/apps.py` (FQDN-verify), `server.py` (scheduler), `pages/dashboard/Admin.jsx` (Heal-knop).
+
+
 - **2026-05-12 — Pre-warmed Cloudflare DNS pool (Instant URLs P0 COMPLETE — 13/13 backend, UI testids green)**
   - **Probleem**: Nieuw aangemaakte apps kregen een random `{slug}.deployunit.app` toegewezen, maar het Cloudflare DNS-record was nét aangemaakt → resolvers wereldwijd hadden de record nog niet → eerste paar minuten resulteerde elke klik op de app-URL in een dode link of NXDOMAIN.
   - **Fix** — `services/subdomains.py`: nieuwe collection `cloudflare_subdomain_pool` met N **pre-aangemaakte** DNS records. Bij app-creatie doet `provision_subdomain(app)` een atomic `find_one_and_update({status:"free"}, ...)` (FIFO, oudste eerst → meest gepropageerd) en heeft de gebruiker een URL die wereldwijd al resolvet vanaf seconde 0. Pool-empty fallback maakt on-demand een record (degraded — propagatie nodig).

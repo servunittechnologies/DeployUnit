@@ -150,6 +150,7 @@ async def heal_app(app_id: str) -> dict:
             "routing_last_probe": _now(),
             "routing_last_probe_reason": probe.get("reason"),
             "routing_last_heal_action": report.get("action"),
+            "routing_last_heal_at": _now(),
             "routing_last_healed_at": healed_at,
         }},
     )
