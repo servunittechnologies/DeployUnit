@@ -224,17 +224,18 @@ function UserMenu() {
   );
 }
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate, compact = false }) {
   const { user } = useAuth();
+  const itemPadY = compact ? "py-1.5" : "py-2.5";
   return (
     <>
-      <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
+      <div className={`${compact ? "px-5 py-4" : "p-5"} border-b border-white/[0.06] flex items-center justify-between`}>
         <Link to="/app" onClick={onNavigate}><Logo /></Link>
       </div>
-      <div className="p-4 border-b border-white/[0.06]">
+      <div className={`${compact ? "px-4 py-3" : "p-4"} border-b border-white/[0.06]`}>
         <WorkspaceSwitcher />
       </div>
-      <nav className="flex-1 py-4 overflow-y-auto">
+      <nav className={`flex-1 ${compact ? "py-2" : "py-4"} overflow-y-auto overscroll-contain`}>
         {NAV.map((n) => (
           <NavLink
             key={n.to}
@@ -243,7 +244,7 @@ function SidebarContent({ onNavigate }) {
             onClick={onNavigate}
             data-testid={`nav-${n.label.toLowerCase()}`}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
+              `flex items-center gap-3 px-5 ${itemPadY} text-sm border-l-2 transition-colors ${
                 isActive
                   ? "border-brand text-white bg-white/[0.03]"
                   : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
@@ -261,13 +262,13 @@ function SidebarContent({ onNavigate }) {
         ))}
         {user?.role === "admin" && (
           <>
-            <div className="mx-5 my-4 h-px bg-white/[0.06]" />
+            <div className="mx-5 my-3 h-px bg-white/[0.06]" />
             <NavLink
               to={ADMIN_NAV.to}
               onClick={onNavigate}
               data-testid="nav-admin"
               className={({ isActive }) =>
-                `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
+                `flex items-center gap-3 px-5 ${itemPadY} text-sm border-l-2 transition-colors ${
                   isActive
                     ? "border-brand text-white bg-white/[0.03]"
                     : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
@@ -313,18 +314,23 @@ export default function DashboardLayout() {
             data-testid="mobile-drawer-backdrop"
           />
           <aside
-            className="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-white/[0.06] flex flex-col animate-[slide-in-left_0.18s_ease-out]"
+            className="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-white/[0.06] flex flex-col animate-[slide-in-left_0.18s_ease-out] relative"
             data-testid="mobile-drawer"
           >
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-3 p-2 text-zinc-400 hover:text-white z-10"
+              className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white z-10"
               aria-label="Close menu"
               data-testid="mobile-drawer-close"
             >
               <X className="h-5 w-5" />
             </button>
-            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent compact onNavigate={() => setMobileOpen(false)} />
+            {/* Fade hint at bottom — tells the user there's more if list overflows */}
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent"
+              aria-hidden
+            />
           </aside>
         </>
       )}
