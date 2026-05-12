@@ -167,7 +167,7 @@ function IntegrationsTab() {
 
       <Section
         title="Twilio (SMS + WhatsApp)"
-        description="Used to send customer notification alerts (billed from each Team's credit wallet)."
+        description="Used to send customer notification alerts (billed from each Workspace's credit wallet)."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
           <div>
@@ -282,7 +282,7 @@ function PlanRow({ plan, onSaved }) {
               ["Credits/mo", "credits", "number"],
               ["Apps cap (-1=∞)", "apps", "number"],
               ["Domains (-1=∞)", "domains", "number"],
-              ["Team (-1=∞)", "team", "number"],
+              ["Workspace (-1=∞)", "team", "number"],
               ["Bandwidth (GB)", "bandwidth_gb", "number"],
               ["Build minutes", "build_minutes", "number"],
             ].map(([label, k, type]) => (
@@ -1098,7 +1098,7 @@ function UsersTab() {
 
       <div className="border border-white/[0.06]">
         <div className="grid grid-cols-[1fr_120px_90px_90px_90px] gap-4 px-4 py-2 border-b border-white/[0.06] text-[10px] uppercase tracking-[0.25em] font-mono text-zinc-500">
-          <div>Email / name</div><div>Role</div><div>Teams</div><div>Credits</div><div className="text-right">Open</div>
+          <div>Email / name</div><div>Role</div><div>Workspaces</div><div>Credits</div><div className="text-right">Open</div>
         </div>
         {data.users.length === 0 && !loading && (
           <div className="p-6 text-sm font-mono text-zinc-500">No users found.</div>
@@ -1214,7 +1214,7 @@ function UserDetailPanel({ userId, onBack }) {
   };
 
   const setPlan = async (workspaceId, plan) => {
-    if (!window.confirm(`Switch this Team to ${plan}?`)) return;
+    if (!window.confirm(`Switch this Workspace to ${plan}?`)) return;
     try {
       await api.post(`/admin/users/${userId}/plan`, { workspace_id: workspaceId, plan });
       toast.success(`Plan: ${plan}`);
@@ -1294,7 +1294,7 @@ function UserDetailPanel({ userId, onBack }) {
       {/* Workspaces */}
       <div className="border border-white/[0.06] p-5 space-y-4">
         <h3 className="font-display text-lg">Workspaces ({data.workspaces.length})</h3>
-        {data.workspaces.length === 0 && <div className="text-xs font-mono text-zinc-500">User owns no Teams.</div>}
+        {data.workspaces.length === 0 && <div className="text-xs font-mono text-zinc-500">User owns no Workspaces.</div>}
         {data.workspaces.map((w) => (
           <div key={w.id} className="border border-white/[0.06] p-4" data-testid={`admin-ws-${w.id}`}>
             <div className="flex items-center justify-between gap-4 flex-wrap">

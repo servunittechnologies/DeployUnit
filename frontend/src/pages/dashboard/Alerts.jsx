@@ -123,7 +123,7 @@ export default function Alerts() {
               <div>
                 <label className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Apply to</label>
                 <select value={appId} onChange={(e) => setAppId(e.target.value)} className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none" data-testid="alert-app-select">
-                  <option value="">All apps in this Team</option>
+                  <option value="">All apps in this Workspace</option>
                   {apps.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>

@@ -26,7 +26,7 @@ const CATEGORIES = [
   { icon: GitBranch, title: "Deploys & builds",    body: "Buildpacks, build args, custom Dockerfiles, PR previews, rollbacks." },
   { icon: Server,    title: "Domains & DNS",       body: "Custom domains, SSL, DNS records, Cloudflare integration." },
   { icon: CreditCard,title: "Billing & credits",   body: "Plans, credit wallet, VAT, invoices, downgrades and upgrades." },
-  { icon: ShieldCheck,title:"Security & teams",    body: "Teams, roles, audit logs, two-factor, OAuth tokens." },
+  { icon: ShieldCheck,title:"Security & teams",    body: "Workspaces, roles, audit logs, two-factor, OAuth tokens." },
   { icon: Wrench,    title: "Troubleshooting",     body: "Build failures, container restarts, env-var debugging, status checks." },
 ];
 

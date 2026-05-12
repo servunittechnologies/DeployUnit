@@ -636,9 +636,9 @@ function WorkspaceSwitcherMock() {
   ], []);
   const [active, setActive] = useState(0);
   return (
-    <div className="border border-zinc-800 bg-zinc-950/50" data-testid="Team-switcher">
+    <div className="border border-zinc-800 bg-zinc-950/50" data-testid="Workspace-switcher">
       <div className="px-3 py-2 border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 flex items-center justify-between">
-        <span>Teams</span>
+        <span>Workspaces</span>
         <span className="text-cyan-400">{ws[active].deploys} deploys / 30d</span>
       </div>
       <div className="divide-y divide-zinc-900">
@@ -650,7 +650,7 @@ function WorkspaceSwitcherMock() {
               key={w.name}
               onClick={() => setActive(i)}
               className="w-full text-left flex items-center justify-between px-3 py-2 text-xs font-mono hover:bg-zinc-900/40 transition-colors group"
-              data-testid={`Team-${i}`}
+              data-testid={`Workspace-${i}`}
             >
               <span className="flex items-center gap-2">
                 <motion.span
@@ -920,9 +920,9 @@ function Features() {
 
           <BentoCard
             overline="Agency multi-tenant"
-            title="Teams per customer."
-            body="Click to switch fleets. Per-Team billing, members, audit logs and credit budget — out of the box."
-            testId="feature-Teams"
+            title="Workspaces per customer."
+            body="Click to switch fleets. Per-Workspace billing, members, audit logs and credit budget — out of the box."
+            testId="feature-Workspaces"
           >
             <WorkspaceSwitcherMock />
           </BentoCard>
@@ -1346,7 +1346,7 @@ function GreenEnergy() {
                 />
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-emerald-400">Partner · Team Trees</div>
+                <div className="text-[10px] uppercase tracking-[0.35em] font-mono text-emerald-400">Partner · Workspace Trees</div>
                 <div className="font-display text-lg font-bold text-white leading-tight">1 deploy = 1 tree.</div>
               </div>
             </div>

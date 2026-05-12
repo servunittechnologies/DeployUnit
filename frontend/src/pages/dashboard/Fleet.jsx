@@ -58,7 +58,7 @@ export default function Fleet() {
   }, [data, q]);
 
   const runBulkRedeploy = async () => {
-    if (!window.confirm(`Redeploy every broken app across ${data.rollup.Teams} Team${data.rollup.Teams === 1 ? "" : "s"}? Capped at 50 per call.`)) return;
+    if (!window.confirm(`Redeploy every broken app across ${data.rollup.Workspaces} Workspace${data.rollup.Workspaces === 1 ? "" : "s"}? Capped at 50 per call.`)) return;
     setBulkBusy(true);
     try {
       const r = await api.post("/fleet/bulk-redeploy");
@@ -70,7 +70,7 @@ export default function Fleet() {
   };
 
   if (loading && !data) {
-    return <div className="p-6 text-sm font-mono text-zinc-500">Loading Teams…</div>;
+    return <div className="p-6 text-sm font-mono text-zinc-500">Loading Workspaces…</div>;
   }
   if (!data) return null;
 
@@ -82,9 +82,9 @@ export default function Fleet() {
     <div className="px-6 py-6 space-y-8" data-testid="fleet-page">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// Teams</div>
+          <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// Workspaces</div>
           <h1 className="font-display text-4xl font-semibold tracking-tighter">
-            {wsCount === 0 ? "Create a Team to get started." : wsCount === 1 ? "Your Team at a glance." : "All your Teams."}
+            {wsCount === 0 ? "Create a Workspace to get started." : wsCount === 1 ? "Your Workspace at a glance." : "All your Workspaces."}
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
             {wsCount <= 1
@@ -115,7 +115,7 @@ export default function Fleet() {
 
       {/* Rollup KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/[0.06] border border-white/[0.06]" data-testid="fleet-rollup">
-        <Kpi icon={<Building2 className="h-4 w-4" />} label="Teams" value={r.workspaces} />
+        <Kpi icon={<Building2 className="h-4 w-4" />} label="Workspaces" value={r.workspaces} />
         <Kpi icon={<Layers className="h-4 w-4" />} label="Apps total" value={r.apps_total} />
         <Kpi icon={<AlertTriangle className="h-4 w-4 text-signal-failed" />} label="Broken" value={r.apps_broken} tone={r.apps_broken > 0 ? "danger" : "muted"} />
         <Kpi icon={<CheckCircle2 className="h-4 w-4 text-signal-live" />} label="Live" value={`${r.apps_live} (${healthPct}%)`} tone="live" />
@@ -128,7 +128,7 @@ export default function Fleet() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="filter Teams or apps…"
+          placeholder="filter Workspaces or apps…"
           className="flex-1 bg-transparent text-sm font-mono focus:outline-none"
           data-testid="fleet-search"
         />
@@ -203,7 +203,7 @@ function WorkspaceCard({ ws }) {
       {open && (
         <div className="border-t border-white/[0.06]" data-testid={`fleet-ws-apps-${ws.id}`}>
           {ws.apps.length === 0 && (
-            <div className="p-5 text-xs font-mono text-zinc-500">No apps in this Team yet.</div>
+            <div className="p-5 text-xs font-mono text-zinc-500">No apps in this Workspace yet.</div>
           )}
           {ws.apps.map((app) => (
             <AppRow key={app.id} app={app} />

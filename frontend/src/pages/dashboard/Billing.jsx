@@ -71,7 +71,7 @@ export default function Billing() {
 
   const cancel = async () => {
     if (!active) return;
-    if (!window.confirm("Cancel your subscription? Your Team drops back to the Free plan.")) return;
+    if (!window.confirm("Cancel your subscription? Your Workspace drops back to the Free plan.")) return;
     try {
       await api.post("/billing/cancel", null, { params: { workspace_id: active.id } });
       toast.success("Subscription canceled.");
@@ -92,7 +92,7 @@ export default function Billing() {
       <div>
         <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// billing</div>
         <h1 className="font-display text-4xl font-semibold tracking-tighter">Plans & invoices</h1>
-        <p className="mt-1 text-sm text-zinc-400">Powered by Mollie · Your Team, your VAT, your invoices.</p>
+        <p className="mt-1 text-sm text-zinc-400">Powered by Mollie · Your Workspace, your VAT, your invoices.</p>
       </div>
 
       {/* Current subscription */}

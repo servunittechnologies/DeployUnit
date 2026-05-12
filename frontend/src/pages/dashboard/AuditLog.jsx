@@ -21,9 +21,9 @@ const ACTION_LABELS = {
   "billing.subscription.cancel": "Subscription canceled",
   "billing.checkout.start": "Checkout started",
   "credits.topup": "Credits topped up",
-  "Team.member.invite": "Member invited",
-  "Team.member.remove": "Member removed",
-  "Team.update": "Team updated",
+  "Workspace.member.invite": "Member invited",
+  "Workspace.member.remove": "Member removed",
+  "Workspace.update": "Workspace updated",
   "admin.platform_settings.update": "Platform settings updated",
 };
 
@@ -63,7 +63,7 @@ export default function AuditLog() {
   useEffect(() => { if (active) load(true); /* eslint-disable-next-line */ }, [active, actionFilter]);
 
   if (!active) {
-    return <div className="p-6 text-sm font-mono text-zinc-500">Select a Team to view its audit log.</div>;
+    return <div className="p-6 text-sm font-mono text-zinc-500">Select a Workspace to view its audit log.</div>;
   }
 
   return (

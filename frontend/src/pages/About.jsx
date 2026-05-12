@@ -32,7 +32,7 @@ const VALUES = [
   },
   {
     icon: Users, title: "Built for agencies",
-    body: "Teams, per-customer billing, audit logs and credit budgets — the patterns we wished existed when running our own studio.",
+    body: "Workspaces, per-customer billing, audit logs and credit budgets — the patterns we wished existed when running our own studio.",
   },
   {
     icon: ShieldCheck, title: "Boringly transparent",

@@ -234,7 +234,7 @@ export default function Account() {
   const sendTest = async (channel) => {
     // Reuse first owned workspace for test send (Mollie/twilio needs ws context for credits)
     const wsId = snap?.workspaces?.[0]?.id;
-    if (!wsId) { toast.error("Create a Team first"); return; }
+    if (!wsId) { toast.error("Create a Workspace first"); return; }
     setTestBusy(channel);
     try {
       const r = await api.post("/notifications/test", { workspace_id: wsId, channel });
@@ -278,7 +278,7 @@ export default function Account() {
           </div>
         </div>
         <p className="text-xs text-zinc-500 mt-2 max-w-2xl">
-          One plan, one wallet, one inbox for notifications — applied across <strong>every Team you own</strong>. Team-specific settings (name, members, delete) live under <a href="/app/settings" className="text-brand hover:underline">Team settings</a>.
+          One plan, one wallet, one inbox for notifications — applied across <strong>every Workspace you own</strong>. Workspace-specific settings (name, members, delete) live under <a href="/app/settings" className="text-brand hover:underline">Workspace settings</a>.
         </p>
       </div>
 
@@ -371,7 +371,7 @@ export default function Account() {
 
           {/* Plan + Usage */}
           <section className="border border-white/[0.06] p-6 space-y-5" data-testid="section-plan">
-            <SectionHeader id="plan" icon={Sparkles} title="Plan & usage" subtitle="Your plan applies across every Team you own. Limits are pooled." />
+            <SectionHeader id="plan" icon={Sparkles} title="Plan & usage" subtitle="Your plan applies across every Workspace you own. Limits are pooled." />
 
             {/* Current plan card */}
             <div className="bg-elevated/30 border border-white/[0.06] p-5 grid grid-cols-12 gap-4">
@@ -401,12 +401,12 @@ export default function Account() {
                   <UsageBar used={usage.domains || 0} cap={limits.domains} />
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Teams</div>
-                  <UsageBar used={usage.teams || snap.workspaces?.length || 1} cap={limits.teams} />
+                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Workspaces</div>
+                  <UsageBar used={usage.workspaces || snap.workspaces?.length || 1} cap={limits.workspaces} />
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Clients</div>
-                  <div className="font-display text-lg text-zinc-300">{usage.clients || "—"}</div>
+                  <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-1">Projects</div>
+                  <div className="font-display text-lg text-zinc-300">{usage.projects ?? "—"}</div>
                 </div>
               </div>
             </div>
@@ -421,7 +421,7 @@ export default function Account() {
           {/* Credits */}
           <section className="border border-white/[0.06] p-6 space-y-5" data-testid="section-credits">
             <SectionHeader id="credits" icon={Wallet} title="Credits wallet"
-              subtitle="Used for SMS, WhatsApp alerts, build overages. Shared across Teams. Free email + in-app alerts." />
+              subtitle="Used for SMS, WhatsApp alerts, build overages. Shared across Workspaces. Free email + in-app alerts." />
 
             <div className="bg-elevated/30 border border-white/[0.06] p-5 grid grid-cols-12 gap-4">
               <div className="col-span-12 md:col-span-6">

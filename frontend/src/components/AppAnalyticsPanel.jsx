@@ -345,7 +345,7 @@ export function AccountAnalyticsPanel() {
       <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">// last 30 days · account-wide</div>
-          <div className="text-sm text-zinc-300 mt-0.5">What you're using across every Team you own</div>
+          <div className="text-sm text-zinc-300 mt-0.5">What you're using across every Workspace you own</div>
         </div>
         <TrendingUp className="h-4 w-4 text-brand" />
       </div>

@@ -38,18 +38,18 @@ async def list_workspaces(request: Request):
 async def create_workspace(payload: WorkspaceIn, request: Request):
     user = await get_current_user(request)
     db = get_db()
-    # Enforce plan `teams` cap (account-level).
+    # Enforce plan `workspaces` cap (account-level).
     from services.plans import user_plan, account_usage, list_plans
     plan = await user_plan(user["id"])
-    cap = (plan.get("limits") or {}).get("teams")
+    cap = (plan.get("limits") or {}).get("workspaces")
     if cap is not None and cap >= 0:
         usage = await account_usage(user["id"])
-        if usage.get("teams", 0) >= cap:
+        if usage.get("workspaces", 0) >= cap:
             higher = [p for p in await list_plans(only_active=True)
                       if p.get("price", 0) > plan.get("price", 0)]
             suggestion = higher[0]["name"] if higher else None
             msg = (
-                f"You hit your {plan.get('name') or plan['id']} plan's Teams limit ({cap}). "
+                f"You hit your {plan.get('name') or plan['id']} plan's Workspaces limit ({cap}). "
                 + (f"Upgrade to {suggestion} for more." if suggestion else "")
             )
             raise HTTPException(status_code=402, detail=msg)

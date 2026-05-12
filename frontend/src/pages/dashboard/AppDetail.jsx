@@ -1230,11 +1230,11 @@ function MoveAppSection({ app }) {
   const startMove = async () => { setOpen(true); await load(); };
 
   const move = async () => {
-    if (!target) { toast.error("Pick a destination Team"); return; }
+    if (!target) { toast.error("Pick a destination Workspace"); return; }
     const tgt = candidates.find((c) => c.id === target);
     if (!tgt) return;
-    if (!tgt.has_room) { toast.error("Destination Team is at its plan limit"); return; }
-    if (!window.confirm(`Move "${app.name}" to "${tgt.name}"?\n\nDeployments, domains, cron jobs and PR previews will follow.\nIf this app is paired with a staging/production peer in the source Team, the link will be broken.\n\nThe build-engine resource itself stays in place — only ownership in DeployUnit moves.`)) return;
+    if (!tgt.has_room) { toast.error("Destination Workspace is at its plan limit"); return; }
+    if (!window.confirm(`Move "${app.name}" to "${tgt.name}"?\n\nDeployments, domains, cron jobs and PR previews will follow.\nIf this app is paired with a staging/production peer in the source Workspace, the link will be broken.\n\nThe build-engine resource itself stays in place — only ownership in DeployUnit moves.`)) return;
     setBusy(true);
     try {
       const r = await api.post(`/apps/${app.id}/move`, { target_workspace_id: target });
@@ -1255,7 +1255,7 @@ function MoveAppSection({ app }) {
         <div>
           <div className="flex items-center gap-2">
             <Boxes className="h-4 w-4 text-brand" />
-            <h2 className="font-display text-xl">Move to another Team</h2>
+            <h2 className="font-display text-xl">Move to another Workspace</h2>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
             Re-parent this app to a different Team or agency-client fleet. Deployments, domains, cron jobs and PR previews follow along.
@@ -1270,7 +1270,7 @@ function MoveAppSection({ app }) {
 
       {open && (
         <div className="space-y-3">
-          {loading && <div className="text-xs font-mono text-zinc-500">Loading Teams…</div>}
+          {loading && <div className="text-xs font-mono text-zinc-500">Loading Workspaces…</div>}
           {!loading && candidates.length === 0 && (
             <div className="text-xs font-mono text-zinc-500">
               No other Teams available. Create a second Team first.

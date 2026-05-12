@@ -144,7 +144,7 @@ export default function Databases() {
     finally { setBusy(false); }
   };
 
-  if (!active) return <div className="p-6 text-sm font-mono text-zinc-500">Select a Team.</div>;
+  if (!active) return <div className="p-6 text-sm font-mono text-zinc-500">Select a Workspace.</div>;
 
   return (
     <div className="px-6 py-6 space-y-6" data-testid="databases-page">

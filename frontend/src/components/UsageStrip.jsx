@@ -30,7 +30,7 @@ export default function UsageStrip({ workspaceId }) {
   const rows = [
     { key: "apps", label: "Apps", used: usage.apps, cap: plan.limits?.apps },
     { key: "domains", label: "Domains", used: usage.domains, cap: plan.limits?.domains },
-    { key: "teams", label: "Teams", used: usage.teams, cap: plan.limits?.teams },
+    { key: "workspaces", label: "Workspaces", used: usage.workspaces, cap: plan.limits?.workspaces },
   ];
   const isFree = (plan.id === "free") || plan.price === 0;
   const anyMaxed = rows.some((r) => r.cap > 0 && r.used >= r.cap);

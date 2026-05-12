@@ -96,7 +96,7 @@ export default function Checkout() {
             <div className="text-brand">// next steps</div>
             {isFree ? (
               <>
-                <div>1. Confirm your Team</div>
+                <div>1. Confirm your Workspace</div>
                 <div>2. Start deploying</div>
               </>
             ) : (
@@ -115,7 +115,7 @@ export default function Checkout() {
 
         {/* Profile + pay */}
         <div className="bg-elevated/30 p-8 lg:col-span-3">
-          <div className="text-xs font-mono uppercase tracking-[0.3em] text-zinc-500">Team</div>
+          <div className="text-xs font-mono uppercase tracking-[0.3em] text-zinc-500">Workspace</div>
           <div className="mt-1 font-display text-2xl">{active?.name}</div>
           <div className="mt-1 text-xs font-mono text-zinc-500">{user?.email}</div>
 

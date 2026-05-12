@@ -90,7 +90,7 @@ export default function Projects() {
                 <input
                   required value={name} onChange={(e) => setName(e.target.value)}
                   className="mt-1 w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:border-brand outline-none"
-                  placeholder="Client: Acme"
+                  placeholder="Project: Acme"
                   data-testid="client-name-input"
                 />
               </div>

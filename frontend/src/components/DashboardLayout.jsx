@@ -18,8 +18,8 @@ import { Button } from "./ui/button";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
-  { to: "/app/projects", label: "Clients", icon: FolderKanban },
-  { to: "/app/fleet", label: "Teams", icon: Layers },
+  { to: "/app/projects", label: "Projects", icon: FolderKanban },
+  { to: "/app/fleet", label: "Workspaces", icon: Layers },
   { to: "/app/databases", label: "Databases", icon: Database },
   { to: "/app/domains", label: "Domains", icon: Globe },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity },
@@ -48,10 +48,10 @@ function WorkspaceSwitcher() {
       <DropdownMenuTrigger asChild>
         <button
           className="w-full flex items-center justify-between gap-2 px-3 py-2 border border-white/10 hover:border-white/30 transition-colors group"
-          data-testid="Team-switcher"
+          data-testid="Workspace-switcher"
         >
           <div className="min-w-0 text-left">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Team</div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Workspace</div>
             <div className="font-display text-sm font-medium truncate">{active?.name || "—"}</div>
           </div>
           <ChevronsUpDown className="h-4 w-4 text-zinc-500 group-hover:text-white" />
@@ -66,7 +66,7 @@ function WorkspaceSwitcher() {
           <DropdownMenuItem
             key={w.id}
             onClick={() => setActive(w.id)}
-            data-testid={`Team-option-${w.slug}`}
+            data-testid={`Workspace-option-${w.slug}`}
             className="flex items-center justify-between"
           >
             <div className="flex items-center gap-2">
@@ -89,10 +89,10 @@ function WorkspaceSwitcher() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Acme Studio"
               className="w-full px-2 py-1.5 bg-black border border-white/10 text-sm font-mono focus:border-brand outline-none"
-              data-testid="new-Team-input"
+              data-testid="new-Workspace-input"
             />
             <div className="flex gap-2">
-              <Button size="sm" className="rounded-none flex-1 bg-brand text-brand-fg hover:bg-brand/80" onClick={handleCreate} data-testid="new-Team-confirm">Create</Button>
+              <Button size="sm" className="rounded-none flex-1 bg-brand text-brand-fg hover:bg-brand/80" onClick={handleCreate} data-testid="new-Workspace-confirm">Create</Button>
               <Button size="sm" variant="ghost" className="rounded-none" onClick={() => setCreating(false)}>Cancel</Button>
             </div>
           </div>
