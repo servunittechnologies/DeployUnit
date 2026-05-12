@@ -72,6 +72,17 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Cloudflare Tunnel + Origin Cert support: pool records nu proxied=true (orange cloud)**
+  - **Achtergrond**: gebruiker stelde Cloudflare Tunnel + wildcard Origin Cert in volgens [Coolify Full TLS guide](https://coolify.io/docs/integrations/cloudflare/tunnels/full-tls). In die setup termineert Cloudflare TLS aan de edge met haar eigen edge-cert, en spreekt naar Coolify Traefik via HTTPS met de Origin Cert die op de Coolify server staat (`/data/coolify/proxy/certs/`). Coolify hoeft géén Let's Encrypt meer te doen want het wildcard `*.deployunit.app` Origin Cert dekt alle subdomains — 15 jaar geldig.
+  - **Nieuwe code**:
+    - `clients/cloudflare.py` — `create_dns_record` had `proxied` parameter (default False) en die wordt nu daadwerkelijk gebruikt; nieuwe `update_dns_record()` helper voor PATCH op proxied/content/name/type.
+    - `services/subdomains.py` — `_proxied_pref()` leest `platform_settings.cloudflare_proxied` (default True), `_create_one()` past het toe op elke nieuwe pool entry. Nieuwe `sync_proxied()` migreert élke bestaande pool entry + élke app met `cloudflare_dns_record_id` naar de gewenste proxied state via Cloudflare PATCH. `pool_stats()` toont nu ook `proxied` + `proxied_unsynced` counter.
+    - `routers/admin.py` — `cloudflare_proxied` boolean field in `PlatformSettingsUpdate`; nieuwe endpoint `POST /admin/subdomain-pool/sync-proxied` triggert bulk-migratie.
+    - Admin UI (`Admin.jsx`) — Cloudflare-proxy toggle in SubdomainPoolWidget met heldere uitleg (ON: instant SSL via Origin Cert, OFF: Let's Encrypt per app), oranje **"Sync to Cloudflare"** knop die in één klik alle DNS records flipt, amber waarschuwing wanneer `proxied_unsynced > 0`.
+  - **Gevolg voor user**: na "Save to GitHub" + redeploy + één klik op "Sync to Cloudflare" worden ALLE bestaande subdomain-records op Cloudflare omgezet naar orange cloud. Vanaf dan: élke nieuwe pool URL en élke nieuwe klant-app heeft INSTANT geldig SSL via de wildcard Origin Cert, zonder Let's Encrypt rate-limit issues, zonder HTTP-01 challenge wachttijd, zonder de healer (Coolify hoeft de FQDN nog steeds te kennen voor route-matching, maar SSL is afgehandeld bij Cloudflare edge).
+  - **Migration-path**: `cloudflare_proxied` toggle staat AAN by default → wie net upgrades en NIET Cloudflare Tunnel gebruikt moet 'm zelf op OFF zetten. De `sync_proxied` endpoint is idempotent — handmatig draaien is veilig.
+
+
 - **2026-05-12 — Auto-SSL trigger via `force_https` flag (Coolify v4)**
   - **Symptoom na vorige fix**: Traefik-route werkte na force-redeploy (route OK, app bereikbaar), maar **Let's Encrypt cert werd niet uitgegeven** → browser bleef "TRAEFIK DEFAULT CERT" laten zien. Voorzijde leek werkend, maar HTTPS gaf certwaarschuwing.
   - **Root cause**: Coolify v4 vereist een **expliciete `force_https: true` flag** in de PATCH body om de Traefik labels te voorzien van `tls.certresolver=letsencrypt` + HTTP→HTTPS redirect. Zonder die flag genereert Coolify alleen een HTTP-router en wordt het cert nooit aangevraagd. Bron: [coollabsio/coolify#1880](https://github.com/coollabsio/coolify/issues/1880).

@@ -60,6 +60,31 @@ async def create_dns_record(
     return await _request("POST", f"/zones/{zone_id}/dns_records", token=token, json=payload)
 
 
+async def update_dns_record(
+    *,
+    token: str,
+    zone_id: str,
+    record_id: str,
+    proxied: bool | None = None,
+    content: str | None = None,
+    record_type: str | None = None,
+    name: str | None = None,
+) -> Optional[dict]:
+    """PATCH an existing DNS record. Only sends fields you specify."""
+    payload: dict = {}
+    if proxied is not None:
+        payload["proxied"] = proxied
+    if content is not None:
+        payload["content"] = content
+    if record_type is not None:
+        payload["type"] = record_type
+    if name is not None:
+        payload["name"] = name
+    if not payload:
+        return None
+    return await _request("PATCH", f"/zones/{zone_id}/dns_records/{record_id}", token=token, json=payload)
+
+
 async def delete_dns_record(*, token: str, zone_id: str, record_id: str) -> bool:
     res = await _request("DELETE", f"/zones/{zone_id}/dns_records/{record_id}", token=token)
     return res is not None

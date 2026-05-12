@@ -6,12 +6,21 @@ DNS records waiting in `cloudflare_subdomain_pool`. New apps grab one from
 that pool instantly — DNS has already propagated worldwide, so the URL works
 the moment the deploy goes live (no waiting on resolvers).
 
+Cloudflare proxy mode is admin-tunable via `platform_settings.cloudflare_proxied`
+(default: True). When True (orange cloud) Cloudflare terminates TLS using
+your Origin Cert and the pool URLs work with HTTPS instantly — no Let's
+Encrypt round-trip needed. When False (grey cloud) the request hits your
+Coolify Traefik directly and SSL is issued via Let's Encrypt.
+
 Public entrypoints:
   * provision_subdomain(app)  → {fqdn, record_id} or None — claims from pool
                                   first, falls back to on-demand DNS create
   * release_subdomain(app)    → bool — deletes the DNS record
   * refill_pool(target=10)    → int  — invoked by the monitor every few mins
                                        to keep the pool topped up
+  * sync_proxied(target_state) → dict — flips every existing DNS record (pool
+                                   entries + already-claimed app records) to
+                                   the desired proxied state on Cloudflare
   * pool_stats()              → {free, claimed} — for the admin diagnostic
 """
 import logging
@@ -19,7 +28,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from clients.cloudflare import create_dns_record, delete_dns_record
+from clients.cloudflare import create_dns_record, delete_dns_record, update_dns_record
 from db import get_db
 from routers.admin import get_cloudflare_config
 
@@ -32,6 +41,7 @@ _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 POOL_COLLECTION = "cloudflare_subdomain_pool"
 POOL_TARGET_DEFAULT = 10           # platform-settings override: subdomain_pool_target
 POOL_TARGET_HARD_MAX = 50          # safety cap so a typo can't burn the Cloudflare quota
+PROXIED_DEFAULT = True             # orange cloud by default — works with Cloudflare Origin Cert
 
 
 def _random_slug(length: int = 8) -> str:
@@ -56,6 +66,18 @@ async def _pool_target() -> int:
     return max(0, min(POOL_TARGET_HARD_MAX, val))
 
 
+async def _proxied_pref() -> bool:
+    """Read the admin's preferred Cloudflare proxy mode for managed
+    subdomains. Default True (orange cloud, recommended when an Origin Cert
+    is installed on Coolify Traefik)."""
+    from routers.admin import get_platform_settings
+    doc = await get_platform_settings()
+    raw = doc.get("cloudflare_proxied")
+    if raw is None:
+        return PROXIED_DEFAULT
+    return bool(raw)
+
+
 async def _create_one(cfg: dict) -> Optional[dict]:
     """Create a single DNS record on Cloudflare. Returns the entry dict."""
     cf_slug = _random_slug()
@@ -64,9 +86,11 @@ async def _create_one(cfg: dict) -> Optional[dict]:
         record_type, content = "CNAME", cfg["target_host"]
     else:
         record_type, content = "A", cfg["target_ip"]
+    proxied = await _proxied_pref()
     rec = await create_dns_record(
         token=cfg["token"], zone_id=cfg["zone_id"],
         name=fqdn, record_type=record_type, content=content,
+        proxied=proxied,
     )
     if not rec or not rec.get("id"):
         return None
@@ -76,6 +100,7 @@ async def _create_one(cfg: dict) -> Optional[dict]:
         "record_id": rec["id"],
         "record_type": record_type,
         "cf_slug": cf_slug,
+        "proxied": proxied,
     }
 
 
@@ -189,11 +214,67 @@ async def release_subdomain(app: dict) -> bool:
     return ok
 
 
+async def sync_proxied(target_state: bool | None = None) -> dict:
+    """Flip every existing managed DNS record (pool entries + currently
+    claimed app records) to the desired Cloudflare proxy state. Use after
+    enabling Full TLS (Cloudflare Tunnel + Origin Cert) to migrate the whole
+    fleet to orange-cloud in one click.
+
+    Returns `{target, updated, failed, skipped, total}`.
+    """
+    db = get_db()
+    cfg = await get_cloudflare_config()
+    if not cfg:
+        return {"target": None, "updated": 0, "failed": 0, "skipped": 0, "total": 0, "error": "cloudflare not configured"}
+    desired = (await _proxied_pref()) if target_state is None else bool(target_state)
+    # Collect every record_id we manage: from the pool + from any app that
+    # ever auto-provisioned a subdomain (apps.cloudflare_dns_record_id).
+    record_ids: set[str] = set()
+    async for entry in db[POOL_COLLECTION].find({}, {"_id": 0, "record_id": 1}):
+        if entry.get("record_id"):
+            record_ids.add(entry["record_id"])
+    async for app in db.apps.find(
+        {"cloudflare_dns_record_id": {"$ne": None, "$exists": True}},
+        {"_id": 0, "cloudflare_dns_record_id": 1},
+    ):
+        if app.get("cloudflare_dns_record_id"):
+            record_ids.add(app["cloudflare_dns_record_id"])
+    updated = 0
+    failed = 0
+    skipped = 0
+    for rid in record_ids:
+        try:
+            res = await update_dns_record(
+                token=cfg["token"], zone_id=cfg["zone_id"],
+                record_id=rid, proxied=desired,
+            )
+            if res:
+                updated += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.warning("sync_proxied: update_dns_record failed for %s: %s", rid, e)
+            failed += 1
+    # Also mirror the new state on the pool collection so the admin UI shows
+    # accurate state without a Cloudflare round-trip.
+    await db[POOL_COLLECTION].update_many({}, {"$set": {"proxied": desired}})
+    return {
+        "target": desired,
+        "updated": updated,
+        "failed": failed,
+        "skipped": skipped,
+        "total": len(record_ids),
+    }
+
+
+
+
 async def pool_stats() -> dict:
     db = get_db()
     free = await db[POOL_COLLECTION].count_documents({"status": "free"})
     claimed = await db[POOL_COLLECTION].count_documents({"status": "claimed"})
     target = await _pool_target()
+    proxied = await _proxied_pref()
     # 5 most recent free entries — gives the admin a peek at upcoming URLs.
     upcoming = await db[POOL_COLLECTION].find(
         {"status": "free"},
@@ -202,6 +283,9 @@ async def pool_stats() -> dict:
     ).limit(5).to_list(5)
     cfg = await get_cloudflare_config()
     ready = bool(cfg and (cfg.get("target_host") or cfg.get("target_ip")))
+    # How many existing records are still on the OLD proxied state — useful
+    # so the admin knows whether to click "Sync proxied".
+    pool_unsynced = await db[POOL_COLLECTION].count_documents({"proxied": {"$ne": proxied}})
     return {
         "free": free,
         "claimed": claimed,
@@ -210,4 +294,6 @@ async def pool_stats() -> dict:
         "cloudflare_ready": ready,
         "zone_name": cfg.get("zone_name") if cfg else None,
         "upcoming": upcoming,
+        "proxied": proxied,
+        "proxied_unsynced": pool_unsynced,
     }

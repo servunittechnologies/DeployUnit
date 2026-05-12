@@ -119,6 +119,7 @@ class PlatformSettingsUpdate(BaseModel):
     default_subdomain_target_ip: str | None = None  # A-record target (Coolify server IP)
     default_subdomain_target_host: str | None = None  # optional CNAME target
     subdomain_pool_target: int | None = None  # 0..50; how many pre-warmed DNS records to keep ready
+    cloudflare_proxied: bool | None = None  # True = orange cloud (Cloudflare handles TLS via Origin Cert); False = grey cloud (Coolify does Let's Encrypt directly)
     company_country: str | None = None
     company_name: str | None = None
     company_address: str | None = None
@@ -343,6 +344,17 @@ async def admin_subdomain_pool_refill(request: Request):
     from services.subdomains import refill_pool, pool_stats
     added = await refill_pool()
     return {"added": added, **(await pool_stats())}
+
+
+@router.post("/admin/subdomain-pool/sync-proxied")
+async def admin_subdomain_pool_sync_proxied(request: Request):
+    """Flip every managed DNS record (pool + currently-claimed) to the
+    admin's preferred proxied state. Use after switching to/from Cloudflare
+    Tunnel + Origin Cert mode."""
+    await _require_admin(request)
+    from services.subdomains import sync_proxied, pool_stats
+    result = await sync_proxied()
+    return {**result, "pool": await pool_stats()}
 
 
 

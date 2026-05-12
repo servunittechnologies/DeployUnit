@@ -613,10 +613,12 @@ function ResourcesTab() {
 
 
 /* ─────────────────────── Platform Domain + Cloudflare ─────────────────────── */
-function SubdomainPoolWidget({ target, onTargetChange }) {
+function SubdomainPoolWidget({ target, onTargetChange, proxied, onProxiedChange }) {
   const [stats, setStats] = useState(null);
   const [refilling, setRefilling] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [healing, setHealing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = async () => {
     try {
@@ -645,7 +647,6 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
     }
   };
 
-  const [healing, setHealing] = useState(false);
   const runHealer = async () => {
     setHealing(true);
     try {
@@ -667,12 +668,31 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
     }
   };
 
+  const syncProxied = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.post("/admin/subdomain-pool/sync-proxied");
+      if (r.data?.error) {
+        toast.error(r.data.error);
+      } else {
+        const tgt = r.data.target ? "orange cloud (proxied)" : "grey cloud (DNS only)";
+        toast.success(`Synced ${r.data.updated}/${r.data.total} DNS record${r.data.total === 1 ? "" : "s"} to ${tgt}${r.data.failed > 0 ? ` · ${r.data.failed} failed` : ""}`);
+        setStats((r.data.pool) || stats);
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const free = stats?.free ?? 0;
   const claimed = stats?.claimed ?? 0;
   const tgt = stats?.target ?? target ?? 10;
   const fillPct = tgt > 0 ? Math.min(100, Math.round((free / tgt) * 100)) : 0;
   const healthColor = !stats?.cloudflare_ready ? "text-zinc-500" : free >= tgt ? "text-emerald-400" : free > 0 ? "text-amber-400" : "text-rose-400";
   const healthLabel = !stats?.cloudflare_ready ? "Cloudflare not configured" : free >= tgt ? "Full — instant URLs ready" : free > 0 ? "Partially filled" : "Empty — next deploy will create on-demand";
+  const unsynced = stats?.proxied_unsynced ?? 0;
 
   return (
     <Section
@@ -727,7 +747,7 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
               disabled={healing}
               className="px-4 py-2 border border-emerald-500 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
               data-testid="admin-routing-heal"
-              title="Re-push FQDN to build engine + restart any apps where Traefik has lost the route. Fixes 'no available server' / no SSL."
+              title="Re-push FQDN to build engine + force-redeploy any apps where Traefik has lost the route. Fixes 'no available server' / no SSL."
             >
               {healing ? "Healing…" : "Heal routing"}
             </button>
@@ -738,6 +758,49 @@ function SubdomainPoolWidget({ target, onTargetChange }) {
               data-testid="admin-pool-refill"
             >
               {refilling ? "Refilling…" : "Refill now"}
+            </button>
+          </div>
+        </div>
+
+        {/* Cloudflare proxy toggle */}
+        <div className="border-t border-white/[0.04] pt-4 grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-2">Cloudflare proxy mode</div>
+            <label className="flex items-start gap-3 cursor-pointer" data-testid="admin-cf-proxied-toggle">
+              <input
+                type="checkbox"
+                checked={!!proxied}
+                onChange={(e) => onProxiedChange(e.target.checked)}
+                className="mt-1 accent-brand h-4 w-4"
+              />
+              <span>
+                <span className="text-sm font-medium text-zinc-200 block">
+                  Proxy traffic through Cloudflare {proxied ? <span className="text-orange-400 font-mono text-xs">🟠 on</span> : <span className="text-zinc-500 font-mono text-xs">⚪ off</span>}
+                </span>
+                <span className="text-[11px] font-mono text-zinc-500 leading-relaxed block mt-1">
+                  ON (recommended w/ Origin Cert): Cloudflare terminates TLS — instant SSL for every subdomain via your wildcard Origin Cert. No Let's Encrypt needed.<br />
+                  OFF: traffic hits Coolify Traefik directly — Traefik does Let's Encrypt per app (slower, can rate-limit).
+                </span>
+              </span>
+            </label>
+          </div>
+          <div className="text-[11px] font-mono text-zinc-500 leading-relaxed md:col-span-1">
+            Existing DNS records keep their old proxy state until you click "Sync to Cloudflare" — that flips every managed record on Cloudflare in one go.
+            {unsynced > 0 && (
+              <div className="mt-2 text-amber-400">
+                {unsynced} record{unsynced === 1 ? "" : "s"} still on the old state.
+              </div>
+            )}
+          </div>
+          <div className="flex md:justify-end">
+            <button
+              onClick={syncProxied}
+              disabled={syncing || !stats?.cloudflare_ready}
+              className="px-4 py-2 border border-orange-500 text-orange-400 hover:bg-orange-500/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+              data-testid="admin-pool-sync-proxied"
+              title="Push the current proxy-mode preference to every existing Cloudflare DNS record (pool + claimed)."
+            >
+              {syncing ? "Syncing…" : "Sync to Cloudflare"}
             </button>
           </div>
         </div>
@@ -814,6 +877,7 @@ function PlatformTab() {
     default_subdomain_target_ip: "",
     default_subdomain_target_host: "",
     subdomain_pool_target: 10,
+    cloudflare_proxied: true,
     company_country: "",
     company_name: "",
     company_address: "",
@@ -848,6 +912,7 @@ function PlatformTab() {
         default_subdomain_target_ip: r.data.default_subdomain_target_ip || "",
         default_subdomain_target_host: r.data.default_subdomain_target_host || "",
         subdomain_pool_target: r.data.subdomain_pool_target ?? 10,
+        cloudflare_proxied: r.data.cloudflare_proxied ?? true,
         company_country: r.data.company_country || "",
         company_name: r.data.company_name || "",
         company_address: r.data.company_address || "",
@@ -1007,6 +1072,8 @@ function PlatformTab() {
       <SubdomainPoolWidget
         target={form.subdomain_pool_target}
         onTargetChange={(n) => setForm({ ...form, subdomain_pool_target: n })}
+        proxied={form.cloudflare_proxied}
+        onProxiedChange={(v) => setForm({ ...form, cloudflare_proxied: v })}
       />
 
       <Section
