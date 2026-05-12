@@ -86,7 +86,7 @@ export default function Pricing() {
         <div className="aurora-blob" style={{ bottom: "-10%", left: "-10%", height: 520, width: 520, background: "radial-gradient(circle, #6B4BFF 0%, transparent 55%)", animation: "aurora-1 32s ease-in-out infinite" }} />
       </div>
 
-      <header className="glass sticky top-0 z-30">
+      <header className="sticky top-0 z-30 bg-black/90 backdrop-blur-xl border-b border-zinc-900">
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/"><Logo /></Link>
           <nav className="flex items-center gap-3">
@@ -96,7 +96,7 @@ export default function Pricing() {
         </div>
       </header>
 
-      <section className="max-w-[1400px] mx-auto px-6 pt-20 pb-10 text-center relative">
+      <section className="max-w-[1400px] mx-auto px-6 pt-24 pb-12 text-center relative">
         <div className="absolute inset-0 -z-10 bg-grid opacity-25" />
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -109,7 +109,7 @@ export default function Pricing() {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="mt-4 font-display text-5xl lg:text-7xl tracking-tighter font-semibold"
+          className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-semibold leading-[1.05]"
         >
           Pay for outcomes,<br /> not config.
         </motion.h1>
@@ -117,9 +117,9 @@ export default function Pricing() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 }}
-          className="mt-5 text-zinc-400 max-w-xl mx-auto"
+          className="mt-6 text-sm sm:text-base text-zinc-400 max-w-md mx-auto"
         >
-          Cancel any time. Every plan includes monitoring, alerts, custom domains, and a 24/7 build queue.
+          Cancel any time. Monitoring, alerts, custom domains and a 24/7 build queue on every plan.
         </motion.p>
       </section>
 
