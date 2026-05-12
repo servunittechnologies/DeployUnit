@@ -197,7 +197,11 @@ async def deployment_watchdog():
 async def _retry_transient_deployment(db, app: dict) -> None:
     """Re-trigger the most recent failed deployment when the failure was a
     known build-engine race condition (Docker 'No such container', network
-    cleanup glitches, etc). Capped at 1 auto-retry per row to prevent loops.
+    cleanup glitches, etc).
+
+    Strategy: call `coolify.stop()` first so the build engine drops any stale
+    helper-container references, wait a few seconds, then deploy(force=True).
+    Capped at 1 auto-retry per row to prevent loops.
     """
     failed = await db.deployments.find_one(
         {"app_id": app["id"], "status": "failed"},
@@ -213,7 +217,7 @@ async def _retry_transient_deployment(db, app: dict) -> None:
     if not coolify_uuid:
         return
     logger.info(
-        "auto-retry: transient failure on app=%s deployment=%s — retriggering build engine",
+        "auto-retry: transient failure on app=%s deployment=%s — clearing build-engine state then redeploying",
         app["id"], failed["id"],
     )
     await db.deployments.update_one(
@@ -221,10 +225,21 @@ async def _retry_transient_deployment(db, app: dict) -> None:
         {
             "$set": {"status": "building", "finished_at": None, "failure_transient": True},
             "$inc": {"auto_retry_count": 1},
-            "$push": {"logs": "[AUTO-RETRY] transient build-engine error — retrying"},
+            "$push": {"logs": "[AUTO-RETRY] clearing stale build-engine state…"},
         },
     )
     try:
+        # Step 1 — Stop the app so the build engine releases any stale
+        # helper-container UUID it had cached for this resource.
+        await coolify.stop(coolify_uuid)
+        # Step 2 — Give it ~3s to fully tear down and update its internal state.
+        await asyncio.sleep(3)
+        # Step 3 — Force a clean redeploy. force=true tells Coolify to skip
+        # any "already running" short-circuits and rebuild from scratch.
+        await db.deployments.update_one(
+            {"id": failed["id"]},
+            {"$push": {"logs": "[AUTO-RETRY] retriggering deploy from clean state"}},
+        )
         res = await coolify.deploy(coolify_uuid, force=True)
         new_uuid = (res or {}).get("deployment_uuid") or (res or {}).get("uuid")
         if new_uuid:

@@ -23,6 +23,7 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingCommits, setLoadingCommits] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cleanBuild, setCleanBuild] = useState(false);
 
   useEffect(() => {
     if (!open || !app) return;
@@ -52,8 +53,9 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
     try {
       const body = { branch };
       if (commitSha) body.commit_sha = commitSha;
+      if (cleanBuild) body.clean_build = true;
       const { data } = await api.post(`/apps/${app.id}/redeploy`, body);
-      toast.success(`Deployment started · ${branch}${commitSha ? ` @ ${commitSha.slice(0, 7)}` : ""}`);
+      toast.success(`Deployment started · ${branch}${commitSha ? ` @ ${commitSha.slice(0, 7)}` : ""}${cleanBuild ? " · clean build" : ""}`);
       onDeployed?.(data);
       onClose?.();
     } catch (e) {
@@ -167,6 +169,24 @@ export default function DeployModal({ app, open, onClose, onDeployed }) {
               {!commitSha && <span className="ml-3 text-zinc-500">@ HEAD</span>}
             </div>
           </div>
+
+          {/* Force clean build — for recurring "No such container" loops */}
+          <label className="flex items-start gap-2.5 cursor-pointer p-3 border border-white/[0.06] hover:border-white/[0.12] transition-colors" data-testid="deploy-clean-build-label">
+            <input
+              type="checkbox"
+              checked={cleanBuild}
+              onChange={(e) => setCleanBuild(e.target.checked)}
+              className="mt-0.5 accent-brand"
+              data-testid="deploy-clean-build-checkbox"
+            />
+            <div className="text-xs">
+              <div className="font-mono text-zinc-300">Force clean build</div>
+              <div className="font-mono text-[11px] text-zinc-500 mt-0.5">
+                Stop the app first so the build engine drops stale helper-container state.
+                Use this when the previous deploy looped on "No such container" errors. Adds ~3s.
+              </div>
+            </div>
+          </label>
 
           <div className="flex gap-2">
             <button

@@ -207,6 +207,13 @@ class CoolifyClient:
     async def restart(self, app_uuid: str) -> Optional[dict]:
         return await self._request("GET", f"/applications/{app_uuid}/restart")
 
+    async def stop(self, app_uuid: str) -> Optional[dict]:
+        """Stop the running app container. Used to clear stale state before a
+        force redeploy when the build engine references a missing helper
+        container ("No such container: <uuid>") — Coolify holds onto that
+        UUID until the app is explicitly stopped or restarted."""
+        return await self._request("GET", f"/applications/{app_uuid}/stop")
+
     async def delete_application(self, app_uuid: str) -> Optional[dict]:
         """Remove an application from Coolify (also tears down its container)."""
         return await self._request(

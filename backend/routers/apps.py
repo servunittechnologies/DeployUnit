@@ -105,14 +105,29 @@ async def _trigger_coolify_deploy_with_retry(
 
 
 async def _redeploy_background(
-    app_id: str, deployment_id: str, coolify_uuid: str, coolify_patch: dict | None = None
+    app_id: str, deployment_id: str, coolify_uuid: str,
+    coolify_patch: dict | None = None, clean_build: bool = False,
 ) -> None:
     """Background task for /redeploy: refresh the Coolify app's git_repository
     with a fresh GitHub token (so subscription / rotation works), apply any
     branch/commit patch, then call deploy with retries. Runs outside the HTTP
-    request so the API returns in <100ms."""
+    request so the API returns in <100ms.
+
+    When `clean_build=True`, first stop the app so the build engine releases
+    any stale helper-container UUIDs it cached (cures recurring
+    "No such container: <uuid>" loops). Adds ~3s latency but is the only way
+    to break that specific stuck state.
+    """
     db = get_db()
     app = await db.apps.find_one({"id": app_id})
+    if clean_build:
+        await _append_log(deployment_id, "[CLEAN] stopping app to clear stale build-engine state…")
+        try:
+            await coolify.stop(coolify_uuid)
+            await asyncio.sleep(3)
+            await _append_log(deployment_id, "[CLEAN] build-engine state cleared — proceeding with deploy")
+        except Exception as e:
+            await _append_log(deployment_id, f"[CLEAN] stop step failed (continuing anyway): {str(e)[:140]}")
     patch = dict(coolify_patch or {})
     # Apps on the private-deploy-key flow don't need URL rewrites — the SSH
     # key is permanent and Coolify keeps `git_repository` as the SSH form.
@@ -823,6 +838,7 @@ async def redeploy(app_id: str, request: Request, background: BackgroundTasks, p
             deploy_doc["id"],
             app["coolify_app_uuid"],
             coolify_patch or None,
+            payload.clean_build,
         )
     else:
         background.add_task(_coolify_deploy, app_id, deploy_doc["id"])

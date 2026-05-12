@@ -132,6 +132,7 @@ class RedeployIn(BaseModel):
     branch: Optional[str] = None
     commit_sha: Optional[str] = None
     commit_message: Optional[str] = None
+    clean_build: bool = False  # stop the app first so the build engine drops stale helper-container references — slower but cures recurring "No such container" loops
 
 
 # ============ Deployment ============
