@@ -202,10 +202,37 @@ class CoolifyClient:
         return {"updated": results}
 
     async def update_application(self, app_uuid: str, payload: dict) -> Optional[dict]:
-        return await self._request("PATCH", f"/applications/{app_uuid}", json=payload)
+        """PATCH an application. Coolify v4 quirk: to update the FQDN you MUST
+        send `domains` (comma-separated, with https:// prefix), NOT `fqdn`.
+        We auto-translate `fqdn` → `domains` here so callers don't have to
+        remember. Note: even after a successful PATCH Coolify does NOT
+        regenerate the Traefik labels — a subsequent deploy(force=True) is
+        required for the new domain to actually start serving traffic.
+        See: github.com/coollabsio/coolify/issues/6281
+        """
+        body = dict(payload or {})
+        if "fqdn" in body and "domains" not in body:
+            body["domains"] = body.pop("fqdn")
+        return await self._request("PATCH", f"/applications/{app_uuid}", json=body)
+
+    async def set_domains(self, app_uuid: str, domains: str | list[str]) -> Optional[dict]:
+        """Set the application's public domains. Accepts a single string with
+        commas, a list of strings, or a single FQDN. Each entry should include
+        the scheme (https://) — Coolify uses it to decide whether to issue SSL.
+        """
+        if isinstance(domains, list):
+            csv = ",".join(d.strip() for d in domains if d and d.strip())
+        else:
+            csv = (domains or "").strip()
+        if not csv:
+            return None
+        return await self._request("PATCH", f"/applications/{app_uuid}", json={"domains": csv})
 
     async def restart(self, app_uuid: str) -> Optional[dict]:
-        return await self._request("GET", f"/applications/{app_uuid}/restart")
+        """Restart the application container. Coolify v4 uses POST for this
+        (older versions accepted GET). Use this to bounce a container when
+        only env-vars or labels changed."""
+        return await self._request("POST", f"/applications/{app_uuid}/restart")
 
     async def stop(self, app_uuid: str) -> Optional[dict]:
         """Stop the running app container. Used to clear stale state before a

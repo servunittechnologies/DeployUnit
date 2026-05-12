@@ -72,6 +72,21 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Routing healer v2: ECHTE fix na Coolify v4 quirk + probe blind spot**
+  - **Bug 1 — fout PATCH veld**: `coolify.update_application({fqdn: "https://..."})` werd door Coolify v4 **stilletjes genegeerd**. Coolify v4 verwacht **`domains`** (komma-gescheiden, met `https://` prefix), zie [coollabsio/coolify#6281](https://github.com/coollabsio/coolify/issues/6281). De PATCH gaf 200 OK terug maar `fqdn` werd niet opgeslagen → Traefik kreeg nooit een route. Fix: nieuwe `coolify.set_domains(uuid, fqdn)` helper + auto-vertaling `{fqdn}` → `{domains}` in `update_application` voor backwards-compat.
+  - **Bug 2 — restart regenereert geen labels**: Coolify slaat Traefik labels op als base64-encoded blob in de DB (`custom_labels`). Een container-restart leest de OUDE labels van de DB → Traefik blijft de oude (lege) route serveren. Pas een **`deploy(force=true)`** triggert Coolify om labels te regenereren vanuit de nieuwe `domains`. Healer doet nu force-redeploy i.p.v. restart.
+  - **Bug 3 — `restart` endpoint method**: Coolify v4 wil **POST** voor `/applications/{uuid}/restart` (oudere versies accepteerden GET). Geüpdatet in `clients/coolify.py`.
+  - **Bug 4 — probe blind spot**: oude `_probe_traefik_route` keek alleen naar (a) TLS default cert via httpx-internals (onbetrouwbaar) en (b) 404+Traefik-body. Maar 503/502/504 (backend down, route exists) werd geclassificeerd als `routed:true` → de healer triggerde nooit op echte productie cases. Probe herschreven met:
+    - Directe `asyncio.open_connection` TLS handshake (geen httpx internals)
+    - 502/503/504 → `reason: backend_down`
+    - HTTP fallback wanneer HTTPS faalt
+    - Probe getest tegen live productie URL `8rrwaumc.deployunit.app` → correct `routed:false, reason:no_route, status:404`
+  - **Nieuwe diagnostic endpoint** `GET /api/admin/routing/inspect?fqdn=...`: returnt DNS resolution + Traefik probe + DeployUnit app + pool entry + Coolify raw record (fqdn/domains/status/is_running/custom_labels_set). In één call zie je waar de keten breekt.
+  - **Heal flow**: `heal_app()` keert nu direct terug na het triggeren van de force-redeploy (geen 6s sleep meer want Coolify build duurt 30-90s). Response bevat `eta_seconds:60` + duidelijke message. Pool widget polling (15s) detecteert auto wanneer probe routed:true wordt.
+  - **Files**: `clients/coolify.py` (set_domains + auto-vertaling + restart POST), `services/routing_healer.py` (probe rewrite + force-redeploy strategie), `routers/admin.py` (+`/admin/routing/inspect` endpoint), `routers/apps.py` (create flow gebruikt set_domains).
+  - **Voor de gebruiker**: na "Save to GitHub" + redeploy productie zal de scheduler binnen 2 min `8rrwaumc.deployunit.app` (en alle andere broken URLs) detecteren, force-redeployen en in 30-90s zijn ze live met Let's Encrypt SSL.
+
+
 - **2026-05-12 — Routing self-healer: permanent fix voor "no available server" / no SSL (11/11 backend green)**
   - **Probleem in productie**: `8rrwaumc.deployunit.app` (een geclaimde pool-URL) toonde `404 page not found` (Traefik) + `CN=TRAEFIK DEFAULT CERT`. DNS resolveerde correct naar `149.12.246.205`, poorten 80/443 open, Coolify draait — **Traefik miste alleen de route-labels op de container**. Klassiek symptoom: `coolify.update_application({fqdn})` PATCHt het veld in Coolify maar de live container heeft de docker-labels niet bijgewerkt (labels worden enkel bij container-start gelezen).
   - **Permanente fix** — nieuwe `services/routing_healer.py`:

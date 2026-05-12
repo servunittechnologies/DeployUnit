@@ -45,89 +45,130 @@ def _now() -> str:
 
 
 async def _probe_traefik_route(fqdn: str) -> dict:
-    """Test if Traefik has a route for this FQDN. Returns one of:
-      {"routed": True}                            → real app responding
+    """Test if Traefik has a HEALTHY route for this FQDN. Returns one of:
+      {"routed": True}                            → real app responding 2xx/3xx
       {"routed": False, "reason": "default_cert"} → Traefik serves default cert
       {"routed": False, "reason": "no_route"}     → 404 with Traefik fingerprint
+      {"routed": False, "reason": "backend_down"} → 502/503/504 (route exists,
+                                                    container is gone/crashed)
       {"routed": False, "reason": "unreachable"}  → connection failed
     """
-    url_https = f"https://{fqdn}/"
-    url_http = f"http://{fqdn}/"
-    # 1) Try HTTPS first and capture the cert subject. We use a context that
-    #    accepts self-signed so we can SEE the Traefik default cert.
+    # 1) Direct TLS handshake on port 443 — read the cert subject WITHOUT
+    #    httpx internals. If the server presents the Traefik default cert,
+    #    Traefik has no router matching this hostname → ALWAYS broken.
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        async with httpx.AsyncClient(verify=ctx, timeout=6.0, follow_redirects=False) as cli:
-            r = await cli.get(url_https)
-            # Grab the peer cert subject through the underlying transport.
-            try:
-                peer = r.extensions.get("network_stream").get_extra_info("ssl_object")
-                if peer:
-                    subj = dict(x[0] for x in peer.getpeercert().get("subject", []))
-                    cn = subj.get("commonName", "")
-                    if cn == TRAEFIK_DEFAULT_CERT_CN:
-                        return {"routed": False, "reason": "default_cert"}
-            except Exception:
-                pass  # fall through to body check
-            # If we get a Let's Encrypt cert AND a non-404 response, app is routed
-            if r.status_code == 404 and TRAEFIK_NO_ROUTE_BODY in (r.content or b""):
-                return {"routed": False, "reason": "no_route"}
-            return {"routed": True}
-    except httpx.HTTPError:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(fqdn, 443, ssl=ctx, server_hostname=fqdn),
+            timeout=6.0,
+        )
+        peer_cert = writer.get_extra_info("peercert") or {}
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        subj = dict(x[0] for x in peer_cert.get("subject", []))
+        cn = subj.get("commonName", "")
+        if cn == TRAEFIK_DEFAULT_CERT_CN:
+            return {"routed": False, "reason": "default_cert", "cert_cn": cn}
+    except (asyncio.TimeoutError, OSError, ssl.SSLError):
+        # TLS handshake failed entirely → fall through to HTTP probe to
+        # diagnose further (port 80 may still tell us what's wrong).
         pass
-    # 2) HTTPS failed entirely — try plain HTTP to see if Traefik is up at all.
+
+    # 2) HTTP probe — Traefik default 404 has a precise fingerprint.
     try:
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=False) as cli:
-            r = await cli.get(url_http)
-            if r.status_code == 404 and TRAEFIK_NO_ROUTE_BODY in (r.content or b""):
-                return {"routed": False, "reason": "no_route"}
-            # Any redirect to HTTPS or 200 means there's *some* route
-            if r.status_code in (301, 302, 308, 200):
-                return {"routed": True}
-            return {"routed": False, "reason": "no_route"}
-    except httpx.HTTPError:
-        return {"routed": False, "reason": "unreachable"}
+            r = await cli.get(f"http://{fqdn}/")
+            body = r.content or b""
+            if r.status_code in (502, 503, 504):
+                return {"routed": False, "reason": "backend_down", "status": r.status_code}
+            if r.status_code == 404 and TRAEFIK_NO_ROUTE_BODY in body:
+                return {"routed": False, "reason": "no_route", "status": 404}
+            if r.status_code in (200, 301, 302, 307, 308):
+                return {"routed": True, "status": r.status_code}
+    except httpx.HTTPError as e:
+        # 3) HTTP failed → try HTTPS one more time as a fallback (cert may
+        #    still be default, that's ok — we just need to see the status).
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            async with httpx.AsyncClient(verify=ctx, timeout=6.0, follow_redirects=False) as cli:
+                r = await cli.get(f"https://{fqdn}/")
+                if r.status_code in (502, 503, 504):
+                    return {"routed": False, "reason": "backend_down", "status": r.status_code}
+                if r.status_code in (200, 301, 302, 307, 308):
+                    return {"routed": True, "status": r.status_code}
+        except httpx.HTTPError:
+            return {"routed": False, "reason": "unreachable", "error": str(e)[:160]}
+        return {"routed": False, "reason": "unreachable", "error": str(e)[:160]}
+
+    # 4) Anything else we got an HTTP response for but can't classify → treat
+    #    as broken so the healer at least gives it a shot.
+    return {"routed": False, "reason": "no_route", "status": getattr(r, "status_code", None)}
 
 
 async def _push_fqdn_and_restart(app: dict) -> dict:
-    """Re-push the FQDN to Coolify and restart the container. Returns a
-    structured report. Idempotent."""
+    """Re-push the FQDN to Coolify and FORCE-REDEPLOY so the Traefik labels
+    actually regenerate. Returns a structured report. Idempotent.
+
+    Coolify v4 background (gotcha that caused the entire bug):
+      * The PATCH field is `domains` (NOT `fqdn`).
+      * Even after a successful PATCH, Coolify does NOT auto-regenerate the
+        container's custom_labels — restart alone leaves Traefik with the OLD
+        labels. ONLY a fresh deploy(force=true) regenerates labels from the
+        new fqdn and writes them onto the new container.
+      * See: github.com/coollabsio/coolify/issues/6281
+    """
     fqdn = app.get("cloudflare_fqdn")
     coolify_uuid = app.get("coolify_app_uuid")
     if not fqdn or not coolify_uuid:
         return {"action": "noop", "reason": "missing fqdn or coolify uuid"}
     desired = f"https://{fqdn}"
-    # 1) PATCH the FQDN on the application.
+    # 1) PATCH `domains` on the application (the Coolify v4 way).
     try:
-        await coolify.update_application(coolify_uuid, {"fqdn": desired})
+        await coolify.set_domains(coolify_uuid, desired)
     except Exception as e:
         return {"action": "patch_failed", "error": str(e)[:200]}
     # 2) Verify the patch landed.
     info = await coolify.get_application(coolify_uuid)
     if not info:
         return {"action": "verify_failed", "reason": "app gone on build engine"}
-    landed = (info.get("fqdn") or "").split(",")[0].strip()
-    if landed != desired and fqdn not in landed:
-        # Coolify silently ignored the PATCH — log it but continue with restart.
+    landed = (info.get("fqdn") or info.get("domains") or "").split(",")[0].strip()
+    if landed and (landed != desired and fqdn not in landed):
         logger.warning(
-            "routing-healer: Coolify did not accept fqdn for %s (wanted=%s got=%s)",
+            "routing-healer: Coolify did not accept domains for %s (wanted=%s got=%s)",
             app.get("id"), desired, landed,
         )
-    # 3) Restart the container so Traefik re-reads the docker labels. This
-    #    is the step that ACTUALLY fixes the "no route" symptom — a simple
-    #    PATCH doesn't relabel a running container.
+    # 3) FORCE REDEPLOY — this is the step that ACTUALLY fixes routing. A
+    #    restart only bounces the container with the OLD labels; a force
+    #    redeploy makes Coolify regenerate the docker labels from the new
+    #    domains and ship them with a fresh container.
     try:
-        await coolify.restart(coolify_uuid)
+        res = await coolify.deploy(coolify_uuid, force=True)
     except Exception as e:
-        return {"action": "restart_failed", "error": str(e)[:200], "landed_fqdn": landed}
-    return {"action": "healed", "landed_fqdn": landed or desired}
+        return {"action": "deploy_failed", "error": str(e)[:200], "landed_fqdn": landed}
+    deploy_uuid = (res or {}).get("deployment_uuid") or (res or {}).get("uuid")
+    return {
+        "action": "healed",
+        "landed_fqdn": landed or desired,
+        "deployment_uuid": deploy_uuid,
+        "note": "Forced redeploy — Traefik labels will be regenerated. SSL cert issuance can take 30-60s after the container is up.",
+    }
 
 
 async def heal_app(app_id: str) -> dict:
     """Public entrypoint — heal a single app's routing. Used by the admin
     "Heal" button and by the background healer.
+
+    Returns immediately after triggering the force-redeploy. The actual route
+    becomes live 30-90s later when the new container is up + Traefik picks up
+    the regenerated labels + Let's Encrypt issues the cert. The widget's 15s
+    poll loop will reflect the change automatically.
     """
     db = get_db()
     app = await db.apps.find_one({"id": app_id}, {"_id": 0})
@@ -138,12 +179,8 @@ async def heal_app(app_id: str) -> dict:
         return {"ok": False, "error": "app has no Cloudflare FQDN"}
     probe = await _probe_traefik_route(fqdn)
     if probe.get("routed"):
-        return {"ok": True, "already_healthy": True, "fqdn": fqdn}
+        return {"ok": True, "already_healthy": True, "fqdn": fqdn, "before": probe}
     report = await _push_fqdn_and_restart(app)
-    # Re-probe briefly after restart (Traefik picks up new labels in ~3-5s)
-    await asyncio.sleep(6)
-    after = await _probe_traefik_route(fqdn)
-    healed_at = _now() if after.get("routed") else None
     await db.apps.update_one(
         {"id": app_id},
         {"$set": {
@@ -151,15 +188,15 @@ async def heal_app(app_id: str) -> dict:
             "routing_last_probe_reason": probe.get("reason"),
             "routing_last_heal_action": report.get("action"),
             "routing_last_heal_at": _now(),
-            "routing_last_healed_at": healed_at,
         }},
     )
     return {
-        "ok": after.get("routed", False),
+        "ok": report.get("action") == "healed",
         "fqdn": fqdn,
         "before": probe,
         "action": report,
-        "after": after,
+        "eta_seconds": 60,
+        "message": "Force-redeploy triggered. Traefik routes + SSL cert will be live in 30-90s.",
     }
 
 

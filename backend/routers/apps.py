@@ -386,16 +386,18 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
         await _append_log(deployment_id, f"[BUILD] application created (uuid={coolify_uuid})")
 
     # Tell Coolify about the auto-provisioned subdomain so Traefik issues SSL.
-    # Verify the PATCH actually landed (Coolify v4 silently 200s on rejected
-    # fields). If it didn't, we restart the container anyway — Traefik
-    # re-reads docker labels on container start which is what actually
-    # registers the route end-to-end.
+    # Coolify v4 quirk: the field is `domains` (not `fqdn`) AND the labels
+    # only regenerate on a fresh deploy — not a PATCH. Since this is the
+    # initial create flow, the subsequent coolify.deploy() call later in
+    # _coolify_deploy() will regenerate labels correctly. No need to force-
+    # redeploy here, just set the domain and let the existing deploy do the
+    # work.
     if app.get("cloudflare_fqdn"):
         desired_fqdn = f"https://{app['cloudflare_fqdn']}"
         try:
-            await coolify.update_application(coolify_uuid, {"fqdn": desired_fqdn})
+            await coolify.set_domains(coolify_uuid, desired_fqdn)
             check = await coolify.get_application(coolify_uuid)
-            landed = ((check or {}).get("fqdn") or "").split(",")[0].strip()
+            landed = ((check or {}).get("fqdn") or (check or {}).get("domains") or "").split(",")[0].strip()
             if landed and (landed == desired_fqdn or app["cloudflare_fqdn"] in landed):
                 if deployment_id:
                     await _append_log(
@@ -403,7 +405,7 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
                     )
             else:
                 # Retry once with explicit JSON body shape.
-                await coolify.update_application(coolify_uuid, {"fqdn": desired_fqdn})
+                await coolify.set_domains(coolify_uuid, desired_fqdn)
                 if deployment_id:
                     await _append_log(
                         deployment_id, f"[BUILD] domain re-pushed: {app['cloudflare_fqdn']}"

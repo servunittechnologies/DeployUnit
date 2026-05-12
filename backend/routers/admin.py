@@ -368,3 +368,72 @@ async def admin_run_routing_healer(request: Request):
     await _require_admin(request)
     from services.routing_healer import routing_healer_tick
     return await routing_healer_tick()
+
+
+
+@router.get("/admin/routing/inspect")
+async def admin_inspect_routing(fqdn: str, request: Request):
+    """Deep-inspect one FQDN end-to-end. Returns DNS resolution, Traefik
+    probe result, the DeployUnit app that claims it (if any), the raw
+    Coolify application record, and the pool entry. Use this when "Heal
+    routing" doesn't fix it and you need to see exactly which link in the
+    chain is broken."""
+    await _require_admin(request)
+    import socket as _sock
+    from services.routing_healer import _probe_traefik_route
+    from clients.coolify import coolify as _coolify
+
+    fqdn = (fqdn or "").strip().lstrip("https://").lstrip("http://").rstrip("/")
+    out: dict = {"fqdn": fqdn}
+
+    # 1) DNS resolution
+    try:
+        out["dns"] = {"ips": _sock.gethostbyname_ex(fqdn)[2]}
+    except Exception as e:
+        out["dns"] = {"error": str(e)[:160]}
+
+    # 2) Traefik probe
+    out["traefik_probe"] = await _probe_traefik_route(fqdn)
+
+    # 3) DeployUnit app that claims this FQDN
+    db = get_db()
+    app = await db.apps.find_one(
+        {"cloudflare_fqdn": fqdn},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "status": 1, "workspace_id": 1,
+         "coolify_app_uuid": 1, "cloudflare_dns_record_id": 1, "primary_url": 1,
+         "routing_last_probe_reason": 1, "routing_last_heal_action": 1, "routing_last_heal_at": 1, "routing_heal_attempts": 1},
+    )
+    out["app"] = app or None
+
+    # 4) Pool entry
+    pool = await db.cloudflare_subdomain_pool.find_one(
+        {"fqdn": fqdn},
+        {"_id": 0, "status": 1, "record_id": 1, "app_id": 1, "created_at": 1, "claimed_at": 1, "record_type": 1, "on_demand": 1},
+    )
+    out["pool_entry"] = pool or None
+
+    # 5) Coolify raw application record (if we have a uuid)
+    if app and app.get("coolify_app_uuid"):
+        info = await _coolify.get_application(app["coolify_app_uuid"])
+        if info:
+            # Keep only the fields that matter for routing diagnostics — full
+            # Coolify objects are huge.
+            out["coolify"] = {
+                "uuid": info.get("uuid"),
+                "name": info.get("name"),
+                "status": info.get("status"),
+                "fqdn": info.get("fqdn"),
+                "domains": info.get("domains"),
+                "ports_exposes": info.get("ports_exposes"),
+                "custom_labels_set": bool(info.get("custom_labels")),
+                "is_running": info.get("is_running"),
+                "is_static": info.get("is_static"),
+                "is_http_basic_auth_enabled": info.get("is_http_basic_auth_enabled"),
+                "redirect": info.get("redirect"),
+            }
+        else:
+            out["coolify"] = {"error": "app uuid set but Coolify returned no record (deleted on build engine?)"}
+    else:
+        out["coolify"] = None
+
+    return out
