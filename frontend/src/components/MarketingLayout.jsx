@@ -6,10 +6,7 @@ import Logo from "./Logo";
 const NAV_LINKS = [
   { to: "/#features", label: "Features", testId: "marketing-nav-features" },
   { to: "/#compare",  label: "Compare",  testId: "marketing-nav-compare" },
-  { to: "/about",     label: "About",    testId: "marketing-nav-about" },
   { to: "/pricing",   label: "Pricing",  testId: "marketing-nav-pricing" },
-  { to: "/support",   label: "Support",  testId: "marketing-nav-support" },
-  { to: "/contact",   label: "Contact",  testId: "marketing-nav-contact" },
 ];
 
 const FOOTER_COLS = [

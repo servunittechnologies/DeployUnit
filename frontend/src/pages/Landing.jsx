@@ -91,10 +91,7 @@ function Nav() {
   const links = [
     ["Features",  "#features",  true],
     ["Compare",   "#compare",   true],
-    ["About",     "/about",     false],
     ["Pricing",   "/pricing",   false],
-    ["Support",   "/support",   false],
-    ["Contact",   "/contact",   false],
   ];
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-zinc-800">
@@ -105,10 +102,7 @@ function Nav() {
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <a href="#features" className="text-zinc-300 hover:text-white" data-testid="nav-features">Features</a>
           <a href="#compare" className="text-zinc-300 hover:text-white" data-testid="nav-compare">Compare</a>
-          <Link to="/about" className="text-zinc-300 hover:text-white" data-testid="nav-about">About</Link>
           <Link to="/pricing" className="text-zinc-300 hover:text-white" data-testid="nav-pricing">Pricing</Link>
-          <Link to="/support" className="text-zinc-300 hover:text-white" data-testid="nav-support">Support</Link>
-          <Link to="/contact" className="text-zinc-300 hover:text-white" data-testid="nav-contact">Contact</Link>
           <Link to="/login" className="text-zinc-300 hover:text-white" data-testid="nav-login">Log in</Link>
         </nav>
         <div className="flex items-center gap-2">
