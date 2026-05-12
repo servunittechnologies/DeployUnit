@@ -3,41 +3,123 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#000000" />
-        <meta name="description" content="A product of emergent.sh" />
+        <meta name="theme-color" content="#0a0a0c" />
+        <meta name="color-scheme" content="dark" />
+
+        <!-- ──────── Primary SEO ──────── -->
+        <title>DeployUnit — Ship Next.js & Node apps in 2 clicks · EU hosting platform</title>
+        <meta
+            name="description"
+            content="DeployUnit is the EU-hosted shipping platform for Next.js and Node.js. Connect your private GitHub repo, get a live URL in 90 seconds with instant SSL, EU data residency, web analytics and credit-based pricing. No vendor lock-in."
+        />
+        <meta
+            name="keywords"
+            content="Next.js hosting, Node.js hosting, EU PaaS, GDPR-compliant hosting, Vercel alternative, Railway alternative, agency hosting, white-label hosting, GitHub deploy, instant SSL, edge hosting Belgium, deploy Next.js EU"
+        />
+        <meta name="author" content="ServUnit Technologies BV" />
+        <meta name="robots" content="index, follow, max-image-preview:large" />
+        <link rel="canonical" href="https://deployunit.com/" />
+
+        <!-- ──────── Open Graph (WhatsApp, Slack, LinkedIn, Discord) ──────── -->
+        <meta property="og:site_name" content="DeployUnit" />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="en_US" />
+        <meta property="og:locale:alternate" content="nl_BE" />
+        <meta property="og:url" content="https://deployunit.com/" />
+        <meta property="og:title" content="DeployUnit — Ship Next.js & Node apps in 2 clicks" />
+        <meta
+            property="og:description"
+            content="Vercel-grade DX without the lock-in. Private GitHub → live URL in 90 seconds. EU-hosted, GDPR-clean, with instant SSL on every deploy."
+        />
+        <meta property="og:image" content="https://deployunit.com/og-image.png" />
+        <meta property="og:image:secure_url" content="https://deployunit.com/og-image.png" />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="DeployUnit — Ship Next.js & Node apps in two clicks" />
+
+        <!-- ──────── Twitter / X ──────── -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:site" content="@deployunit" />
+        <meta name="twitter:creator" content="@deployunit" />
+        <meta name="twitter:url" content="https://deployunit.com/" />
+        <meta name="twitter:title" content="DeployUnit — Ship Next.js & Node apps in 2 clicks" />
+        <meta
+            name="twitter:description"
+            content="Vercel-grade DX without the lock-in. Private GitHub → live URL in 90 seconds. EU-hosted, GDPR-clean."
+        />
+        <meta name="twitter:image" content="https://deployunit.com/og-image.png" />
+        <meta name="twitter:image:alt" content="DeployUnit — EU shipping platform for Next.js and Node.js" />
+
+        <!-- ──────── PWA / icons ──────── -->
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/site.webmanifest" />
+
+        <!-- ──────── Fonts ──────── -->
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-        <!--
-        manifest.json provides metadata used when your web app is installed on a
-        user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-        -->
-        <!--
-        Notice the use of %PUBLIC_URL% in the tags above.
-        It will be replaced with the URL of the `public` folder during the build.
-        Only files inside the `public` folder can be referenced from the HTML.
+        <link
+            href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
 
-        Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-        work correctly both with client-side routing and a non-root public URL.
-        Learn how to configure a non-root public URL by running `npm run build`.
-        -->
-        <title>DeployUnit — Ship Next.js & Node apps in 2 clicks</title>
-        <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
+        <!-- ──────── Structured data (JSON-LD) — drives the rich Google snippet ──────── -->
+        <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "SoftwareApplication",
+                "name": "DeployUnit",
+                "applicationCategory": "DeveloperApplication",
+                "operatingSystem": "Web",
+                "description": "EU-hosted shipping platform for Next.js and Node.js. Connect your private GitHub repo, get a live URL in 90 seconds with instant SSL, EU data residency and credit-based pricing.",
+                "url": "https://deployunit.com",
+                "image": "https://deployunit.com/og-image.png",
+                "offers": [
+                    {
+                        "@type": "Offer",
+                        "name": "Hobby",
+                        "price": "0",
+                        "priceCurrency": "EUR"
+                    },
+                    {
+                        "@type": "Offer",
+                        "name": "Pro",
+                        "price": "19",
+                        "priceCurrency": "EUR"
+                    }
+                ],
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "ServUnit Technologies BV",
+                    "url": "https://servunit.com"
+                }
+            }
+        </script>
+
+        <!-- Suppress a benign Chrome PerformanceServerTiming clone error. -->
+        <script>
+            window.addEventListener(
+                "error",
+                function (e) {
+                    if (
+                        e.error instanceof DOMException &&
+                        e.error.name === "DataCloneError" &&
+                        e.message &&
+                        e.message.includes("PerformanceServerTiming")
+                    ) {
+                        e.stopImmediatePropagation();
+                        e.preventDefault();
+                    }
+                },
+                true,
+            );
+        </script>
     </head>
     <body>
-        <noscript>You need to enable JavaScript to run this app.</noscript>
+        <noscript>You need to enable JavaScript to run DeployUnit.</noscript>
         <div id="root"></div>
-        <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
+        <!-- Product analytics — privacy-first, EU PoP. -->
         <script>
             !(function (t, e) {
                 var o, n, p, r;
@@ -102,7 +184,7 @@
             })(document, window.posthog || []);
             posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
                 api_host: "https://us.i.posthog.com",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
+                person_profiles: "identified_only",
                 session_recording: {
                     recordCrossOriginIframes: true,
                     capturePerformance: false,

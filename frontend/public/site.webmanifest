@@ -1,0 +1,14 @@
+{
+  "name": "DeployUnit",
+  "short_name": "DeployUnit",
+  "description": "EU-hosted shipping platform for Next.js and Node.js — Vercel-grade DX without the lock-in.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" },
+    { "src": "/og-image.png", "sizes": "1200x630", "type": "image/png", "purpose": "any" }
+  ]
+}

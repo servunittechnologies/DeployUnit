@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Logo from "../components/Logo";
 import { api } from "../lib/api";
+import useSeo from "../hooks/useSeo";
 
 /* ─────────────────────── Atoms ─────────────────────── */
 
@@ -185,6 +186,11 @@ function IncidentList({ title, items, empty, sev }) {
 /* ─────────────────────── Page ─────────────────────── */
 
 export default function Status() {
+  useSeo({
+    title: "System status — DeployUnit",
+    description: "Real-time status of the DeployUnit platform: build engine, DNS, SSL, payments, notifications.",
+    path: "/status",
+  });
   const [data, setData] = useState(null);
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);

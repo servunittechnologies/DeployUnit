@@ -15,6 +15,7 @@ import {
 import Logo from "../components/Logo";
 import ConstellationCanvas from "../components/ConstellationCanvas";
 import useTypewriter from "../hooks/useTypewriter";
+import useSeo from "../hooks/useSeo";
 
 /* ───────────────────────── Shared atoms ───────────────────────── */
 
@@ -1135,6 +1136,7 @@ function Compare() {
     { f: "PR previews",                dh: true, vc: true,  rd: true,      coolify: false },
     { f: "Managed support",            dh: true, vc: true,  rd: true,      coolify: false },
   ];
+  ];
 
   function Cell({ v }) {
     if (v === true) return <Check className="h-4 w-4 text-cyan-400 mx-auto" />;
@@ -1170,7 +1172,7 @@ function Compare() {
                 <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployUnit</th>
                 <th className="p-4 font-normal">Vercel</th>
                 <th className="p-4 font-normal">Render</th>
-                <th className="p-4 font-normal">Coolify (DIY)</th>
+                <th className="p-4 font-normal">Self-hosting (DIY)</th>
               </tr>
             </thead>
             <tbody>
@@ -1536,6 +1538,12 @@ function Footer() {
 /* ───────────────────────── Page ───────────────────────── */
 
 export default function Landing() {
+  useSeo({
+    title: "DeployUnit — Ship Next.js & Node apps in 2 clicks · EU hosting platform",
+    description:
+      "Vercel-grade DX without the lock-in. Connect your private GitHub repo, get a live URL in 90 seconds with instant SSL, EU data residency and credit-based pricing.",
+    path: "/",
+  });
   return (
     <div className="bg-black text-white min-h-screen">
       <Nav />

@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /api/
+Disallow: /login
+Disallow: /signup
+Disallow: /reset
+
+Sitemap: https://deployunit.com/sitemap.xml

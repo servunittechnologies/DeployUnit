@@ -7,6 +7,7 @@ import {
   Wrench,
 } from "lucide-react";
 import MarketingLayout from "../components/MarketingLayout";
+import useSeo from "../hooks/useSeo";
 
 function Section({ className = "", children }) {
   return <section className={`max-w-5xl mx-auto px-6 lg:px-8 ${className}`}>{children}</section>;
@@ -80,6 +81,11 @@ const QUICK_LINKS = [
 ];
 
 export default function Support() {
+  useSeo({
+    title: "Support — DeployUnit",
+    description: "FAQs, troubleshooting and direct ticket support for DeployUnit. EU-based response within one business day.",
+    path: "/support",
+  });
   const [q, setQ] = useState("");
   const filteredFaq = FAQ.filter((f) =>
     !q || f.q.toLowerCase().includes(q.toLowerCase()) || f.a.toLowerCase().includes(q.toLowerCase()),

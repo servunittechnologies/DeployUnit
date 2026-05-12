@@ -6,6 +6,7 @@ import {
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import MarketingLayout from "../components/MarketingLayout";
+import useSeo from "../hooks/useSeo";
 
 function Section({ className = "", children }) {
   return <section className={`max-w-5xl mx-auto px-6 lg:px-8 ${className}`}>{children}</section>;
@@ -64,6 +65,11 @@ const CONTACT = [
 ];
 
 export default function Contact() {
+  useSeo({
+    title: "Contact — DeployUnit",
+    description: "Reach the DeployUnit team in Belgium. Sales, support, partnerships — we reply within one business day.",
+    path: "/contact",
+  });
   const [form, setForm] = useState({
     name: "", email: "", company: "", kind: "general", subject: "", message: "",
   });

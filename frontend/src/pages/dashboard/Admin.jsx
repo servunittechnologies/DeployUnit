@@ -409,12 +409,12 @@ function MetricsAgentSection() {
 
       {/* Unmanaged containers are silently dropped at ingest — no more
           nagging warnings. The reconcile job (every 10 min) imports any
-          real Coolify resources that should be tracked. Show a tiny
+          real build engine resources that should be tracked. Show a tiny
           informational pill only if there's a backlog to look at. */}
       {(info.unmanaged_coolify_count ?? 0) > 0 && (
         <div className="bg-black/30 border border-white/[0.06] px-3 py-2 mb-4 text-[11px] font-mono text-zinc-400 flex items-center gap-2" data-testid="admin-agent-unmanaged">
           <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-          {info.unmanaged_coolify_count} Coolify resource{info.unmanaged_coolify_count === 1 ? "" : "s"} not yet imported to DeployUnit — they'll appear here on the next reconcile.
+          {info.unmanaged_coolify_count} build engine resource{info.unmanaged_coolify_count === 1 ? "" : "s"} not yet imported to DeployUnit — they'll appear here on the next reconcile.
         </div>
       )}
 
@@ -872,7 +872,7 @@ function SubdomainPoolWidget({ target, onTargetChange, proxied, onProxiedChange 
                 </span>
                 <span className="text-[11px] font-mono text-zinc-500 leading-relaxed block mt-1">
                   ON (recommended w/ Origin Cert): Cloudflare terminates TLS — instant SSL for every subdomain via your wildcard Origin Cert. No Let's Encrypt needed.<br />
-                  OFF: traffic hits Coolify Traefik directly — Traefik does Let's Encrypt per app (slower, can rate-limit).
+                  OFF: traffic hits the build engine directly — it does Let's Encrypt per app (slower, can rate-limit).
                 </span>
               </span>
             </label>

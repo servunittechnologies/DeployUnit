@@ -72,6 +72,32 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - Demo: `demo@deployunit.com` / `demo1234`
 
 ## Changelog
+- **2026-05-12 — Volledige SEO + link-preview pipeline + Emergent/Coolify rebrand voor share-ready v1**
+  - **OG image** (`public/og-image.png`, 1200×630, 64KB): donker thema met cyaan brand, headline "Ship Next.js & Node apps in two clicks", subheadline "Vercel-grade DX without the vendor lock-in", "deployunit.com" pill, EU-data residency credit-line. Gegenereerd via PIL-script (`/tmp/gen_og.py`). Werkt op WhatsApp, Slack, LinkedIn, Twitter/X, Discord, Facebook.
+  - **`public/index.html` volledig herschreven**:
+    - Verwijderd: `<script src="https://assets.emergent.sh/scripts/emergent-main.js">` + "A product of emergent.sh" description (de gebruiker wilde 0 Emergent-zichtbaarheid)
+    - Toegevoegd: complete primary SEO meta-set (title, description met 240 chars, keywords met EU+Vercel+Railway+agency keywords, author, robots, canonical)
+    - Toegevoegd: 11 OG meta tags (site_name, type, locale + nl_BE alternate, url, title, description, image + secure_url + type + dimensions + alt) — picture-perfect link previews
+    - Toegevoegd: 7 Twitter Card meta tags (summary_large_image, site, creator, url, title, description, image + alt)
+    - Toegevoegd: PWA manifest link + apple-touch-icon + theme-color + color-scheme=dark
+    - Toegevoegd: JSON-LD `SoftwareApplication` schema → Google rich-snippet met pricing (Hobby €0, Pro €19), publisher (ServUnit Technologies BV), category, description
+  - **Per-route SEO** — nieuwe `hooks/useSeo.js` updatet `<title>`, description, og:title, og:description, og:url, twitter:title, twitter:url + canonical link on the fly. Toegepast op Landing/Pricing/About/Contact/Support/Status — elke route heeft eigen titel & description voor Google indexing.
+  - **`public/robots.txt`** — staat Allow /, blokkeert /app/, /api/, /login, /signup, /reset (geen value in indexed auth-pages). Verwijst naar sitemap.
+  - **`public/sitemap.xml`** — 6 marketing-routes met priorities (`/` = 1.0, `/pricing` = 0.9, contact/about = 0.6, support/status = 0.5) en changefreq.
+  - **`public/site.webmanifest`** — PWA installable: brand-colored splash, og-image als install icon.
+  - **Coolify uit publieke UI verwijderd**:
+    - Landing pricing-comparison tabel kolom "Coolify (DIY)" → "Self-hosting (DIY)" (zelfde feature row data, neutrale term)
+    - Admin agent-info-pill: "Coolify resources" → "build engine resources"
+    - Cloudflare-proxy toggle hint: "Coolify Traefik" → "build engine" (admin-only, maar consistent)
+    - Backend logica/comments hebben nog `coolify_app_uuid` field names — die zijn internal-only en raken klanten niet, weglaten = veel werk zonder waarde
+  - **Tests**: `/og-image.png` returnt HTTP 200 PNG, HTML serveert volledig set OG + Twitter + JSON-LD + canonical, geen `emergent` strings meer in served HTML, sitemap.xml + robots.txt geserveerd correct. Visuele check OG image bevestigd via screenshot — strak op-brand.
+  - **Voor de user**: na "Save to GitHub" + redeploy productie kan hij `https://deployunit.com` delen op WhatsApp/Slack/Twitter/LinkedIn en het link preview toont:
+    - Title: "DeployUnit — Ship Next.js & Node apps in 2 clicks"
+    - Description: "Vercel-grade DX without the lock-in. Private GitHub → live URL in 90 seconds. EU-hosted, GDPR-clean."
+    - Image: gebrande dark OG image
+    - Voor Google: rich-snippet met Hobby/Pro prijzen + DeployUnit als SoftwareApplication
+
+
 - **2026-05-12 — WhatsApp volledig verwijderd uit notification stack**
   - **User keuze**: alleen **SMS / Email / Slack / Discord** als alerting channels.
   - **Backend**:

@@ -5,6 +5,7 @@ import {
   ArrowRight, Heart,
 } from "lucide-react";
 import MarketingLayout from "../components/MarketingLayout";
+import useSeo from "../hooks/useSeo";
 
 function Section({ id, className = "", children }) {
   return (
@@ -52,6 +53,11 @@ const TIMELINE = [
 ];
 
 export default function About() {
+  useSeo({
+    title: "About — DeployUnit",
+    description: "DeployUnit is a Belgium-based PaaS for European Next.js & Node.js teams. GDPR-clean, green-energy hosting, no vendor lock-in.",
+    path: "/about",
+  });
   return (
     <MarketingLayout>
       {/* Hero */}

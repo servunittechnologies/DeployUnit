@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
 import useSpotlight from "../hooks/useSpotlight";
+import useSeo from "../hooks/useSeo";
 
 const PLAN_ICON = { hobby: Sparkles, pro: Rocket, agency: Shield };
 
@@ -65,6 +66,11 @@ function PlanCard({ plan, onChoose, index }) {
 }
 
 export default function Pricing() {
+  useSeo({
+    title: "Pricing — DeployUnit",
+    description: "Transparent EU hosting pricing for Next.js & Node.js. Hobby is free forever. Pro from €19/mo. No vendor lock-in.",
+    path: "/pricing",
+  });
   const [plans, setPlans] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
