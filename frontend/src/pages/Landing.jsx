@@ -1136,7 +1136,6 @@ function Compare() {
     { f: "PR previews",                dh: true, vc: true,  rd: true,      coolify: false },
     { f: "Managed support",            dh: true, vc: true,  rd: true,      coolify: false },
   ];
-  ];
 
   function Cell({ v }) {
     if (v === true) return <Check className="h-4 w-4 text-cyan-400 mx-auto" />;
