@@ -1,0 +1,47 @@
+{
+  "summary": "End-to-end testing of the Cloudflare pre-warmed subdomain pool feature (backend + frontend). 13/13 pytest backend tests passed; all UI testids verified; target persistence + clamp behaviour confirmed via reload.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_subdomain_pool.py",
+    "/app/test_reports/pytest/pytest_iter15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/subdomains.py imports get_cloudflare_config from routers.admin and get_platform_settings is imported inside _pool_target — fine, but tight coupling between a service and a router is unusual; consider moving these helpers to a settings/cloudflare service module to avoid circular import risk as the codebase grows.",
+    "PlatformSettingsUpdate.subdomain_pool_target uses `int | None` with no Pydantic Field constraints (ge=0, le=50); clamp is applied only on the read path (pool_stats). The raw value (e.g. 999, -5) is therefore stored verbatim in MongoDB. Functionally OK (read-side clamp), but adding `Field(ge=0, le=50)` would reject obviously-bad input at write time with a clean 422 instead of silently saving garbage.",
+    "refill_pool / provision_subdomain run sequential `await create_dns_record` calls inside a `for` loop. For target=50 on a slow CF account this is 50 round-trips serial. Consider asyncio.gather with a small semaphore (or at minimum log refill duration) — not blocking now since target≤50 and refill runs in a 3-min scheduler."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_subdomain_pool.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13)",
+    "frontend": "100% (widget + persistence + clamp via API)"
+  },
+  "test_credentials": "admin@deployunit.com / admin123 ; demo@deployunit.com / demo1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Test creates no persistent fixtures. Side-effect during regression test temporarily set company_name='DeployUnit BV TEST'; restored to 'DeployUnit BV' via cleanup curl after run. subdomain_pool_target restored to its original value via fixture teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Cloudflare is intentionally NOT configured in this preview env. All pool API calls correctly return cloudflare_ready:false and added:0 — NOT a bug. Refill button is disabled in the UI in that state (confirmed). The subdomain_pool_target value is stored raw in platform_settings but clamped to [0,50] on read in services/subdomains._pool_target(); GET /api/admin/subdomain-pool returns the clamped value. Backend test_set_target_invalid_type_returns_422 passes (Pydantic 422 on non-int).",
+  "verified_behaviors": [
+    "GET /api/admin/subdomain-pool: 401 anon, 403 non-admin, 200 admin with full {free,claimed,target,hard_max=50,cloudflare_ready=false,zone_name,upcoming[]}",
+    "POST /api/admin/subdomain-pool/refill: 403 non-admin, 200 admin with {added:0, cloudflare_ready:false, ...stats} (no 500)",
+    "PUT /api/admin/platform-settings {subdomain_pool_target:20} persisted; GET pool returns target:20",
+    "PUT {subdomain_pool_target:999} stored raw; pool target clamped to 50",
+    "PUT {subdomain_pool_target:-5} pool target clamped to 0",
+    "PUT {subdomain_pool_target:0} pool target = 0 (disabled)",
+    "PUT {subdomain_pool_target:'abc'} returns 422 from Pydantic",
+    "Frontend Admin → Platform Domain tab: admin-subdomain-pool, pool-free-count ('0 / 10'), pool-health-label ('Cloudflare not configured'), admin-pool-target, admin-pool-refill all visible with correct data-testids",
+    "Refill button correctly disabled when cloudflare_ready=false",
+    "Changing pool target to 25 → Save → reload → widget shows '0 / 25' and input value persists as 25",
+    "Regression: GET /admin/platform-settings (no token leak), PUT without pool target preserves existing pool target, GET /admin/integrations returns full health snapshot"
+  ]
+}

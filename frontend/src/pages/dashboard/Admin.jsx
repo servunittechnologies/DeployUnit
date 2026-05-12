@@ -613,6 +613,123 @@ function ResourcesTab() {
 
 
 /* ─────────────────────── Platform Domain + Cloudflare ─────────────────────── */
+function SubdomainPoolWidget({ target, onTargetChange }) {
+  const [stats, setStats] = useState(null);
+  const [refilling, setRefilling] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    try {
+      const r = await api.get("/admin/subdomain-pool");
+      setStats(r.data);
+    } catch (e) {
+      console.warn("pool stats fail", e?.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+
+  const refill = async () => {
+    setRefilling(true);
+    try {
+      const r = await api.post("/admin/subdomain-pool/refill");
+      setStats(r.data);
+      if (r.data.added > 0) toast.success(`Pool refilled: +${r.data.added} new subdomain${r.data.added > 1 ? "s" : ""} ready`);
+      else if (!r.data.cloudflare_ready) toast.error("Cloudflare not configured — save the token + zone + target IP first.");
+      else toast.message("Pool is already at target — no refill needed.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setRefilling(false);
+    }
+  };
+
+  const free = stats?.free ?? 0;
+  const claimed = stats?.claimed ?? 0;
+  const tgt = stats?.target ?? target ?? 10;
+  const fillPct = tgt > 0 ? Math.min(100, Math.round((free / tgt) * 100)) : 0;
+  const healthColor = !stats?.cloudflare_ready ? "text-zinc-500" : free >= tgt ? "text-emerald-400" : free > 0 ? "text-amber-400" : "text-rose-400";
+  const healthLabel = !stats?.cloudflare_ready ? "Cloudflare not configured" : free >= tgt ? "Full — instant URLs ready" : free > 0 ? "Partially filled" : "Empty — next deploy will create on-demand";
+
+  return (
+    <Section
+      title="Instant URL pool (pre-warmed Cloudflare DNS)"
+      description="Holds a stash of pre-created DNS records so every new app gets a fully-propagated URL the moment it's deployed — no DNS waiting."
+    >
+      <div className="space-y-5" data-testid="admin-subdomain-pool">
+        {/* Stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="border border-white/[0.06] bg-black/40 p-4">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Free / target</div>
+            <div className="text-2xl font-mono font-medium mt-1 tabular-nums" data-testid="pool-free-count">
+              <span className={healthColor}>{loading ? "…" : free}</span>
+              <span className="text-zinc-600 text-lg"> / {tgt}</span>
+            </div>
+            <div className="mt-3 h-1 bg-white/5 overflow-hidden">
+              <div className={`h-full ${free >= tgt ? "bg-emerald-500/70" : free > 0 ? "bg-amber-500/70" : "bg-rose-500/40"}`} style={{ width: `${fillPct}%` }} />
+            </div>
+          </div>
+          <div className="border border-white/[0.06] bg-black/40 p-4">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Claimed</div>
+            <div className="text-2xl font-mono font-medium mt-1 tabular-nums">{loading ? "…" : claimed}</div>
+            <div className="text-[10px] font-mono text-zinc-600 mt-1">live apps holding a pooled URL</div>
+          </div>
+          <div className="border border-white/[0.06] bg-black/40 p-4 col-span-2 md:col-span-2">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Health</div>
+            <div className={`text-base font-medium mt-1 ${healthColor}`} data-testid="pool-health-label">{healthLabel}</div>
+            <div className="text-[10px] font-mono text-zinc-600 mt-1">
+              {stats?.zone_name ? <>Zone: <span className="text-zinc-400">{stats.zone_name}</span></> : "No zone configured"}
+            </div>
+          </div>
+        </div>
+
+        {/* Target + refill controls */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
+          <Field label={`Pool target (0–${stats?.hard_max ?? 50})`} hint="0 disables the pool. Higher = more instant URLs ready, slightly more Cloudflare API usage.">
+            <Input
+              type="number"
+              min={0}
+              max={stats?.hard_max ?? 50}
+              value={target}
+              onChange={(e) => onTargetChange(Math.max(0, Math.min(stats?.hard_max ?? 50, parseInt(e.target.value || "0", 10) || 0)))}
+              data-testid="admin-pool-target"
+            />
+          </Field>
+          <div className="text-[11px] font-mono text-zinc-500 leading-relaxed md:col-span-1">
+            Save platform settings to apply a new target — the scheduler refills automatically every 3 min, or click "Refill now" for an instant top-up.
+          </div>
+          <div className="flex md:justify-end">
+            <button
+              onClick={refill}
+              disabled={refilling || !stats?.cloudflare_ready}
+              className="px-4 py-2 border border-brand text-brand hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+              data-testid="admin-pool-refill"
+            >
+              {refilling ? "Refilling…" : "Refill now"}
+            </button>
+          </div>
+        </div>
+
+        {/* Upcoming preview */}
+        {stats?.upcoming?.length ? (
+          <div className="border-t border-white/[0.04] pt-4">
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 mb-2">Next in line (FIFO — oldest claimed first)</div>
+            <div className="flex flex-wrap gap-2" data-testid="pool-upcoming">
+              {stats.upcoming.map((u) => (
+                <span key={u.fqdn} className="text-[11px] font-mono px-2 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                  {u.fqdn}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Section>
+  );
+}
+
+
 function PlatformTab() {
   // Test sender component declared inline so it can reach api directly
   const MailerSendTester = ({ from_email_set, api_key_set }) => {
@@ -665,6 +782,7 @@ function PlatformTab() {
     cloudflare_zone_name: "",
     default_subdomain_target_ip: "",
     default_subdomain_target_host: "",
+    subdomain_pool_target: 10,
     company_country: "",
     company_name: "",
     company_address: "",
@@ -698,6 +816,7 @@ function PlatformTab() {
         cloudflare_zone_name: r.data.cloudflare_zone_name || "",
         default_subdomain_target_ip: r.data.default_subdomain_target_ip || "",
         default_subdomain_target_host: r.data.default_subdomain_target_host || "",
+        subdomain_pool_target: r.data.subdomain_pool_target ?? 10,
         company_country: r.data.company_country || "",
         company_name: r.data.company_name || "",
         company_address: r.data.company_address || "",
@@ -853,6 +972,11 @@ function PlatformTab() {
           </Field>
         </div>
       </Section>
+
+      <SubdomainPoolWidget
+        target={form.subdomain_pool_target}
+        onTargetChange={(n) => setForm({ ...form, subdomain_pool_target: n })}
+      />
 
       <Section
         title="Twilio (SMS + WhatsApp alerts)"

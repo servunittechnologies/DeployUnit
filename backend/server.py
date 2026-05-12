@@ -23,6 +23,7 @@ from services.metrics import downsample_and_gc
 from services.account_migration import migrate_accounts, needs_migration
 from services.pagespeed import daily_pagespeed_tick
 from services.analytics import gc as analytics_gc
+from services.subdomains import refill_pool as subdomain_refill_pool
 from routers.status import status_ping_tick
 
 from routers import (
@@ -100,7 +101,15 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(analytics_gc, "interval", hours=24, id="analytics_gc", replace_existing=True)
     # Public status page — ping every component every 60 seconds.
     scheduler.add_job(status_ping_tick, "interval", seconds=60, id="status_ping", replace_existing=True)
+    # Cloudflare subdomain pool — keep N pre-warmed DNS records so new apps
+    # get instantly-resolving URLs at creation time instead of waiting on
+    # DNS propagation. Tick every 3 min; refill is a no-op when full.
+    scheduler.add_job(subdomain_refill_pool, "interval", minutes=3, id="subdomain_pool_refill", replace_existing=True, max_instances=1)
     scheduler.start()
+    # Initial fill on boot (fire-and-forget) so the very first deploy after
+    # a restart doesn't have to wait 3 min for the first scheduler tick.
+    import asyncio as _asyncio
+    _asyncio.create_task(subdomain_refill_pool())
     logger.info("DeployUnit backend started")
     yield
     scheduler.shutdown(wait=False)

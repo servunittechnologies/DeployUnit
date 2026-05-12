@@ -118,6 +118,7 @@ class PlatformSettingsUpdate(BaseModel):
     cloudflare_zone_name: str | None = None   # root domain, e.g. "deployunit.com"
     default_subdomain_target_ip: str | None = None  # A-record target (Coolify server IP)
     default_subdomain_target_host: str | None = None  # optional CNAME target
+    subdomain_pool_target: int | None = None  # 0..50; how many pre-warmed DNS records to keep ready
     company_country: str | None = None
     company_name: str | None = None
     company_address: str | None = None
@@ -315,3 +316,30 @@ async def get_cloudflare_config() -> dict | None:
         "target_ip": doc.get("default_subdomain_target_ip"),
         "target_host": doc.get("default_subdomain_target_host"),
     }
+
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare subdomain pool — diagnostics + manual refill
+# ---------------------------------------------------------------------------
+@router.get("/admin/subdomain-pool")
+async def admin_subdomain_pool(request: Request):
+    """Live stats of the pre-warmed Cloudflare DNS pool.
+
+    Returns `{free, claimed, target, hard_max, cloudflare_ready, zone_name, upcoming[]}`.
+    When `cloudflare_ready` is false the pool can never refill — the admin must
+    configure Cloudflare + a target IP/host first.
+    """
+    await _require_admin(request)
+    from services.subdomains import pool_stats
+    return await pool_stats()
+
+
+@router.post("/admin/subdomain-pool/refill")
+async def admin_subdomain_pool_refill(request: Request):
+    """Trigger an on-demand refill of the pool (synchronous so the admin sees
+    exactly how many entries were created)."""
+    await _require_admin(request)
+    from services.subdomains import refill_pool, pool_stats
+    added = await refill_pool()
+    return {"added": added, **(await pool_stats())}

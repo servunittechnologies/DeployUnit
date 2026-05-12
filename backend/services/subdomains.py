@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 
 POOL_COLLECTION = "cloudflare_subdomain_pool"
-POOL_TARGET_SIZE = 10  # keep this many free entries warm at all times
+POOL_TARGET_DEFAULT = 10           # platform-settings override: subdomain_pool_target
+POOL_TARGET_HARD_MAX = 50          # safety cap so a typo can't burn the Cloudflare quota
 
 
 def _random_slug(length: int = 8) -> str:
@@ -40,6 +41,19 @@ def _random_slug(length: int = 8) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+async def _pool_target() -> int:
+    """Resolve the desired pool size from platform_settings (admin-tunable),
+    falling back to POOL_TARGET_DEFAULT. Always clamped to [0, HARD_MAX]."""
+    from routers.admin import get_platform_settings
+    doc = await get_platform_settings()
+    raw = doc.get("subdomain_pool_target")
+    try:
+        val = int(raw) if raw is not None else POOL_TARGET_DEFAULT
+    except (TypeError, ValueError):
+        val = POOL_TARGET_DEFAULT
+    return max(0, min(POOL_TARGET_HARD_MAX, val))
 
 
 async def _create_one(cfg: dict) -> Optional[dict]:
@@ -65,17 +79,23 @@ async def _create_one(cfg: dict) -> Optional[dict]:
     }
 
 
-async def refill_pool(target: int = POOL_TARGET_SIZE) -> int:
-    """Top the pool up to `target` free entries. Returns how many we added.
+async def refill_pool(target: int | None = None) -> int:
+    """Top the pool up to the configured target. Returns how many we added.
 
     Called periodically by the monitor worker. Also safe to call from an
     admin endpoint or a one-off script after Cloudflare has been (re)configured.
+
+    If `target` is None we resolve it from platform_settings (admin-editable).
     """
     cfg = await get_cloudflare_config()
     if not cfg:
         return 0
     if not (cfg.get("target_host") or cfg.get("target_ip")):
         logger.info("subdomain pool: cloudflare zone configured but no target IP/host; skipping refill")
+        return 0
+    if target is None:
+        target = await _pool_target()
+    if target <= 0:
         return 0
     db = get_db()
     free = await db[POOL_COLLECTION].count_documents({"status": "free"})
@@ -173,4 +193,21 @@ async def pool_stats() -> dict:
     db = get_db()
     free = await db[POOL_COLLECTION].count_documents({"status": "free"})
     claimed = await db[POOL_COLLECTION].count_documents({"status": "claimed"})
-    return {"free": free, "claimed": claimed, "target": POOL_TARGET_SIZE}
+    target = await _pool_target()
+    # 5 most recent free entries — gives the admin a peek at upcoming URLs.
+    upcoming = await db[POOL_COLLECTION].find(
+        {"status": "free"},
+        {"_id": 0, "fqdn": 1, "created_at": 1},
+        sort=[("created_at", 1)],
+    ).limit(5).to_list(5)
+    cfg = await get_cloudflare_config()
+    ready = bool(cfg and (cfg.get("target_host") or cfg.get("target_ip")))
+    return {
+        "free": free,
+        "claimed": claimed,
+        "target": target,
+        "hard_max": POOL_TARGET_HARD_MAX,
+        "cloudflare_ready": ready,
+        "zone_name": cfg.get("zone_name") if cfg else None,
+        "upcoming": upcoming,
+    }
