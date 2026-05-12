@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { api } from "../lib/api";
@@ -8,6 +8,7 @@ import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, Settings, LogOut,
   Plus, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
   ShieldCheck, Layers, Database, FileClock, Coins, Sparkles, LifeBuoy,
+  Menu, X,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -223,25 +224,48 @@ function UserMenu() {
   );
 }
 
-export default function DashboardLayout() {
+function SidebarContent({ onNavigate }) {
   const { user } = useAuth();
-  const { active } = useWorkspace();
   return (
-    <div className="min-h-screen flex bg-background text-foreground">
-      <aside className="w-64 hidden lg:flex flex-col border-r border-white/[0.06] sticky top-0 h-screen">
-        <div className="p-5 border-b border-white/[0.06]">
-          <Link to="/app"><Logo /></Link>
-        </div>
-        <div className="p-4 border-b border-white/[0.06]">
-          <WorkspaceSwitcher />
-        </div>
-        <nav className="flex-1 py-4">
-          {NAV.map((n) => (
+    <>
+      <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
+        <Link to="/app" onClick={onNavigate}><Logo /></Link>
+      </div>
+      <div className="p-4 border-b border-white/[0.06]">
+        <WorkspaceSwitcher />
+      </div>
+      <nav className="flex-1 py-4 overflow-y-auto">
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            onClick={onNavigate}
+            data-testid={`nav-${n.label.toLowerCase()}`}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
+                isActive
+                  ? "border-brand text-white bg-white/[0.03]"
+                  : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
+              }`
+            }
+          >
+            <n.icon className="h-4 w-4" />
+            <span className="flex-1">{n.label}</span>
+            {n.badge && (
+              <span className="px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] bg-brand/15 text-brand border border-brand/30 leading-none">
+                {n.badge}
+              </span>
+            )}
+          </NavLink>
+        ))}
+        {user?.role === "admin" && (
+          <>
+            <div className="mx-5 my-4 h-px bg-white/[0.06]" />
             <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              data-testid={`nav-${n.label.toLowerCase()}`}
+              to={ADMIN_NAV.to}
+              onClick={onNavigate}
+              data-testid="nav-admin"
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
                   isActive
@@ -250,40 +274,72 @@ export default function DashboardLayout() {
                 }`
               }
             >
-              <n.icon className="h-4 w-4" />
-              <span className="flex-1">{n.label}</span>
-              {n.badge && (
-                <span className="px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] bg-brand/15 text-brand border border-brand/30 leading-none">
-                  {n.badge}
-                </span>
-              )}
+              <ADMIN_NAV.icon className="h-4 w-4 text-brand" />
+              {ADMIN_NAV.label}
             </NavLink>
-          ))}
-          {user?.role === "admin" && (
-            <>
-              <div className="mx-5 my-4 h-px bg-white/[0.06]" />
-              <NavLink
-                to={ADMIN_NAV.to}
-                data-testid="nav-admin"
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-5 py-2.5 text-sm border-l-2 transition-colors ${
-                    isActive
-                      ? "border-brand text-white bg-white/[0.03]"
-                      : "border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]"
-                  }`
-                }
-              >
-                <ADMIN_NAV.icon className="h-4 w-4 text-brand" />
-                {ADMIN_NAV.label}
-              </NavLink>
-            </>
-          )}
-        </nav>
+          </>
+        )}
+      </nav>
+    </>
+  );
+}
+
+export default function DashboardLayout() {
+  const { user } = useAuth();
+  const { active } = useWorkspace();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  // Auto-close drawer + lock body scroll while open
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
+
+  return (
+    <div className="min-h-screen flex bg-background text-foreground">
+      {/* Desktop sidebar */}
+      <aside className="w-64 hidden lg:flex flex-col border-r border-white/[0.06] sticky top-0 h-screen">
+        <SidebarContent />
       </aside>
 
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <>
+          <div
+            className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+            data-testid="mobile-drawer-backdrop"
+          />
+          <aside
+            className="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-white/[0.06] flex flex-col animate-[slide-in-left_0.18s_ease-out]"
+            data-testid="mobile-drawer"
+          >
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="absolute top-4 right-3 p-2 text-zinc-400 hover:text-white z-10"
+              aria-label="Close menu"
+              data-testid="mobile-drawer-close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </>
+      )}
+
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="glass sticky top-0 z-30 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <header className="glass sticky top-0 z-30 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 -ml-2 text-zinc-300 hover:text-white"
+              aria-label="Open menu"
+              data-testid="dashboard-mobile-toggle"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
             <Link to="/app" className="lg:hidden"><Logo small /></Link>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 border border-white/10 text-zinc-500 text-sm w-72">
               <Search className="h-3.5 w-3.5" />
@@ -291,7 +347,7 @@ export default function DashboardLayout() {
               <span className="text-[10px] font-mono text-zinc-600">⌘K</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <CreditsPill />
             <NotificationsBell />
             <UserMenu />

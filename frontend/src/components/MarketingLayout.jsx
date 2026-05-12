@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowRight, Leaf, ShieldCheck } from "lucide-react";
+import { ArrowRight, Leaf, ShieldCheck, Menu, X } from "lucide-react";
 import Logo from "./Logo";
 
 const NAV_LINKS = [
@@ -18,10 +19,19 @@ const FOOTER_COLS = [
 ];
 
 export function MarketingNav() {
-  const { hash } = useLocation();
+  const { hash, pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+  // Close drawer on route change
+  useEffect(() => { setOpen(false); }, [pathname, hash]);
+
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-zinc-800">
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between h-16">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         <Link to="/" className="flex items-center gap-2.5" data-testid="marketing-nav-home">
           <Logo className="h-7 w-auto" />
         </Link>
@@ -44,15 +54,80 @@ export function MarketingNav() {
           })}
           <Link to="/login" className="text-zinc-300 hover:text-white" data-testid="marketing-nav-login">Log in</Link>
         </nav>
-        <Link
-          to="/register"
-          className="group inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-4 py-2 text-sm transition-colors"
-          data-testid="marketing-nav-cta"
-        >
-          Deploy now
-          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/register"
+            className="hidden sm:inline-flex group items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-4 py-2 text-sm transition-colors"
+            data-testid="marketing-nav-cta"
+          >
+            Deploy now
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <button
+            onClick={() => setOpen(true)}
+            className="md:hidden p-2 -mr-2 text-zinc-300 hover:text-white"
+            aria-label="Open menu"
+            data-testid="marketing-nav-mobile-toggle"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+        </div>
       </div>
+
+      {/* Mobile drawer */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col" data-testid="marketing-nav-mobile-drawer">
+          <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-800">
+            <Link to="/" onClick={() => setOpen(false)}><Logo className="h-7 w-auto" /></Link>
+            <button
+              onClick={() => setOpen(false)}
+              className="p-2 -mr-2 text-zinc-300 hover:text-white"
+              aria-label="Close menu"
+              data-testid="marketing-nav-mobile-close"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+          <nav className="flex-1 flex flex-col px-6 py-8 gap-1 overflow-y-auto">
+            {NAV_LINKS.map((n) => {
+              const isAnchor = n.to.startsWith("/#");
+              const props = isAnchor ? { href: n.to } : { to: n.to };
+              const Comp = isAnchor ? "a" : Link;
+              return (
+                <Comp
+                  key={n.to}
+                  {...props}
+                  onClick={() => setOpen(false)}
+                  data-testid={`${n.testId}-mobile`}
+                  className="py-3 text-xl font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
+                >
+                  {n.label}
+                </Comp>
+              );
+            })}
+            <Link
+              to="/login"
+              onClick={() => setOpen(false)}
+              data-testid="marketing-nav-login-mobile"
+              className="py-3 text-xl font-display font-medium text-zinc-200 hover:text-cyan-400 border-b border-zinc-900"
+            >
+              Log in
+            </Link>
+            <Link
+              to="/register"
+              onClick={() => setOpen(false)}
+              data-testid="marketing-nav-cta-mobile"
+              className="mt-6 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-5 py-3 transition-colors"
+            >
+              Deploy now
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </nav>
+          <div className="px-6 py-5 border-t border-zinc-900 text-[11px] font-mono text-zinc-500">
+            © {new Date().getFullYear()} DeployUnit · EU-hosted · GDPR
+          </div>
+        </div>
+      )}
     </header>
   );
 }

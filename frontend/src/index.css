@@ -237,6 +237,12 @@ body {
 }
 .animate-rise { animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* 6b. Mobile drawer slide-in from left */
+@keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+}
+
 /* 7. Floating lift */
 @keyframes float-y {
     0%, 100% { transform: translateY(0); }
