@@ -18,6 +18,8 @@ Endpoints (all require login):
 """
 import logging
 import os
+
+from env_utils import public_base_url, mollie_webhook_url
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Literal
@@ -236,8 +238,8 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
     else:
         cid = mc["mollie_customer_id"]
 
-    redirect = (os.environ.get("FRONTEND_URL") or "").rstrip("/")
-    webhook = os.environ.get("MOLLIE_WEBHOOK_URL")
+    redirect = public_base_url()
+    webhook = mollie_webhook_url()
     try:
         payment = await mollie.create_payment(payload={
             "amount": {"currency": "EUR", "value": f"{totals['total']:.2f}"},
@@ -365,8 +367,8 @@ async def credit_pack_checkout(payload: CreditPackCheckoutIn, request: Request):
         home_cc=await effective_home_country(),
     )
     totals = compute_totals(subtotal=pack["price_eur"], vat_rate=vat["rate"])
-    redirect = (os.environ.get("FRONTEND_URL") or "").rstrip("/")
-    webhook = os.environ.get("MOLLIE_WEBHOOK_URL")
+    redirect = public_base_url()
+    webhook = mollie_webhook_url()
     try:
         payment = await mollie.create_payment(payload={
             "amount": {"currency": "EUR", "value": f"{totals['total']:.2f}"},

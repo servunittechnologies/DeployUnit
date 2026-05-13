@@ -8,6 +8,8 @@
 """
 import logging
 import os
+
+from env_utils import public_base_url, mollie_webhook_url
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -103,9 +105,8 @@ async def credits_checkout(payload: CreditCheckoutIn, request: Request):
     )
     totals = compute_totals(subtotal=pack["price_eur"], vat_rate=vat["rate"])
 
-    redirect = (os.environ.get("FRONTEND_URL") or "").rstrip("/")
-    webhook = (os.environ.get("MOLLIE_WEBHOOK_URL") or
-               f"{os.environ.get('BACKEND_PUBLIC_URL', redirect)}/api/billing/mollie/webhook")
+    redirect = public_base_url()
+    webhook = mollie_webhook_url()
     try:
         payment = await mollie.create_payment(payload={
             "amount": {"currency": "EUR", "value": f"{totals['total']:.2f}"},

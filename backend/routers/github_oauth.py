@@ -62,10 +62,7 @@ def _redirect_uri_for(origin: str) -> str:
 
 def _redirect_uri() -> str:
     # Static default for legacy callers; prefer _redirect_uri_for(origin).
-    return os.environ.get(
-        "GITHUB_OAUTH_REDIRECT_URI",
-        f"{_frontend_origin()}/api/auth/github/callback",
-    )
+    return f"{_frontend_origin()}/api/auth/github/callback"
 
 
 def _client_credentials() -> tuple[str, str]:

@@ -90,3 +90,39 @@ def safe_skip(action: str) -> bool:
         return False
     logger.info("[env-guard] skipping live-infra write '%s' (env=%s)", action, env_name())
     return True
+
+
+# ───────────────────── Derived public URLs ─────────────────────
+# All URLs the platform needs to give to third-party callbacks are derived
+# from FRONTEND_URL. Keeping them in code (not env) means:
+#   * one source of truth across preview + production
+#   * no risk of preview having a stale Mollie webhook pointing to prod
+#   * env-isolation is automatic — preview's FRONTEND_URL is preview-only
+
+
+def public_base_url() -> str:
+    """Canonical public origin for this deployment, no trailing slash."""
+    return (
+        os.environ.get("FRONTEND_URL")
+        or os.environ.get("PUBLIC_FRONTEND_URL")
+        or "https://deployunit.com"
+    ).rstrip("/")
+
+
+def mollie_webhook_url() -> str:
+    """Mollie POSTs payment status updates here. Must be HTTPS + publicly
+    reachable. Derived from FRONTEND_URL so preview and production never
+    share a webhook target."""
+    return f"{public_base_url()}/api/billing/mollie/webhook"
+
+
+def mollie_redirect_url() -> str:
+    """User is sent here after completing a Mollie checkout (success or
+    cancel — Mollie sends a single redirect)."""
+    return f"{public_base_url()}/app/billing?mollie=success"
+
+
+def github_oauth_redirect_uri() -> str:
+    """GitHub OAuth `redirect_uri` — must match the GitHub App's allowed
+    callback URLs. We ship this exact path on every deploy."""
+    return f"{public_base_url()}/api/auth/github/callback"

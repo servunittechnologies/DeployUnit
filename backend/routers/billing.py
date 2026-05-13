@@ -9,6 +9,8 @@ Flow:
 6. GET  /billing/invoices     — list invoices; /billing/invoices/{n}/pdf streams the PDF
 """
 import os
+
+from env_utils import mollie_webhook_url, mollie_redirect_url
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
@@ -230,8 +232,8 @@ async def checkout(payload: CheckoutIn, request: Request):
         "customerId": mollie_customer_id,
         "sequenceType": "first",
         "description": f"{plan['name']} plan — first payment",
-        "redirectUrl": os.environ.get("MOLLIE_REDIRECT_URL"),
-        "webhookUrl": os.environ.get("MOLLIE_WEBHOOK_URL"),
+        "redirectUrl": mollie_redirect_url(),
+        "webhookUrl": mollie_webhook_url(),
         "metadata": {
             "workspace_id": payload.workspace_id,
             "plan": plan["id"],
@@ -445,7 +447,7 @@ async def _activate_subscription_from_first_payment(db, payment: dict):
         "amount": {"currency": "EUR", "value": f"{plan['price']:.2f}"},
         "interval": "1 month",
         "description": f"{plan['name']} plan subscription",
-        "webhookUrl": os.environ.get("MOLLIE_WEBHOOK_URL"),
+        "webhookUrl": mollie_webhook_url(),
         "metadata": {"workspace_id": workspace_id, "plan": plan_id},
     }
     if mandate_id:
@@ -602,7 +604,7 @@ async def mollie_webhook(request: Request):
                         "amount": {"currency": "EUR", "value": f"{plan['price']:.2f}"},
                         "interval": "1 month",
                         "description": f"{plan['name']} plan subscription",
-                        "webhookUrl": os.environ.get("MOLLIE_WEBHOOK_URL"),
+                        "webhookUrl": mollie_webhook_url(),
                         "metadata": {"user_id": target_user_id, "plan": plan["id"]},
                     },
                 )

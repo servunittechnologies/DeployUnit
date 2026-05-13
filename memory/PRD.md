@@ -709,3 +709,16 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
       - env_utils detection: explicit production/preview/unset (defaults safe to preview) + FRONTEND_URL heuristic for production vs preview hosts.
   - **Files touched**: `backend/env_utils.py` (new), `backend/server.py` (/api/env-info), `backend/clients/coolify.py` + `cloudflare.py` + `mollie.py` + `smstools.py` + `mailersend.py` (write guards), `backend/services/deploy_keys.py` (key add/remove guards), `backend/.env` (DEPLOYUNIT_ENV default), `frontend/src/components/EnvBanner.jsx` (new), `frontend/src/components/DashboardLayout.jsx` (banner mount), `backend/tests/test_iter24_env_isolation.py` (new, 9 tests).
   - **Production action required**: when redeploying `deployunit.com`, ensure the production .env has `DEPLOYUNIT_ENV="production"` — otherwise live writes will be blocked (this is the desired fail-safe behavior, but means production users will get the banner + no-op deploys until the env var is set).
+
+
+- **2026-05-13 — Iter24b — .env opschoning (9 vars verwijderd)**
+  - **User ask (Dutch)**: "company info kan uit de database komen en mollie en GitHub url kan van front end url komen want de rest van de url blijft onveranderd dit scheelt ook weer 4 .env vars"
+  - **Vars verwijderd uit `/app/backend/.env`** (9 totaal, oorspronkelijke 27 → 18):
+    - `WHMCS_BASE_URL`, `WHMCS_API_IDENTIFIER`, `WHMCS_API_SECRET`, `WHMCS_DEFAULT_PRODUCT_ID` (4) — geen code-referenties; WHMCS niet meer gebruikt
+    - `PLATFORM_NAME` (1) — nul references in heel het project
+    - `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_POSTCODE`, `COMPANY_CITY`, `COMPANY_VAT_ID`, `COMPANY_COUNTRY` (6) — komen nu uitsluitend uit `platform_settings` MongoDB collectie (admin → Platform → Company)
+    - `MOLLIE_WEBHOOK_URL`, `MOLLIE_REDIRECT_URL` (2) — afgeleid via `env_utils.mollie_webhook_url()` / `mollie_redirect_url()` van `FRONTEND_URL`
+    - `GITHUB_OAUTH_REDIRECT_URI` (1) — afgeleid via `env_utils.github_oauth_redirect_uri()` van `FRONTEND_URL`
+  - **Nieuwe centrale URL-helpers** in `env_utils.py`: `public_base_url()`, `mollie_webhook_url()`, `mollie_redirect_url()`, `github_oauth_redirect_uri()`. Eén source of truth — preview en productie kunnen nooit meer met elkaars webhook-URL eindigen omdat alles van `FRONTEND_URL` afhangt.
+  - **Files touched**: `backend/env_utils.py` (URL helpers), `backend/services/invoice.py` (company hardcoded fallback), `backend/services/vat.py` (home_country defaults to NL), `backend/routers/billing.py`, `backend/routers/credits.py`, `backend/routers/account.py`, `backend/routers/admin.py`, `backend/routers/github_oauth.py` (alle van env naar helper), `backend/.env` (vars verwijderd).
+  - **Tests**: 32/32 backend pytest groen, `/api/admin/integrations` retourneert correcte derived GitHub callback URL.

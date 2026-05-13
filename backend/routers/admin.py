@@ -9,6 +9,8 @@ Everything here requires user.role == 'admin'. Exposes:
 """
 import asyncio
 import os
+
+from env_utils import github_oauth_redirect_uri
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -87,7 +89,7 @@ async def integrations(request: Request):
     }
     gh = {
         "client_id": os.environ.get("GITHUB_CLIENT_ID") or os.environ.get("GITHUB_OAUTH_CLIENT_ID") or None,
-        "callback_url": os.environ.get("GITHUB_OAUTH_REDIRECT_URI") or None,
+        "callback_url": github_oauth_redirect_uri(),
         "configured": bool(
             (os.environ.get("GITHUB_CLIENT_ID") or os.environ.get("GITHUB_OAUTH_CLIENT_ID"))
             and (os.environ.get("GITHUB_CLIENT_SECRET") or os.environ.get("GITHUB_OAUTH_CLIENT_SECRET"))

@@ -1,12 +1,11 @@
 """EU VAT calculation + VIES validation.
 
-- Company location: COMPANY_COUNTRY env (default NL)
+- Company location: platform_settings.company_country (admin-editable, default NL)
 - EU B2B with valid VAT ID → 0% (reverse charge)
 - EU B2C → destination country standard rate
 - Same-country (regardless of B2B/B2C) → home-country standard rate
 - Non-EU → 0%
 """
-import os
 import re
 import logging
 import httpx
@@ -36,10 +35,10 @@ COUNTRY_NAMES = {
 
 
 def home_country() -> str:
-    """Synchronous fallback — used by code paths that can't await. Reads only
-    from env. For accurate runtime resolution use `effective_home_country()`
-    which also checks `platform_settings` in MongoDB."""
-    return (os.environ.get("COMPANY_COUNTRY") or "NL").upper()
+    """Synchronous fallback used by code paths that can't await — returns
+    the hardcoded default. For accurate runtime resolution use
+    `effective_home_country()` which reads `platform_settings` in MongoDB."""
+    return "NL"
 
 
 async def effective_home_country() -> str:

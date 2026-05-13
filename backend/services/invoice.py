@@ -17,13 +17,17 @@ def _storage_path() -> str:
 
 
 def _company() -> dict:
+    """Static defaults for invoices when admin hasn't configured the company
+    identity yet in platform_settings. Admin can edit these in Admin →
+    Platform → Company. Env vars are no longer read here — DB is the single
+    source of truth so preview + production can't drift."""
     return {
-        "name": os.environ.get("COMPANY_NAME", "DeployUnit"),
-        "address": os.environ.get("COMPANY_ADDRESS", ""),
-        "postcode": os.environ.get("COMPANY_POSTCODE", ""),
-        "city": os.environ.get("COMPANY_CITY", ""),
-        "country": os.environ.get("COMPANY_COUNTRY", ""),
-        "vat_id": os.environ.get("COMPANY_VAT_ID", ""),
+        "name": "DeployUnit",
+        "address": "",
+        "postcode": "",
+        "city": "",
+        "country": "",
+        "vat_id": "",
     }
 
 
