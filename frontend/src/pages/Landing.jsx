@@ -1233,25 +1233,35 @@ const SMALL_FEATURES = [
 /* ───────────────────────── Comparison table ───────────────────────── */
 
 function Compare() {
-  const rows = [
-    { f: "Push → live deploy in seconds",          dh: true, vc: true,      rd: true },
-    { f: "PR preview deployments",                 dh: true, vc: true,      rd: true },
-    { f: "Auto-detect stack (Next.js, Node, etc.)",dh: true, vc: true,      rd: true },
-    { f: "No config required (zero DevOps)",       dh: true, vc: false,     rd: false },
-    { f: "Single dashboard for everything",        dh: true, vc: false,     rd: false },
-    { f: "Built-in analytics (no Plausible/GA)",   dh: true, vc: false,     rd: false },
-    { f: "Built-in monitoring & metrics",          dh: true, vc: false,     rd: false },
-    { f: "Built-in alerts (Slack/Discord/email)",  dh: true, vc: false,     rd: false },
-    { f: "Background jobs / cron included",        dh: true, vc: false,     rd: false },
-    { f: "No need for external tools",             dh: true, vc: false,     rd: false },
-    { f: "Agency workspaces (multi-client)",       dh: true, vc: false,     rd: false },
-    { f: "Per-client access & permissions",        dh: true, vc: false,     rd: false },
-    { f: "Per-client billing support",             dh: true, vc: false,     rd: false },
-    { f: "Predictable pricing",                    dh: true, vc: false,     rd: false },
-    { f: "No surprise usage costs",                dh: true, vc: false,     rd: false },
-    { f: "Custom domains & TLS included",          dh: true, vc: true,      rd: true },
-    { f: "Deploy logs & full pipeline visibility", dh: true, vc: "limited", rd: "limited" },
-    { f: "Everything works out-of-the-box",        dh: true, vc: false,     rd: false },
+  // Each row is bucketed by what the customer actually gains: features the
+  // competitors don't even offer ("new"), features we do strictly better
+  // ("improved"), and features that are table-stakes anyway ("on_par").
+  // Sorting the table this way makes the differentiator visceral — the eye
+  // hits the "13 features only on DeployUnit" header before scanning
+  // anything else.
+  const NEW = [
+    "No config required (zero DevOps)",
+    "Single dashboard for everything",
+    "Built-in analytics (no Plausible/GA)",
+    "Built-in monitoring & metrics",
+    "Built-in alerts (Slack/Discord/email)",
+    "Background jobs / cron included",
+    "No need for external tools",
+    "Agency workspaces (multi-client)",
+    "Per-client access & permissions",
+    "Per-client billing support",
+    "Predictable pricing",
+    "No surprise usage costs",
+    "Everything works out-of-the-box",
+  ];
+  const IMPROVED = [
+    { f: "Deploy logs & full pipeline visibility", vc: "limited", rd: "limited" },
+  ];
+  const ON_PAR = [
+    "Push → live deploy in seconds",
+    "PR preview deployments",
+    "Auto-detect stack (Next.js, Node, etc.)",
+    "Custom domains & TLS included",
   ];
 
   function Cell({ v }) {
@@ -1262,6 +1272,75 @@ function Compare() {
     if (v === "limited")
       return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">limited</span>;
     return <span className="text-zinc-600">—</span>;
+  }
+
+  function GroupHeader({ tone, kicker, title, count, blurb }) {
+    const toneMap = {
+      new:      { dot: "bg-cyan-400",    border: "border-cyan-500/40",   text: "text-cyan-300",  pill: "bg-cyan-950/40 text-cyan-300 border-cyan-500/40" },
+      improved: { dot: "bg-amber-400",   border: "border-amber-400/40",  text: "text-amber-300", pill: "bg-amber-950/40 text-amber-300 border-amber-400/40" },
+      on_par:   { dot: "bg-zinc-500",    border: "border-zinc-700",      text: "text-zinc-400",  pill: "bg-zinc-900 text-zinc-400 border-zinc-700" },
+    }[tone];
+    return (
+      <div className="flex items-end justify-between flex-wrap gap-3 mt-12 mb-3">
+        <div>
+          <div className={`inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.35em] ${toneMap.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${toneMap.dot}`} />
+            {kicker}
+          </div>
+          <h3 className={`mt-2 font-display text-2xl md:text-3xl tracking-tighter text-white`}>
+            {title}
+          </h3>
+          {blurb && <p className="mt-1 text-sm text-zinc-500 max-w-md">{blurb}</p>}
+        </div>
+        <div className={`inline-flex items-center px-3 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border ${toneMap.pill}`}>
+          {count} feature{count === 1 ? "" : "s"}
+        </div>
+      </div>
+    );
+  }
+
+  function GroupTable({ tone, rows }) {
+    const accent = {
+      new:      "bg-cyan-950/20 border-cyan-500/30",
+      improved: "bg-amber-950/20 border-amber-400/30",
+      on_par:   "bg-zinc-950/60 border-zinc-800",
+    }[tone];
+    return (
+      <div className={`border ${accent} overflow-x-auto`} data-testid={`compare-group-${tone}`}>
+        <table className="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr className="border-b border-white/[0.06] text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
+              <th className="text-left p-4 font-normal w-1/2">Capability</th>
+              <th className="p-4 font-normal text-cyan-300">DeployUnit</th>
+              <th className="p-4 font-normal">Vercel</th>
+              <th className="p-4 font-normal">Render</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const label = typeof r === "string" ? r : r.f;
+              const vc = typeof r === "string" ? (tone === "new" ? false : true) : r.vc;
+              const rd = typeof r === "string" ? (tone === "new" ? false : true) : r.rd;
+              return (
+                <motion.tr
+                  key={label}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.02 }}
+                  className="border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02]"
+                >
+                  <td className="p-4 text-zinc-300">{label}</td>
+                  <td className="p-4 text-center"><Cell v={true} /></td>
+                  <td className="p-4 text-center"><Cell v={vc} /></td>
+                  <td className="p-4 text-center"><Cell v={rd} /></td>
+                </motion.tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   }
 
   return (
@@ -1319,36 +1398,34 @@ function Compare() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="border border-zinc-800 overflow-x-auto"
-          data-testid="compare-table"
+          data-testid="compare-grouped"
         >
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="border-b border-zinc-800 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
-                <th className="text-left p-4 font-normal">Capability</th>
-                <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployUnit</th>
-                <th className="p-4 font-normal">Vercel</th>
-                <th className="p-4 font-normal">Render</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <motion.tr
-                  key={r.f}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.02 }}
-                  className="border-b border-zinc-900 last:border-b-0 hover:bg-zinc-950/50"
-                >
-                  <td className="p-4 text-zinc-300">{r.f}</td>
-                  <td className="p-4 bg-cyan-950/20 border-x border-cyan-500/20 text-center"><Cell v={r.dh} /></td>
-                  <td className="p-4 text-center"><Cell v={r.vc} /></td>
-                  <td className="p-4 text-center"><Cell v={r.rd} /></td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+          <GroupHeader
+            tone="new"
+            kicker="New · only on DeployUnit"
+            title="13 things our competitors don't even offer."
+            count={NEW.length}
+            blurb="Stop assembling 6 SaaS tools to get what one platform should already do."
+          />
+          <GroupTable tone="new" rows={NEW} />
+
+          <GroupHeader
+            tone="improved"
+            kicker="Improved"
+            title="Where we go further than the rest."
+            count={IMPROVED.length}
+            blurb="Same capability — done deeper, with no add-on fee."
+          />
+          <GroupTable tone="improved" rows={IMPROVED} />
+
+          <GroupHeader
+            tone="on_par"
+            kicker="On par"
+            title="Table-stakes — yes, we do these too."
+            count={ON_PAR.length}
+            blurb="Just confirming what you'd expect from any modern platform."
+          />
+          <GroupTable tone="on_par" rows={ON_PAR} />
         </motion.div>
       </Container>
     </Section>
