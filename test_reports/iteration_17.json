@@ -1,0 +1,55 @@
+{
+  "summary": "Full end-to-end testing of the Admin Credit-Pricing Editor (iter17). 17/17 pytest backend tests passed and full Playwright UI flow (load → edit → add → remove → save → reload → reset) succeeded with all data persisted correctly. The hardcoded credit pack catalog has been successfully migrated to platform_settings.credit_packs. The CreditPackCheckoutIn Pydantic model is no longer using Literal['small','medium','large'] — custom pack ids are accepted (verified — checkout with 'mega-pack' returns 503/400, NOT 422 'value is not a valid enumeration member'). All async get_pack() call sites correctly use await.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_credit_packs.py",
+    "/app/test_reports/pytest/pytest_iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/credits._normalize_pack silently drops invalid rows when reading from DB but the PUT validator already rejects invalid input at write time — defensive but causes a subtle behavior where if a malformed pack somehow ends up in DB (e.g. manual mongo edit) the admin GET shows fewer packs than what's stored. Consider logging a warning when a row is dropped so admins know.",
+    "Admin.jsx CreditPacksTab uses window.confirm-style behavior for reset (toast-based). Good. But the reset button does NOT show a confirmation dialog at all in this build — clicking it immediately wipes the custom catalog. For a destructive action that's editable in the UI, an explicit confirm() prompt would be safer.",
+    "routers/admin.py admin_update_credit_packs lowercases the pack id (pid.lower()) but the input still allows mixed case in p.id — so 'Pro' and 'pro' would collide. The dedupe check uses the lowercased value, which is correct, but the error message echoes the original (p.id) — clear UX. No bug.",
+    "routers/credits.py /credits/checkout still has its own CreditCheckoutIn with `pack: Optional[str]` (already string, ✅) — confirmed no Literal restriction there either. Both checkout endpoints are now fully dynamic.",
+    "DEFAULT_CREDIT_PACKS in services/credits.py contains a Unicode star '⭐' in the Medium label — works fine through JSON, just be aware on any non-UTF8 client. Cosmetic only."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_credit_packs.py (new — 17 tests, all green)"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17)",
+    "frontend": "100% (load, edit, add, remove, save, persist-after-reload, reset all verified with correct toasts)"
+  },
+  "test_credentials": "admin@deployunit.com / admin123 ; demo@deployunit.com / demo1234",
+  "seed_data_creation": "Test fixture creates and reverts the credit pack catalog. Module-level autouse fixture calls POST /admin/credit-packs/reset both before yield and after yield so the system is left in default state after every run. No persistent test data remains.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Admin Console URL is /app/admin (NOT /dashboard/admin). Credit Packs tab data-testid = 'admin-tab-credit-packs'. Reset endpoint does NOT show a browser confirm dialog — the click is destructive immediately and shows a sonner toast 'Reverted to defaults'. Custom pack ids accepted by /api/account/credits/checkout are validated only against the saved catalog (no Pydantic Literal). Mollie is not configured in preview env so checkout returns 400 'Fill in your billing profile first.' (when catalog has the pack) or 503 'Payments not configured' once a billing profile exists. The previous Literal-based validation has been correctly removed — verified by sending 'mega-pack' as pack id and checking response is NOT 422.",
+  "verified_behaviors": [
+    "GET /api/admin/credit-packs (admin): 200 returns built-in defaults [small,medium,large] when no custom catalog is saved",
+    "GET /api/admin/credit-packs (demo user): 403 admin only",
+    "GET /api/admin/credit-packs (anonymous): 401",
+    "PUT /api/admin/credit-packs: 400 'At least one credit pack is required.' when packs=[]",
+    "PUT /api/admin/credit-packs: 400 'Duplicate pack id ...' on dupes",
+    "PUT /api/admin/credit-packs: 400 'positive credits' on credits<=0",
+    "PUT /api/admin/credit-packs: 400 'positive price' on price_eur<=0",
+    "PUT /api/admin/credit-packs: 400 'invalid (use letters, digits, _ or -)' on bad chars (space, !)",
+    "PUT /api/admin/credit-packs: 200 round-trip persists custom catalog with bonus_pct preserved; bonus_pct=0 normalized away",
+    "GET /api/account/credits/packs: returns dynamic catalog (used by buy-credits UI)",
+    "GET /api/credits/packs?workspace_id=...: same dynamic catalog",
+    "POST /api/account/credits/checkout {pack:'mega-pack'}: NOT 422 (Literal removed) — returns 400 'Fill in your billing profile first' (preview env has no Mollie + no billing profile on demo user)",
+    "POST /api/account/credits/checkout {pack:'nonexistent'}: 400 'Unknown pack'",
+    "POST /api/admin/credit-packs/reset (admin): 200 returns defaults; demo user gets 403",
+    "Frontend: Admin → Credit Packs tab loads 3 default pack rows with all 5 fields editable (id, label, credits, price, bonus%)",
+    "Frontend: Add pack appends a new row; edit + Save catalog hits PUT /api/admin/credit-packs → 200; reload shows custom 'uitest' pack still present (persisted)",
+    "Frontend: Revert to defaults hits POST /api/admin/credit-packs/reset → 200, toast 'Reverted to defaults' shown, custom pack removed from UI"
+  ]
+}

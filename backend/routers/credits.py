@@ -19,7 +19,7 @@ from auth_utils import get_current_user, require_workspace_member
 from clients.mollie import mollie, MollieError
 from services.vat import compute_vat, compute_totals, effective_home_country
 from services.credits import (
-    get_balance, list_transactions, grant_credits, CREDIT_PACKS, get_pack,
+    get_balance, list_transactions, grant_credits, get_credit_packs, get_pack,
 )
 
 router = APIRouter(tags=["credits"])
@@ -46,7 +46,7 @@ async def credits_history(workspace_id: str, request: Request, limit: int = 50):
 
 @router.get("/credits/packs")
 async def credits_packs():
-    return list(CREDIT_PACKS.values())
+    return await get_credit_packs()
 
 
 class CreditCheckoutIn(BaseModel):
@@ -69,7 +69,7 @@ async def credits_checkout(payload: CreditCheckoutIn, request: Request):
     # Resolve either a preset pack or a custom amount into a single
     # `pack`-shaped dict so the rest of the flow is identical.
     if payload.pack:
-        pack = get_pack(payload.pack)
+        pack = await get_pack(payload.pack)
         if not pack:
             raise HTTPException(status_code=400, detail="unknown pack")
     elif payload.custom_credits is not None:

@@ -153,6 +153,18 @@ class PlatformSettingsUpdate(BaseModel):
     mailersend_reply_to: str | None = None      # optional
 
 
+class CreditPackIn(BaseModel):
+    id: str
+    label: str
+    credits: int
+    price_eur: float
+    bonus_pct: int | None = None
+
+
+class CreditPacksUpdate(BaseModel):
+    packs: list[CreditPackIn]
+
+
 @router.put("/admin/platform-settings")
 async def update_platform_settings(payload: PlatformSettingsUpdate, request: Request):
     await _require_admin(request)
@@ -495,3 +507,79 @@ async def admin_smstools_test(payload: _SmsTestPayload, request: Request):
               resource_type="platform", resource_id="smstools",
               meta={"to": payload.to[-4:].rjust(len(payload.to), "*")}, request=request)
     return {"ok": True, "message_id": resp.get("messageid") or resp.get("message_id"), "raw": resp}
+
+
+
+# ─────────── Credit pack catalog (admin pricing editor) ─────────────────────
+@router.get("/admin/credit-packs")
+async def admin_list_credit_packs(request: Request):
+    """Return the current credit pack catalog used in the Buy Credits flow.
+    When no packs are configured in `platform_settings`, this returns the
+    built-in defaults so the admin can edit them as a starting point."""
+    await _require_admin(request)
+    from services.credits import get_credit_packs
+    return await get_credit_packs()
+
+
+@router.put("/admin/credit-packs")
+async def admin_update_credit_packs(payload: CreditPacksUpdate, request: Request):
+    """Persist the credit pack catalog. Accepts an ordered list of packs
+    with `id`, `label`, `credits`, `price_eur`, optional `bonus_pct`."""
+    actor = await _require_admin(request)
+    if not payload.packs:
+        raise HTTPException(status_code=400, detail="At least one credit pack is required.")
+    seen: set[str] = set()
+    cleaned: list[dict] = []
+    for p in payload.packs:
+        pid = (p.id or "").strip().lower()
+        if not pid:
+            raise HTTPException(status_code=400, detail="Pack id cannot be empty.")
+        if not pid.replace("-", "").replace("_", "").isalnum():
+            raise HTTPException(status_code=400, detail=f"Pack id '{p.id}' is invalid (use letters, digits, _ or -).")
+        if pid in seen:
+            raise HTTPException(status_code=400, detail=f"Duplicate pack id '{pid}'.")
+        seen.add(pid)
+        if p.credits <= 0:
+            raise HTTPException(status_code=400, detail=f"Pack '{pid}' must have a positive credits amount.")
+        if p.price_eur <= 0:
+            raise HTTPException(status_code=400, detail=f"Pack '{pid}' must have a positive price.")
+        row: dict = {
+            "id": pid,
+            "label": (p.label or pid.title()).strip()[:60],
+            "credits": int(p.credits),
+            "price_eur": round(float(p.price_eur), 2),
+        }
+        if p.bonus_pct is not None and int(p.bonus_pct) > 0:
+            row["bonus_pct"] = max(0, min(500, int(p.bonus_pct)))
+        cleaned.append(row)
+
+    db = get_db()
+    await db.platform_settings.update_one(
+        {"id": PLATFORM_SETTINGS_ID},
+        {"$set": {
+            "id": PLATFORM_SETTINGS_ID,
+            "credit_packs": cleaned,
+            "credit_packs_updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    audit_log(action="admin.credit_packs_update", actor=actor,
+              resource_type="platform", resource_id="credit_packs",
+              meta={"count": len(cleaned)}, request=request)
+    return cleaned
+
+
+@router.post("/admin/credit-packs/reset")
+async def admin_reset_credit_packs(request: Request):
+    """Discard any custom pricing and revert to the built-in defaults."""
+    actor = await _require_admin(request)
+    db = get_db()
+    await db.platform_settings.update_one(
+        {"id": PLATFORM_SETTINGS_ID},
+        {"$unset": {"credit_packs": "", "credit_packs_updated_at": ""}},
+    )
+    audit_log(action="admin.credit_packs_reset", actor=actor,
+              resource_type="platform", resource_id="credit_packs",
+              meta={}, request=request)
+    from services.credits import get_credit_packs
+    return await get_credit_packs()

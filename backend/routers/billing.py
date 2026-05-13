@@ -530,7 +530,7 @@ async def mollie_webhook(request: Request):
                 pack_id = meta.get("pack")
                 credits_amount = int(meta.get("credits") or 0)
                 if not credits_amount and pack_id:
-                    pack = get_pack(pack_id)
+                    pack = await get_pack(pack_id)
                     credits_amount = (pack or {}).get("credits", 0)
                 if credits_amount > 0:
                     await grant_credits(
@@ -623,7 +623,7 @@ async def mollie_webhook(request: Request):
                 pack_id = meta.get("pack")
                 credits_amount = int(meta.get("credits") or 0)
                 if not credits_amount and pack_id:
-                    pack = get_pack(pack_id)
+                    pack = await get_pack(pack_id)
                     credits_amount = (pack or {}).get("credits", 0)
                 if credits_amount > 0:
                     await grant_credits(

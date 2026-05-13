@@ -277,13 +277,67 @@ async def list_transactions(workspace_or_user_id: str, limit: int = 50) -> list[
     return await db.credit_transactions.find(q, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
 
 
-# Credit pack catalog — one-shot Mollie payments
-CREDIT_PACKS = {
-    "small":  {"id": "small",  "credits": 50,  "price_eur": 5.0,  "label": "Small"},
-    "medium": {"id": "medium", "credits": 220, "price_eur": 20.0, "label": "Medium ⭐", "bonus_pct": 10},
-    "large":  {"id": "large",  "credits": 600, "price_eur": 50.0, "label": "Large", "bonus_pct": 17},
-}
+# Credit pack catalog — one-shot Mollie payments.
+#
+# Packs are stored in `platform_settings.credit_packs` (a list of dicts) so
+# the platform owner can edit pricing, credit amounts and bulk-discount
+# bonuses from the Admin Console without a redeploy. The values below are
+# only used as a one-time seed when no packs have been saved yet.
+DEFAULT_CREDIT_PACKS: list[dict] = [
+    {"id": "small",  "credits": 50,  "price_eur": 5.0,  "label": "Small",     "bonus_pct": 0},
+    {"id": "medium", "credits": 220, "price_eur": 20.0, "label": "Medium ⭐", "bonus_pct": 10},
+    {"id": "large",  "credits": 600, "price_eur": 50.0, "label": "Large",     "bonus_pct": 17},
+]
 
 
-def get_pack(pack_id: str) -> Optional[dict]:
-    return CREDIT_PACKS.get(pack_id)
+def _normalize_pack(p: dict) -> Optional[dict]:
+    """Coerce a stored pack into the shape the UI + Mollie code expect.
+    Returns None if the row is unusable."""
+    try:
+        pid = str(p.get("id") or "").strip()
+        credits = int(p.get("credits") or 0)
+        price = float(p.get("price_eur") or 0)
+        if not pid or credits <= 0 or price <= 0:
+            return None
+        out = {
+            "id": pid,
+            "label": str(p.get("label") or pid.title()),
+            "credits": credits,
+            "price_eur": round(price, 2),
+        }
+        bonus = p.get("bonus_pct")
+        if bonus is not None:
+            try:
+                bonus_i = int(bonus)
+                if bonus_i > 0:
+                    out["bonus_pct"] = bonus_i
+            except (TypeError, ValueError):
+                pass
+        return out
+    except (TypeError, ValueError):
+        return None
+
+
+async def get_credit_packs() -> list[dict]:
+    """Return the active credit-pack catalog. Reads `platform_settings.credit_packs`
+    and falls back to DEFAULT_CREDIT_PACKS when nothing is configured."""
+    db = get_db()
+    doc = await db.platform_settings.find_one(
+        {"id": "platform-singleton"}, {"_id": 0, "credit_packs": 1}
+    ) or {}
+    raw = doc.get("credit_packs")
+    if isinstance(raw, list) and raw:
+        cleaned = [n for p in raw if (n := _normalize_pack(p))]
+        if cleaned:
+            return cleaned
+    return [dict(p) for p in DEFAULT_CREDIT_PACKS]
+
+
+async def get_pack(pack_id: str) -> Optional[dict]:
+    """Return one pack by id, or None when missing/disabled."""
+    if not pack_id:
+        return None
+    for p in await get_credit_packs():
+        if p["id"] == pack_id:
+            return p
+    return None

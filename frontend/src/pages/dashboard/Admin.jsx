@@ -4,6 +4,7 @@ import {
   ShieldCheck, Database, Globe, CheckCircle2, XCircle, AlertCircle,
   Loader2, Save, Copy, RefreshCw, Key, Users, Banknote, Github,
   Coins, Star, Cpu, LifeBuoy, ArrowLeft, Filter, Search as SearchIcon,
+  Trash2, Plus, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TicketThread, StatusPill as TicketStatusPill } from "./Tickets";
@@ -12,6 +13,7 @@ import TabBar from "../../components/TabBar";
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
   { id: "plans", label: "Plans & Pricing", icon: Coins },
+  { id: "credit-packs", label: "Credit Packs", icon: Star },
   { id: "resources", label: "Resources & Limits", icon: Cpu },
   { id: "platform", label: "Platform Domain", icon: Globe },
   { id: "vat", label: "VAT / VIES", icon: Banknote },
@@ -1838,6 +1840,226 @@ function TicketsAdminTab() {
 }
 
 
+/* ─────────────────────────── Credit Packs ─────────────────────────── */
+function CreditPacksTab() {
+  const [packs, setPacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/admin/credit-packs");
+      setPacks(Array.isArray(r.data) ? r.data.map(p => ({
+        id: p.id || "",
+        label: p.label || "",
+        credits: p.credits ?? 0,
+        price_eur: p.price_eur ?? 0,
+        bonus_pct: p.bonus_pct ?? 0,
+      })) : []);
+    } catch (e) {
+      toast.error("Could not load credit packs");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const updatePack = (idx, field, value) => {
+    setPacks((rows) => rows.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  };
+
+  const addPack = () => {
+    const n = packs.length + 1;
+    setPacks([...packs, { id: `pack${n}`, label: "New pack", credits: 100, price_eur: 10, bonus_pct: 0 }]);
+  };
+
+  const removePack = (idx) => {
+    setPacks(packs.filter((_, i) => i !== idx));
+  };
+
+  const save = async () => {
+    // client-side guardrails so we surface helpful errors before the API call
+    const ids = new Set();
+    for (const [i, p] of packs.entries()) {
+      if (!p.id || !p.id.trim()) return toast.error(`Row ${i + 1}: id is required`);
+      const pid = p.id.trim().toLowerCase();
+      if (ids.has(pid)) return toast.error(`Row ${i + 1}: duplicate id "${pid}"`);
+      ids.add(pid);
+      if (Number(p.credits) <= 0) return toast.error(`Row ${i + 1}: credits must be > 0`);
+      if (Number(p.price_eur) <= 0) return toast.error(`Row ${i + 1}: price must be > 0`);
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        packs: packs.map((p) => ({
+          id: p.id.trim().toLowerCase(),
+          label: (p.label || "").trim() || p.id.trim(),
+          credits: Number(p.credits),
+          price_eur: Number(p.price_eur),
+          bonus_pct: Number(p.bonus_pct) || 0,
+        })),
+      };
+      const r = await api.put("/admin/credit-packs", payload);
+      setPacks(r.data.map(p => ({
+        id: p.id, label: p.label, credits: p.credits,
+        price_eur: p.price_eur, bonus_pct: p.bonus_pct ?? 0,
+      })));
+      toast.success("Credit packs saved");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = async () => {
+    if (!window.confirm("Revert to the built-in default pricing? Any custom packs will be lost.")) return;
+    setResetting(true);
+    try {
+      const r = await api.post("/admin/credit-packs/reset");
+      setPacks(r.data.map(p => ({
+        id: p.id, label: p.label, credits: p.credits,
+        price_eur: p.price_eur, bonus_pct: p.bonus_pct ?? 0,
+      })));
+      toast.success("Reverted to defaults");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  if (loading) return <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading credit packs…</div>;
+
+  return (
+    <div className="space-y-4" data-testid="admin-credit-packs">
+      <Section
+        title="Credit packs catalog"
+        description="These are the one-shot top-up packs users see in the Buy Credits flow. Bulk discount is shown as a + bonus_pct badge on the pack. Changes are live immediately — no redeploy needed."
+      >
+        <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500 mb-3">
+          // {packs.length} pack{packs.length === 1 ? "" : "s"} configured · €/credit shown per row
+        </div>
+
+        <div className="space-y-3" data-testid="credit-packs-rows">
+          {packs.map((p, idx) => {
+            const credits = Math.max(0, Number(p.credits) || 0);
+            const price = Math.max(0, Number(p.price_eur) || 0);
+            const perCredit = credits > 0 ? (price / credits) : 0;
+            return (
+              <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-white/[0.06] bg-black p-3" data-testid={`credit-pack-row-${idx}`}>
+                <div className="md:col-span-2">
+                  <Field label="ID">
+                    <Input
+                      value={p.id}
+                      onChange={(e) => updatePack(idx, "id", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                      placeholder="small"
+                      data-testid={`credit-pack-id-${idx}`}
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-3">
+                  <Field label="Label">
+                    <Input
+                      value={p.label}
+                      onChange={(e) => updatePack(idx, "label", e.target.value)}
+                      placeholder="Starter"
+                      data-testid={`credit-pack-label-${idx}`}
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-2">
+                  <Field label="Credits">
+                    <Input
+                      type="number" min="1" step="1"
+                      value={p.credits}
+                      onChange={(e) => updatePack(idx, "credits", e.target.value)}
+                      data-testid={`credit-pack-credits-${idx}`}
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-2">
+                  <Field label="Price (€)">
+                    <Input
+                      type="number" min="0.01" step="0.01"
+                      value={p.price_eur}
+                      onChange={(e) => updatePack(idx, "price_eur", e.target.value)}
+                      data-testid={`credit-pack-price-${idx}`}
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-2">
+                  <Field label="Bonus %" hint="bulk discount badge">
+                    <Input
+                      type="number" min="0" max="500" step="1"
+                      value={p.bonus_pct}
+                      onChange={(e) => updatePack(idx, "bonus_pct", e.target.value)}
+                      data-testid={`credit-pack-bonus-${idx}`}
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-1 flex md:justify-end">
+                  <button
+                    onClick={() => removePack(idx)}
+                    className="inline-flex items-center justify-center h-9 w-9 border border-white/10 text-zinc-400 hover:text-signal-failed hover:border-signal-failed/40 transition-colors"
+                    title="Remove pack"
+                    data-testid={`credit-pack-remove-${idx}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="md:col-span-12 text-[11px] font-mono text-zinc-500 -mt-1">
+                  {credits > 0 && price > 0 ? (
+                    <>€{perCredit.toFixed(3)} / credit · effective rate {(1 / perCredit).toFixed(1)} credits per €</>
+                  ) : (
+                    <>fill in credits + price to see the per-credit rate</>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {packs.length === 0 && (
+            <div className="text-sm text-zinc-500 font-mono py-6 text-center border border-dashed border-white/10">
+              No packs configured yet. Add at least one — users can&apos;t top up otherwise.
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={addPack}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono text-zinc-300 hover:text-brand hover:border-brand/40 transition-colors"
+            data-testid="credit-pack-add-btn"
+          >
+            <Plus className="h-4 w-4" /> Add pack
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-black text-sm font-mono font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors"
+            data-testid="credit-pack-save-btn"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving…" : "Save catalog"}
+          </button>
+          <button
+            onClick={reset}
+            disabled={resetting}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono text-zinc-400 hover:text-zinc-100 transition-colors ml-auto"
+            data-testid="credit-pack-reset-btn"
+          >
+            {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Revert to defaults
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+
 /* ─────────────────────────── Admin shell ─────────────────────────── */
 export default function Admin() {
   const [tab, setTab] = useState("integrations");
@@ -1854,6 +2076,7 @@ export default function Admin() {
 
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "plans" && <PlansTab />}
+      {tab === "credit-packs" && <CreditPacksTab />}
       {tab === "resources" && <ResourcesTab />}
       {tab === "platform" && <PlatformTab />}
       {tab === "vat" && <VatTab />}

@@ -30,7 +30,7 @@ from auth_utils import get_current_user, verify_password, hash_password
 from services.plans import user_plan, account_usage, list_plans, get_plan
 from services.credits import (
     get_balance as credits_balance, list_transactions as credits_history,
-    grant_credits, CREDIT_PACKS, get_pack,
+    grant_credits, get_credit_packs, get_pack,
 )
 from services.audit import log as audit_log
 from services.vat import (
@@ -338,17 +338,17 @@ async def get_credits_history(request: Request, limit: int = 50):
 
 @router.get("/account/credits/packs")
 async def get_credits_packs():
-    return list(CREDIT_PACKS.values())
+    return await get_credit_packs()
 
 
 class CreditPackCheckoutIn(BaseModel):
-    pack: Literal["small", "medium", "large"]
+    pack: str
 
 
 @router.post("/account/credits/checkout")
 async def credit_pack_checkout(payload: CreditPackCheckoutIn, request: Request):
     user = await get_current_user(request)
-    pack = get_pack(payload.pack)
+    pack = await get_pack(payload.pack)
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")
     if not mollie.configured:
