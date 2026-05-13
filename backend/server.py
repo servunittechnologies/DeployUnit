@@ -28,6 +28,8 @@ from services.routing_healer import routing_healer_tick
 from services.coolify_reconcile import reconcile_tick as coolify_reconcile_tick
 from services.custom_subdomain import verify_pending_subdomains_tick
 from services.health_audit import health_audit_tick
+from services.app_addons import renew_tick as app_addons_renew_tick
+from routers.app_addons import heatmap_gc_tick
 from routers.status import status_ping_tick
 
 from routers import (
@@ -48,6 +50,7 @@ from routers import (
     credits as credits_router,
     webhooks as webhooks_router,
     fleet as fleet_router,
+    app_addons as app_addons_router,
     audit as audit_router,
     cron as cron_router,
     databases as databases_router,
@@ -127,6 +130,12 @@ async def lifespan(app: FastAPI):
     # expiry for every verified custom domain. Per-event dispatcher cooldown
     # prevents repeat pings within 24h for the same problem.
     scheduler.add_job(health_audit_tick, "interval", hours=6, id="health_audit", replace_existing=True, max_instances=1)
+    # Per-app add-on subscriptions — checks for due renewals every hour
+    # (subscriptions only expire once per 30 days so this is cheap, and an
+    # hourly tick lets a top-up recover a grace-period account quickly).
+    scheduler.add_job(app_addons_renew_tick, "interval", hours=1, id="app_addons_renew", replace_existing=True, max_instances=1)
+    # Heatmap event GC — same retention tiers as metrics (7d / 30d with addon)
+    scheduler.add_job(heatmap_gc_tick, "interval", hours=12, id="heatmap_gc", replace_existing=True, max_instances=1)
     scheduler.start()
     # Initial fill on boot (fire-and-forget) so the very first deploy after
     # a restart doesn't have to wait 3 min for the first scheduler tick.
@@ -171,6 +180,7 @@ api_router.include_router(credits_router.router)
 api_router.include_router(webhooks_router.router)
 api_router.include_router(fleet_router.router)
 api_router.include_router(audit_router.router)
+api_router.include_router(app_addons_router.router)
 api_router.include_router(cron_router.router)
 api_router.include_router(databases_router.router)
 api_router.include_router(pr_previews_router.router)

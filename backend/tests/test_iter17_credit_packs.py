@@ -13,7 +13,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://app-test-build-2.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://addon-showcase-1.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@deployunit.com"
 ADMIN_PASS = "admin123"
 USER_EMAIL = "demo@deployunit.com"

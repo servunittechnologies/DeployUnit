@@ -179,17 +179,39 @@ async def ingest_samples(samples: list[dict], *, source_ip: Optional[str] = None
 # ─────────────────────── Retention / downsampling ───────────────────────
 async def downsample_and_gc() -> dict:
     """Hourly job: collapse 30s-raw → 5-min buckets for anything older than
-    24h, drop anything older than 30 days.
+    24h, drop anything older than the per-app retention (7d default, 30d
+    with the Extended Log Retention addon).
 
     The downsampled rows live in the same collection but carry a `rollup=5m`
     marker; raw samples are `rollup=raw` (default if missing)."""
     db = get_db()
     now = _now()
     raw_cut = (now - RAW_RETENTION).isoformat()
-    drop_cut = (now - ROLLUP_RETENTION).isoformat()
+    # Universal hard ceiling — 30 days, the longest retention any app can
+    # buy. Beyond this we always drop.
+    hard_cut = (now - timedelta(days=30)).isoformat()
+    # Short tier — 7 days, applied only to apps WITHOUT the addon.
+    short_cut = (now - timedelta(days=7)).isoformat()
 
-    # 1) Drop ancient rollups
-    drop = await db.container_metrics_samples.delete_many({"sampled_at": {"$lt": drop_cut}})
+    # Look up the set of app_ids entitled to extended retention. Resolved
+    # once per tick — much cheaper than per-row checks.
+    from services.app_addons import active_app_ids
+    paid_apps = await active_app_ids("log-retention")
+
+    # 1) Hard ceiling: drop anything older than 30 days
+    drop1 = await db.container_metrics_samples.delete_many({"sampled_at": {"$lt": hard_cut}})
+    # 2) Short-tier drop for non-paying apps
+    q2: dict = {"sampled_at": {"$lt": short_cut}}
+    if paid_apps:
+        q2["app_id"] = {"$nin": list(paid_apps)}
+    drop2 = await db.container_metrics_samples.delete_many(q2)
+
+    # Same two-tier drop for the uptime samples collection
+    await db.app_status_samples.delete_many({"sampled_at": {"$lt": hard_cut}})
+    q2u: dict = {"sampled_at": {"$lt": short_cut}}
+    if paid_apps:
+        q2u["app_id"] = {"$nin": list(paid_apps)}
+    await db.app_status_samples.delete_many(q2u)
 
     # 2) Pull RAW samples older than 24h, downsample to 5-min bucketed averages
     cur = db.container_metrics_samples.aggregate([
@@ -246,7 +268,8 @@ async def downsample_and_gc() -> dict:
         })
     return {
         "ran_at": now.isoformat(),
-        "dropped_old": drop.deleted_count,
+        "dropped_old": (drop1.deleted_count + drop2.deleted_count),
+        "paid_apps": len(paid_apps),
         "rolled_up": len(bucketed),
     }
 
