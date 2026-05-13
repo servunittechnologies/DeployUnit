@@ -13,6 +13,7 @@ import TabBar from "../../components/TabBar";
 const TABS = [
   { id: "integrations", label: "Integrations", icon: Database },
   { id: "plans", label: "Plans & Pricing", icon: Coins },
+  { id: "pricing-page", label: "Pricing Page", icon: Star },
   { id: "credit-packs", label: "Credit Packs", icon: Star },
   { id: "resources", label: "Resources & Limits", icon: Cpu },
   { id: "platform", label: "Platform Domain", icon: Globe },
@@ -1840,6 +1841,192 @@ function TicketsAdminTab() {
 }
 
 
+/* ─────────────────────────── Pricing Page CMS ─────────────────────────── */
+function PricingPageTab() {
+  const [cms, setCms] = useState(null);
+  const [iconChoices, setIconChoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/admin/pricing-page");
+      setCms({
+        hero: r.data.hero,
+        addons_intro: r.data.addons_intro,
+        addons: r.data.addons.map(a => ({ ...a })),
+      });
+      setIconChoices(r.data.icon_choices || []);
+    } catch (e) {
+      toast.error("Could not load pricing page CMS");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const setHero = (k, v) => setCms({ ...cms, hero: { ...cms.hero, [k]: v } });
+  const setIntro = (k, v) => setCms({ ...cms, addons_intro: { ...cms.addons_intro, [k]: v } });
+  const setAddon = (idx, k, v) => setCms({ ...cms, addons: cms.addons.map((a, i) => i === idx ? { ...a, [k]: v } : a) });
+  const addAddon = () => setCms({ ...cms, addons: [...cms.addons, { id: `addon-${cms.addons.length + 1}`, icon: "Sparkles", name: "New add-on", price: "100 credits / mo", hint: "Describe what this add-on does." }] });
+  const removeAddon = (idx) => setCms({ ...cms, addons: cms.addons.filter((_, i) => i !== idx) });
+
+  const save = async () => {
+    if (!cms.addons.length) return toast.error("Keep at least one add-on");
+    const ids = new Set();
+    for (const [i, a] of cms.addons.entries()) {
+      if (!a.id?.trim()) return toast.error(`Add-on ${i + 1}: id is required`);
+      if (ids.has(a.id)) return toast.error(`Add-on ${i + 1}: duplicate id "${a.id}"`);
+      ids.add(a.id);
+    }
+    setSaving(true);
+    try {
+      const r = await api.put("/admin/pricing-page", {
+        hero: cms.hero,
+        addons_intro: cms.addons_intro,
+        addons: cms.addons,
+      });
+      setCms({
+        hero: r.data.hero,
+        addons_intro: r.data.addons_intro,
+        addons: r.data.addons.map(a => ({ ...a })),
+      });
+      toast.success("Pricing page saved · live immediately");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = async () => {
+    if (!window.confirm("Discard custom hero copy and add-ons → revert to platform defaults?")) return;
+    setResetting(true);
+    try {
+      const r = await api.post("/admin/pricing-page/reset");
+      setCms({
+        hero: r.data.hero,
+        addons_intro: r.data.addons_intro,
+        addons: r.data.addons.map(a => ({ ...a })),
+      });
+      toast.success("Reverted to defaults");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  if (loading || !cms) return <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading pricing page CMS…</div>;
+
+  return (
+    <div className="space-y-6" data-testid="admin-pricing-page">
+      <Section title="Hero" description="Top of the /pricing page — the kicker line, two-tone headline and subtitle.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Kicker (small label)">
+            <Input value={cms.hero.kicker} onChange={(e) => setHero("kicker", e.target.value)} maxLength={80} data-testid="pricing-hero-kicker" />
+          </Field>
+          <Field label="Headline — first line">
+            <Input value={cms.hero.title_lead} onChange={(e) => setHero("title_lead", e.target.value)} maxLength={60} data-testid="pricing-hero-title-lead" />
+          </Field>
+          <Field label="Headline — second line (accent color)">
+            <Input value={cms.hero.title_accent} onChange={(e) => setHero("title_accent", e.target.value)} maxLength={60} data-testid="pricing-hero-title-accent" />
+          </Field>
+          <Field label="Subtitle (under headline)">
+            <textarea
+              rows={3}
+              value={cms.hero.subtitle}
+              onChange={(e) => setHero("subtitle", e.target.value)}
+              maxLength={300}
+              className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand resize-none"
+              data-testid="pricing-hero-subtitle"
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="Add-ons section — intro" description="The header above the credit add-on grid.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Kicker">
+            <Input value={cms.addons_intro.kicker} onChange={(e) => setIntro("kicker", e.target.value)} maxLength={50} data-testid="pricing-addons-kicker" />
+          </Field>
+          <Field label="Title">
+            <Input value={cms.addons_intro.title} onChange={(e) => setIntro("title", e.target.value)} maxLength={80} data-testid="pricing-addons-title" />
+          </Field>
+          <Field label="Subtitle">
+            <textarea rows={2} value={cms.addons_intro.subtitle} onChange={(e) => setIntro("subtitle", e.target.value)} maxLength={280}
+              className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand resize-none" data-testid="pricing-addons-subtitle" />
+          </Field>
+          <Field label="Footnote (below grid)">
+            <textarea rows={2} value={cms.addons_intro.footnote} onChange={(e) => setIntro("footnote", e.target.value)} maxLength={280}
+              className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand resize-none" data-testid="pricing-addons-footnote" />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="Add-on cards" description="Each card shown in the credits-unlock catalog. id must be unique, icon is from lucide-react.">
+        <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500 mb-3">
+          // {cms.addons.length} add-on{cms.addons.length === 1 ? "" : "s"} configured
+        </div>
+        <div className="space-y-3" data-testid="pricing-addons-rows">
+          {cms.addons.map((a, idx) => (
+            <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start border border-white/[0.06] bg-black p-3" data-testid={`pricing-addon-row-${idx}`}>
+              <div className="md:col-span-2">
+                <Field label="ID"><Input value={a.id} onChange={(e) => setAddon(idx, "id", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder="static-ip" data-testid={`pricing-addon-id-${idx}`} /></Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Icon">
+                  <select
+                    value={a.icon}
+                    onChange={(e) => setAddon(idx, "icon", e.target.value)}
+                    className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand"
+                    data-testid={`pricing-addon-icon-${idx}`}
+                  >
+                    {iconChoices.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="md:col-span-3">
+                <Field label="Name"><Input value={a.name} onChange={(e) => setAddon(idx, "name", e.target.value)} maxLength={60} data-testid={`pricing-addon-name-${idx}`} /></Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Price label"><Input value={a.price} onChange={(e) => setAddon(idx, "price", e.target.value)} maxLength={40} placeholder="50 credits / mo" data-testid={`pricing-addon-price-${idx}`} /></Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Hint (1-2 lines)">
+                  <textarea rows={2} value={a.hint} onChange={(e) => setAddon(idx, "hint", e.target.value)} maxLength={280}
+                    className="w-full bg-black border border-white/10 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand resize-none" data-testid={`pricing-addon-hint-${idx}`} />
+                </Field>
+              </div>
+              <div className="md:col-span-1 flex md:justify-end pt-5">
+                <button onClick={() => removeAddon(idx)} className="inline-flex items-center justify-center h-9 w-9 border border-white/10 text-zinc-400 hover:text-signal-failed hover:border-signal-failed/40 transition-colors" title="Remove" data-testid={`pricing-addon-remove-${idx}`}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button onClick={addAddon} className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono text-zinc-300 hover:text-brand hover:border-brand/40 transition-colors" data-testid="pricing-addon-add">
+            <Plus className="h-4 w-4" /> Add card
+          </button>
+          <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-black text-sm font-mono font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors" data-testid="pricing-page-save">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving…" : "Save pricing page"}
+          </button>
+          <button onClick={reset} disabled={resetting} className="inline-flex items-center gap-2 px-3 py-2 border border-white/10 text-sm font-mono text-zinc-400 hover:text-zinc-100 transition-colors ml-auto" data-testid="pricing-page-reset">
+            {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Revert to defaults
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+
 /* ─────────────────────────── Credit Packs ─────────────────────────── */
 function CreditPacksTab() {
   const [packs, setPacks] = useState([]);
@@ -2076,6 +2263,7 @@ export default function Admin() {
 
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "plans" && <PlansTab />}
+      {tab === "pricing-page" && <PricingPageTab />}
       {tab === "credit-packs" && <CreditPacksTab />}
       {tab === "resources" && <ResourcesTab />}
       {tab === "platform" && <PlatformTab />}

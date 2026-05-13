@@ -632,3 +632,148 @@ async def admin_notifications_sends(request: Request, limit: int = 50, workspace
         q["workspace_id"] = workspace_id
     rows = await db.notification_sends.find(q, {"_id": 0}).sort("created_at", -1).limit(min(500, max(1, limit))).to_list(limit)
     return rows
+
+
+
+# ─────────── Pricing page CMS (hero copy + credit add-on catalog) ───────────
+# These are the bits of the public pricing page that aren't already covered
+# by `platform_plans` (plan cards) — so the admin can fully rebrand the
+# pricing page without a redeploy.
+PRICING_HERO_DEFAULT = {
+    "kicker": "Predictable. Transparent. EU-hosted.",
+    "title_lead": "Flat plans.",
+    "title_accent": "Transparent add-ons.",
+    "subtitle": "Pick a plan. Unlock extra features with credits — every add-on priced openly. No surprise bills, ever.",
+}
+PRICING_ADDONS_INTRO_DEFAULT = {
+    "kicker": "credits unlock",
+    "title": "What you can do with credits.",
+    "subtitle": "Every plan includes a monthly credit allowance. Use them for the features below — buy more whenever you need, never expire.",
+    "footnote": "Every action shows its credit cost before you confirm. Watch your balance live on the dashboard. Hard cap toggle so you're never billed for more than you budgeted.",
+}
+PRICING_ADDONS_DEFAULT = [
+    {"id": "sms", "icon": "MessageSquare", "name": "SMS alert", "price": "1 credit",
+     "hint": "Per SMS sent to your phone for deploy / downtime / SSL events. No SMS contract needed."},
+    {"id": "static-ip", "icon": "Server", "name": "Reserved static IP", "price": "50 credits / mo",
+     "hint": "Pin your app to a fixed IP — required for some database whitelists & 3rd party API integrations."},
+    {"id": "server-upgrade", "icon": "Gauge", "name": "Server upgrade per app", "price": "from 100 credits / mo",
+     "hint": "Bump CPU + RAM for hungry apps. Multiple tiers — pay only for the apps that need more horsepower."},
+    {"id": "heatmaps", "icon": "Sparkles", "name": "Site heatmaps", "price": "100 credits / mo per app",
+     "hint": "Visual recording of where visitors click, scroll and bounce. Toggle on per app, no extra script tags."},
+    {"id": "log-retention", "icon": "Gauge", "name": "Extended log retention", "price": "100 credits / mo",
+     "hint": "Keep build & runtime logs for 30 days instead of 7. Required for some compliance frameworks."},
+]
+# Valid lucide-react icon names that the admin can pick — keeps the bundle
+# small and prevents typos from rendering a broken icon.
+PRICING_ADDON_ICONS = [
+    "MessageSquare", "Server", "Gauge", "Sparkles", "Shield", "Rocket",
+    "Mail", "Coins", "Globe", "Zap", "Cpu", "Database", "Lock", "Activity",
+]
+
+
+class PricingHeroIn(BaseModel):
+    kicker: str
+    title_lead: str
+    title_accent: str
+    subtitle: str
+
+
+class PricingAddonsIntroIn(BaseModel):
+    kicker: str
+    title: str
+    subtitle: str
+    footnote: str
+
+
+class PricingAddonIn(BaseModel):
+    id: str
+    icon: str
+    name: str
+    price: str
+    hint: str
+
+
+class PricingPageUpdate(BaseModel):
+    hero: PricingHeroIn
+    addons_intro: PricingAddonsIntroIn
+    addons: list[PricingAddonIn]
+
+
+async def _read_pricing_page() -> dict:
+    db = get_db()
+    doc = await db.platform_settings.find_one(
+        {"id": PLATFORM_SETTINGS_ID},
+        {"_id": 0, "pricing_hero": 1, "pricing_addons_intro": 1, "pricing_addons": 1},
+    ) or {}
+    return {
+        "hero": doc.get("pricing_hero") or dict(PRICING_HERO_DEFAULT),
+        "addons_intro": doc.get("pricing_addons_intro") or dict(PRICING_ADDONS_INTRO_DEFAULT),
+        "addons": doc.get("pricing_addons") or [dict(a) for a in PRICING_ADDONS_DEFAULT],
+        "icon_choices": PRICING_ADDON_ICONS,
+    }
+
+
+@router.get("/admin/pricing-page")
+async def admin_get_pricing_page(request: Request):
+    await _require_admin(request)
+    return await _read_pricing_page()
+
+
+@router.put("/admin/pricing-page")
+async def admin_put_pricing_page(payload: PricingPageUpdate, request: Request):
+    actor = await _require_admin(request)
+    if not payload.addons:
+        raise HTTPException(status_code=400, detail="Keep at least one credit add-on visible.")
+    seen: set[str] = set()
+    cleaned_addons: list[dict] = []
+    for a in payload.addons:
+        aid = (a.id or "").strip().lower()
+        if not aid:
+            raise HTTPException(status_code=400, detail="Each add-on needs an id.")
+        if aid in seen:
+            raise HTTPException(status_code=400, detail=f"Duplicate add-on id '{aid}'.")
+        seen.add(aid)
+        if a.icon not in PRICING_ADDON_ICONS:
+            raise HTTPException(status_code=400, detail=f"Icon '{a.icon}' is not in the allowed list.")
+        cleaned_addons.append({
+            "id": aid,
+            "icon": a.icon,
+            "name": a.name.strip()[:60],
+            "price": a.price.strip()[:40],
+            "hint": a.hint.strip()[:280],
+        })
+    db = get_db()
+    await db.platform_settings.update_one(
+        {"id": PLATFORM_SETTINGS_ID},
+        {"$set": {
+            "id": PLATFORM_SETTINGS_ID,
+            "pricing_hero": payload.hero.model_dump(),
+            "pricing_addons_intro": payload.addons_intro.model_dump(),
+            "pricing_addons": cleaned_addons,
+            "pricing_page_updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    audit_log(action="admin.pricing_page_update", actor=actor,
+              resource_type="platform", resource_id="pricing_page",
+              meta={"addon_count": len(cleaned_addons)}, request=request)
+    return await _read_pricing_page()
+
+
+@router.post("/admin/pricing-page/reset")
+async def admin_reset_pricing_page(request: Request):
+    actor = await _require_admin(request)
+    db = get_db()
+    await db.platform_settings.update_one(
+        {"id": PLATFORM_SETTINGS_ID},
+        {"$unset": {
+            "pricing_hero": "",
+            "pricing_addons_intro": "",
+            "pricing_addons": "",
+            "pricing_page_updated_at": "",
+        }},
+    )
+    audit_log(action="admin.pricing_page_reset", actor=actor,
+              resource_type="platform", resource_id="pricing_page",
+              meta={}, request=request)
+    return await _read_pricing_page()

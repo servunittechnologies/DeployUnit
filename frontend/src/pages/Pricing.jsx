@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Check, ArrowRight, Sparkles, Shield, Rocket, Coins, MessageSquare, Server, Gauge } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+import { Check, ArrowRight, Sparkles, Shield, Rocket, Coins } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
@@ -9,6 +10,24 @@ import useSpotlight from "../hooks/useSpotlight";
 import useSeo from "../hooks/useSeo";
 
 const PLAN_ICON = { free: Sparkles, starter: Sparkles, pro: Rocket, agency: Shield };
+
+// Fallback content used until /billing/pricing-page returns — keeps the
+// page useful even if the backend is unreachable on first paint.
+const PRICING_FALLBACK = {
+  hero: {
+    kicker: "Predictable. Transparent. EU-hosted.",
+    title_lead: "Flat plans.",
+    title_accent: "Transparent add-ons.",
+    subtitle: "Pick a plan. Unlock extra features with credits — every add-on priced openly. No surprise bills, ever.",
+  },
+  addons_intro: {
+    kicker: "credits unlock",
+    title: "What you can do with credits.",
+    subtitle: "Every plan includes a monthly credit allowance. Use them for the features below — buy more whenever you need, never expire.",
+    footnote: "Every action shows its credit cost before you confirm. Watch your balance live on the dashboard. Hard cap toggle so you're never billed for more than you budgeted.",
+  },
+  addons: [],
+};
 
 function PlanCard({ plan, onChoose, index }) {
   const onMove = useSpotlight();
@@ -72,11 +91,13 @@ export default function Pricing() {
     path: "/pricing",
   });
   const [plans, setPlans] = useState([]);
+  const [cms, setCms] = useState(PRICING_FALLBACK);
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get("/billing/plans").then((r) => setPlans(r.data));
+    api.get("/billing/plans").then((r) => setPlans(r.data)).catch(() => {});
+    api.get("/billing/pricing-page").then((r) => setCms(r.data)).catch(() => {});
   }, []);
 
   const choose = (planId) => {
@@ -109,7 +130,7 @@ export default function Pricing() {
           animate={{ opacity: 1, y: 0 }}
           className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] text-brand"
         >
-          <span className="h-px w-6 bg-brand/60" /> pricing <span className="h-px w-6 bg-brand/60" />
+          <span className="h-px w-6 bg-brand/60" /> {cms.hero.kicker || "pricing"} <span className="h-px w-6 bg-brand/60" />
         </motion.div>
         <motion.h1
           initial={{ opacity: 0, y: 18 }}
@@ -117,7 +138,7 @@ export default function Pricing() {
           transition={{ duration: 0.8 }}
           className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-semibold leading-[1.05]"
         >
-          Flat plans.<br /> <span className="text-brand">Transparent add-ons.</span>
+          {cms.hero.title_lead}<br /> <span className="text-brand">{cms.hero.title_accent}</span>
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
@@ -125,7 +146,7 @@ export default function Pricing() {
           transition={{ delay: 0.25 }}
           className="mt-6 text-base sm:text-lg text-zinc-400 max-w-lg mx-auto leading-relaxed"
         >
-          Pick a plan. Unlock extra features with credits — every add-on priced openly. No surprise bills, ever.
+          {cms.hero.subtitle}
         </motion.p>
       </section>
 
@@ -135,80 +156,53 @@ export default function Pricing() {
         ))}
       </section>
 
-      {/* What credits unlock — the transparent add-on catalog */}
-      <section className="max-w-[1200px] mx-auto px-6 pb-20" data-testid="addons-catalog">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] text-brand">
-            <Coins className="h-3 w-3" /> credits unlock
+      {/* What credits unlock — admin-managed catalog. We dynamically resolve
+          the lucide icon by name from the CMS payload; unknown icon names
+          fall back to Sparkles so a typo never crashes the page. */}
+      {cms.addons.length > 0 && (
+        <section className="max-w-[1200px] mx-auto px-6 pb-20" data-testid="addons-catalog">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] text-brand">
+              <Coins className="h-3 w-3" /> {cms.addons_intro.kicker}
+            </div>
+            <h2 className="mt-4 font-display text-3xl md:text-5xl tracking-tighter font-semibold leading-[1.1]">
+              {cms.addons_intro.title}
+            </h2>
+            <p className="mt-4 text-zinc-400 max-w-xl mx-auto">
+              {cms.addons_intro.subtitle}
+            </p>
           </div>
-          <h2 className="mt-4 font-display text-3xl md:text-5xl tracking-tighter font-semibold leading-[1.1]">
-            What you can do with credits.
-          </h2>
-          <p className="mt-4 text-zinc-400 max-w-xl mx-auto">
-            Every plan includes a monthly credit allowance. Use them for the features below — buy more whenever you need, never expire.
-          </p>
-        </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
-          {[
-            {
-              icon: MessageSquare,
-              name: "SMS alert",
-              price: "1 credit",
-              hint: "Per SMS sent to your phone for deploy / downtime / SSL events. No SMS contract needed.",
-            },
-            {
-              icon: Server,
-              name: "Reserved static IP",
-              price: "50 credits / mo",
-              hint: "Pin your app to a fixed IP — required for some database whitelists & 3rd party API integrations.",
-            },
-            {
-              icon: Gauge,
-              name: "Server upgrade per app",
-              price: "from 100 credits / mo",
-              hint: "Bump CPU + RAM for hungry apps. Multiple tiers — pay only for the apps that need more horsepower.",
-            },
-            {
-              icon: Sparkles,
-              name: "Site heatmaps",
-              price: "100 credits / mo per app",
-              hint: "Visual recording of where visitors click, scroll and bounce. Toggle on per app, no extra script tags.",
-            },
-            {
-              icon: Gauge,
-              name: "Extended log retention",
-              price: "100 credits / mo",
-              hint: "Keep build & runtime logs for 30 days instead of 7. Required for some compliance frameworks.",
-            },
-          ].map((addon, i) => {
-            const Ai = addon.icon;
-            return (
-              <motion.div
-                key={addon.name}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-                className="bg-background p-6"
-                data-testid={`addon-${addon.name.toLowerCase().replace(/\s+/g,'-')}`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="h-9 w-9 border border-brand/40 flex items-center justify-center">
-                    <Ai className="h-4 w-4 text-brand" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
+            {cms.addons.map((addon, i) => {
+              const Ai = LucideIcons[addon.icon] || Sparkles;
+              return (
+                <motion.div
+                  key={addon.id || addon.name}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                  className="bg-background p-6"
+                  data-testid={`addon-${(addon.id || addon.name).toLowerCase().replace(/\s+/g,'-')}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-9 w-9 border border-brand/40 flex items-center justify-center">
+                      <Ai className="h-4 w-4 text-brand" />
+                    </div>
+                    <div className="text-xs font-mono text-brand">{addon.price}</div>
                   </div>
-                  <div className="text-xs font-mono text-brand">{addon.price}</div>
-                </div>
-                <div className="font-display text-lg text-zinc-100">{addon.name}</div>
-                <div className="mt-2 text-sm text-zinc-400 leading-relaxed">{addon.hint}</div>
-              </motion.div>
-            );
-          })}
-        </div>
-        <div className="mt-6 text-center text-xs font-mono text-zinc-500">
-          Every action shows its credit cost before you confirm. Watch your balance live on the dashboard. Hard cap toggle so you&apos;re never billed for more than you budgeted.
-        </div>
-      </section>
+                  <div className="font-display text-lg text-zinc-100">{addon.name}</div>
+                  <div className="mt-2 text-sm text-zinc-400 leading-relaxed">{addon.hint}</div>
+                </motion.div>
+              );
+            })}
+          </div>
+          <div className="mt-6 text-center text-xs font-mono text-zinc-500">
+            {cms.addons_intro.footnote}
+          </div>
+        </section>
+      )}
 
       <section className="max-w-[1200px] mx-auto px-6 pb-28">
         <div className="border border-white/[0.06] p-8 md:p-10 relative overflow-hidden">

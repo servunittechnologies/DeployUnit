@@ -41,6 +41,16 @@ async def list_plans():
     return await plans_list(only_active=True)
 
 
+@router.get("/billing/pricing-page")
+async def pricing_page_content():
+    """Public, unauthenticated read of the admin-managed pricing page bits
+    (hero copy + credit add-ons catalog). Plan cards still come from
+    /billing/plans. We import here lazily to avoid a circular admin↔billing
+    dependency at module load time."""
+    from routers.admin import _read_pricing_page
+    return await _read_pricing_page()
+
+
 @router.get("/billing/countries")
 async def list_countries():
     eu = [{"code": c, "name": COUNTRY_NAMES.get(c, c), "eu": True, "vat_rate": EU_VAT_RATES[c]} for c in EU_VAT_RATES]
