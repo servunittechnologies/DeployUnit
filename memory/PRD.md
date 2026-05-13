@@ -581,3 +581,33 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Prerender refresh**: nieuwe copy is bevestigd aanwezig in `build/index.html` en `build/pricing/index.html` voor no-JS visitors + SEO.
   - **Strategie**: credits worden gepresenteerd als **"feature-unlock currency"** (transparant per add-on, niet als usage-meter). Aansluitend op user-statement "extra features worden betaald met credits maar dit is heel transparant".
 
+
+
+- **2026-05-13 — Iter22 — App Add-ons UI wired (P0)**
+  - **Context**: previous fork built the backend (`services/app_addons.py`, `routers/app_addons.py`, scheduler tick) and created `AddonsCard.jsx` + `Heatmaps.jsx`, but hit context limit before wiring them into the dashboard. Iter22 finishes the wiring.
+  - **Changes**:
+    * `pages/dashboard/AppDetail.jsx` — `TABS` array now ends with `addons` before `settings`; new tab block renders `<AddonsCard appId={id} appName={app.name} />` inside the standard `p-6 max-w-3xl` container with a short header.
+    * `App.js` — new route `<Route path="apps/:id/heatmaps" element={<Heatmaps />} />` nested under `/app` so it inherits the existing `DashboardLayout` outlet.
+    * `pages/dashboard/Heatmaps.jsx` — removed the (incorrect) named import `{ DashboardLayout }` and the `<DashboardLayout>` wrapper. The page is already nested under `/app` so the parent route provides the layout via `<Outlet />`. Without this fix the page would have crashed at runtime (`DashboardLayout` is a default export).
+  - **Verified flows (testing agent iter21 report)**: login → AppDetail → ADDONS tab → 3 cards render with correct active/inactive states → static-ip enable POST succeeds → Open heatmap viewer → /app/apps/:id/heatmaps loads with sidebar (no double-layout) → date range buttons work → URL list renders. No regressions on overview/deployments/settings tabs. 100% pass rate.
+  - **Files touched**: `frontend/src/App.js`, `frontend/src/pages/dashboard/AppDetail.jsx`, `frontend/src/pages/dashboard/Heatmaps.jsx`.
+
+## Roadmap (post-iter22, ordered)
+
+### P1 — next up
+- **Static IP reservations (50 cr/mo)** — backend already lists `static-ip` in `ADDON_CATALOG`; needs actual IP-pinning logic on the build engine + a visible IP value in the AddonsCard when active.
+- **Server upgrade per app** — buy more CPU/RAM via credits, exposed on Pricing page but not yet enforced/executed.
+
+### P2 — soon
+- Slack/Discord webhook "Send test ping" button in App → Notifications.
+- Credit balance auto-monitoring scheduler tick (admin email when SMS/API balance drops below threshold).
+- Build-engine health dashboard tab in Admin Console (failed/retried deploy stats over 24h).
+
+### P2 — backlog
+- Mailserver hosting.
+- Developers API.
+- Database branching (Neon-style 1-click prod-clone per PR).
+
+## Known good test data (post-iter22)
+- Demo user: `demo@deployunit.com` / `demo1234`.
+- Seeded first app (id `63c1ba3c-8286-4e80-83d1-06a603132392`) already has `heatmaps` addon active and 1 URL (`/test`) with click data — convenient for visual checks.
