@@ -107,10 +107,9 @@ frontend/node_modules/.cache/default-development/25.pack
 frontend/node_modules/.cache/default-development/22.pack
 frontend/node_modules/.cache/default-development/28.pack
 -e 
-# Environment and credential files
-.env
-.env.*
-*.env
+# Credential files (kept out of git on purpose). .env files are NOT
+# ignored — they hold env-specific config that the deployment pipeline
+# auto-updates per environment (preview vs production).
 credentials.json
 *.pem
 *.key
