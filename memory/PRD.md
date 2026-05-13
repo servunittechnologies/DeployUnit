@@ -541,3 +541,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Scheduler**: `verify_pending_subdomains_tick` registered at 30s interval in `server.py` lifespan.
   - Tests: 45/45 backend pytest green (`/app/backend/tests/test_iter18_custom_subdomain.py`) + UI hydration of prerendered `/pricing` verified clean + full CustomSubdomainCard UI flow. Iter18 report: `/app/test_reports/iteration_18.json`.
 
+
+- **2026-05-13 — Iter19+20 — End-to-end notification pipeline rebuild (P0 bug)**
+  - **User report**: "SMS-tests werken perfect, maar échte meldingen (restart, build success/failed, domain expiry, SSL invalid) komen nooit binnen."
+  - **Root cause**: `send_alert()` werd ALLEEN aangeroepen vanuit `/api/notifications/test`. Geen enkel echt platform event triggerde de SMS/Email/Slack/Discord fan-out. Daarnaast deed `_evaluate_alerts` alleen in-app inserts en vuurde nooit `app_recovered`.
+  - **Fix**: Nieuwe centrale `services/event_dispatcher.py::dispatch_event()` met:
+    * **Cooldown** per (workspace, event_type, app_id) via unique index op `event_cooldowns` + DuplicateKeyError-fallback voor race-free atomic claim. Per-event windows in `COOLDOWN_DEFAULTS` (app_down 15min, deploy 60s, domain_expiring 6h, etc.).
+    * **In-app bell** — schrijft één workspace-scoped row naar `notifications` ongeacht of de gebruiker external channels heeft.
+    * **External fan-out** — voor elke workspace member met `notification_prefs.channels[ch]` roept dispatcher `send_alert()` aan. Email-branch in `send_alert` schrijft nu géén dubbele bell row meer (alleen externe email + log).
+  - **Wiring**:
+    * `routers/apps.py::restart_app` → `app_restarted`
+    * `workers/monitor.py::_evaluate_alerts` → `app_down` / `app_recovered` met state-flip tracking via `monitor_last_ok`
+    * `workers/monitor.py::sync_deployments` → `deploy_succeeded` / `deploy_failed` bij status-transities
+    * Nieuw: `services/health_audit.py` (every 6h) probeert SSL via Python `ssl` socket per custom domain. Bij handshake-failure / verlopen cert / `<7d remaining` → `ssl_invalid`. Bij registrar `expires_at <14d` → `domain_expiring`.
+  - **Nieuwe admin tools**:
+    * `POST /api/admin/notifications/fire` — synthesisch event afvuren (force-bypass cooldown) om in productie te verifiëren of de pipeline werkt zonder een echte deploy te crashen.
+    * `GET /api/admin/notifications/sends?limit&workspace_id` — auditlog van alle uitgaande sends (status/error/cost).
+  - **DB-indexen toegevoegd**: `event_cooldowns(workspace_id, event_type, app_id)` UNIQUE, plus indexen op `notification_sends` en `custom_subdomain_requests` voor de hot path.
+  - **Tests**: 29/29 backend pytest green (`/app/backend/tests/test_iter20_dispatcher.py`). Regressie: cooldown atomicity verified (back-to-back POST /apps/{id}/restart fires once), email-branch deduplication verified, all 9 event types in `SUPPORTED_EVENT_TYPES`. Report: `/app/test_reports/iteration_20.json`.
+
