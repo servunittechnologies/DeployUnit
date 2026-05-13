@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Check, ArrowRight, Sparkles, Shield, Rocket, Coins, Mail, MessageSquare, Server, Gauge } from "lucide-react";
+import { Check, ArrowRight, Sparkles, Shield, Rocket, Coins, MessageSquare, Server, Gauge } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
@@ -151,12 +151,36 @@ export default function Pricing() {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
           {[
-            { icon: MessageSquare, name: "SMS alert", price: "1 credit",  hint: "Per SMS sent to your phone for deploy / downtime events." },
-            { icon: MessageSquare, name: "WhatsApp alert", price: "3 credits", hint: "Same as SMS but delivered via WhatsApp Business." },
-            { icon: Server,        name: "Reserved static IP", price: "50 credits / mo", hint: "Pin your app to a fixed IP — required for some database whitelists & 3rd party integrations." },
-            { icon: Mail,          name: "Branded email sender", price: "100 credits / mo", hint: "Send transactional emails from your domain with our infra." },
-            { icon: Gauge,         name: "Extended log retention", price: "100 credits / mo", hint: "Keep build & runtime logs for 30 days instead of 7." },
-            { icon: Coins,         name: "Top-up credit packs", price: "from €5", hint: "Buy 50 / 220 / 600 credits packs. Bulk discount on larger packs." },
+            {
+              icon: MessageSquare,
+              name: "SMS alert",
+              price: "1 credit",
+              hint: "Per SMS sent to your phone for deploy / downtime / SSL events. No SMS contract needed.",
+            },
+            {
+              icon: Server,
+              name: "Reserved static IP",
+              price: "50 credits / mo",
+              hint: "Pin your app to a fixed IP — required for some database whitelists & 3rd party API integrations.",
+            },
+            {
+              icon: Gauge,
+              name: "Server upgrade per app",
+              price: "from 100 credits / mo",
+              hint: "Bump CPU + RAM for hungry apps. Multiple tiers — pay only for the apps that need more horsepower.",
+            },
+            {
+              icon: Sparkles,
+              name: "Site heatmaps",
+              price: "100 credits / mo per app",
+              hint: "Visual recording of where visitors click, scroll and bounce. Toggle on per app, no extra script tags.",
+            },
+            {
+              icon: Gauge,
+              name: "Extended log retention",
+              price: "100 credits / mo",
+              hint: "Keep build & runtime logs for 30 days instead of 7. Required for some compliance frameworks.",
+            },
           ].map((addon, i) => {
             const Ai = addon.icon;
             return (
