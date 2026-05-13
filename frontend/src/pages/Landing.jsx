@@ -1234,31 +1234,33 @@ const SMALL_FEATURES = [
 
 function Compare() {
   const rows = [
-    { f: "EU data residency by default", dh: true,      vc: "partial", rd: "partial", coolify: "self-host" },
-    { f: "Included container metrics",   dh: true,      vc: "addon",   rd: "addon",   coolify: false },
-    { f: "Built-in web analytics",       dh: true,      vc: "addon",   rd: "addon",   coolify: false },
-    { f: "Agency-grade multi-tenant",    dh: true,      vc: false,     rd: false,     coolify: false },
-    { f: "Green energy by default",      dh: true,      vc: false,     rd: false,     coolify: "self-host" },
-    { f: "Credit-based pricing",         dh: true,      vc: "partial", rd: false,     coolify: false },
-    { f: "Transparent overage billing",  dh: true,      vc: "partial", rd: "partial", coolify: "self-host" },
-    { f: "Push-to-deploy from GitHub",   dh: true,      vc: true,      rd: true,      coolify: "DIY" },
-    { f: "PR previews",                  dh: true,      vc: true,      rd: true,      coolify: false },
-    { f: "Managed EU-based support",     dh: true,      vc: false,     rd: false,     coolify: false },
+    { f: "Push → live deploy in seconds",          dh: true, vc: true,      rd: true },
+    { f: "PR preview deployments",                 dh: true, vc: true,      rd: true },
+    { f: "Auto-detect stack (Next.js, Node, etc.)",dh: true, vc: true,      rd: true },
+    { f: "No config required (zero DevOps)",       dh: true, vc: false,     rd: false },
+    { f: "Single dashboard for everything",        dh: true, vc: false,     rd: false },
+    { f: "Built-in analytics (no Plausible/GA)",   dh: true, vc: false,     rd: false },
+    { f: "Built-in monitoring & metrics",          dh: true, vc: false,     rd: false },
+    { f: "Built-in alerts (Slack/Discord/email)",  dh: true, vc: false,     rd: false },
+    { f: "Background jobs / cron included",        dh: true, vc: false,     rd: false },
+    { f: "No need for external tools",             dh: true, vc: false,     rd: false },
+    { f: "Agency workspaces (multi-client)",       dh: true, vc: false,     rd: false },
+    { f: "Per-client access & permissions",        dh: true, vc: false,     rd: false },
+    { f: "Per-client billing support",             dh: true, vc: false,     rd: false },
+    { f: "Predictable pricing",                    dh: true, vc: false,     rd: false },
+    { f: "No surprise usage costs",                dh: true, vc: false,     rd: false },
+    { f: "Custom domains & TLS included",          dh: true, vc: true,      rd: true },
+    { f: "Deploy logs & full pipeline visibility", dh: true, vc: "limited", rd: "limited" },
+    { f: "Everything works out-of-the-box",        dh: true, vc: false,     rd: false },
   ];
 
   function Cell({ v }) {
     if (v === true)
       return <span className="inline-flex items-center gap-1 text-signal-live"><Check className="h-4 w-4" /></span>;
     if (v === false)
-      return <span className="text-zinc-600">—</span>;
-    if (v === "partial")
-      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">partial</span>;
-    if (v === "addon")
-      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">paid add-on</span>;
-    if (v === "self-host")
-      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-zinc-600 text-zinc-400 font-mono">self-host</span>;
-    if (v === "DIY")
-      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-zinc-600 text-zinc-400 font-mono">DIY only</span>;
+      return <span className="inline-flex items-center gap-1 text-zinc-600"><XIcon className="h-4 w-4" /></span>;
+    if (v === "limited")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">limited</span>;
     return <span className="text-zinc-600">—</span>;
   }
 
@@ -1327,7 +1329,6 @@ function Compare() {
                 <th className="p-4 font-normal bg-cyan-950/30 border-x border-cyan-500/30 text-cyan-300">DeployUnit</th>
                 <th className="p-4 font-normal">Vercel</th>
                 <th className="p-4 font-normal">Render</th>
-                <th className="p-4 font-normal">Self-hosting (DIY)</th>
               </tr>
             </thead>
             <tbody>
@@ -1337,14 +1338,13 @@ function Compare() {
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.03 }}
+                  transition={{ delay: i * 0.02 }}
                   className="border-b border-zinc-900 last:border-b-0 hover:bg-zinc-950/50"
                 >
                   <td className="p-4 text-zinc-300">{r.f}</td>
-                  <td className="p-4 bg-cyan-950/20 border-x border-cyan-500/20"><Cell v={r.dh} /></td>
-                  <td className="p-4"><Cell v={r.vc} /></td>
-                  <td className="p-4"><Cell v={r.rd} /></td>
-                  <td className="p-4"><Cell v={r.coolify} /></td>
+                  <td className="p-4 bg-cyan-950/20 border-x border-cyan-500/20 text-center"><Cell v={r.dh} /></td>
+                  <td className="p-4 text-center"><Cell v={r.vc} /></td>
+                  <td className="p-4 text-center"><Cell v={r.rd} /></td>
                 </motion.tr>
               ))}
             </tbody>
