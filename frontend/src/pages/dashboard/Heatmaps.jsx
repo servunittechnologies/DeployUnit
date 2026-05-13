@@ -13,7 +13,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Loader2, ArrowLeft, MousePointerClick, Eye, ScrollText, Flame } from "lucide-react";
 import { api } from "../../lib/api";
-import { DashboardLayout } from "../../components/DashboardLayout";
 
 const TYPE_LABELS = {
   click: { label: "Clicks", icon: MousePointerClick, color: "#06B6D4" },
@@ -57,8 +56,7 @@ export default function Heatmaps() {
   }, [pages, selectedUrl]);
 
   return (
-    <DashboardLayout>
-      <div className="p-6" data-testid="heatmaps-page">
+    <div className="p-6" data-testid="heatmaps-page">
         <Link to={`/app/apps/${id}`} className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-brand mb-4" data-testid="heatmaps-back">
           <ArrowLeft className="h-3.5 w-3.5" /> back to app
         </Link>
@@ -139,7 +137,6 @@ export default function Heatmaps() {
           </div>
         )}
       </div>
-    </DashboardLayout>
   );
 }
 

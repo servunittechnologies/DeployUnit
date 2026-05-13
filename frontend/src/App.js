@@ -17,6 +17,7 @@ import Projects from "./pages/dashboard/Projects";
 import ProjectDetail from "./pages/dashboard/ProjectDetail";
 import NewApp from "./pages/dashboard/NewApp";
 import AppDetail from "./pages/dashboard/AppDetail";
+import Heatmaps from "./pages/dashboard/Heatmaps";
 import Domains from "./pages/dashboard/Domains";
 import Monitoring from "./pages/dashboard/Monitoring";
 import Alerts from "./pages/dashboard/Alerts";
@@ -75,6 +76,7 @@ function App() {
                 <Route path="projects/:id" element={<ProjectDetail />} />
                 <Route path="apps/new" element={<NewApp />} />
                 <Route path="apps/:id" element={<AppDetail />} />
+                <Route path="apps/:id/heatmaps" element={<Heatmaps />} />
                 <Route path="domains" element={<Domains />} />
                 <Route path="monitoring" element={<Monitoring />} />
                 <Route path="alerts" element={<Alerts />} />

@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only verification of new ADDONS tab on AppDetail + /app/apps/:id/heatmaps route. All requested flows passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "Login as demo@deployunit.com / demo1234 succeeded; landed on /app",
+    "Dynamic app discovery via GET /api/workspaces + /api/apps?workspace_id=... -> first app id 63c1ba3c-8286-4e80-83d1-06a603132392 (next.js)",
+    "AppDetail loads with [data-testid='app-detail']; overview tab default and Deploy CTA visible",
+    "tab-addons trigger renders [data-testid='app-addons'] with three cards: addon-card-log-retention, addon-card-heatmaps, addon-card-static-ip",
+    "Heatmaps card shows ACTIVE status pill, renews-in-30-days text, [data-testid='heatmap-snippet-copy'] and [data-testid='heatmap-open-viewer'] both visible",
+    "Click addon-enable-static-ip -> POST /api/apps/{id}/addons/static-ip/enable observed with status 200; sonner toast rendered",
+    "heatmap-open-viewer navigates to /app/apps/:id/heatmaps; [data-testid='heatmaps-page'] renders inside DashboardLayout (sidebar nav present); no double-layout / crash",
+    "Date range buttons heatmaps-range-7/14/30/90 all clickable; heatmap-url-list renders (1 URL '/test'), is_active=true, no empty/inactive state shown",
+    "Regression: overview tab still loads, tab-deployments and tab-settings switch without errors"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Non-blocking React warning observed in console: a 'key' prop is being spread into <UsageBar /> via JSX spread (unrelated to this iteration's addons/heatmaps wiring, but worth fixing in the component that maps over usage entries).",
+    "AddonsCard catches load errors silently (sets addons=[]) — consider surfacing a small inline error instead of an indistinguishable empty list."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "demo@deployunit.com / demo1234 (used as provided)",
+  "seed_data_creation": "None; relied on existing seeded demo workspace+app (heatmaps already active, 1 page '/test' with click events).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Addons tab wiring + /app/apps/:id/heatmaps route fully working as of iteration 21. The Heatmaps.jsx fix (removing nested DashboardLayout) is confirmed — page renders inside the parent /app outlet without sidebar duplication or runtime errors."
+}

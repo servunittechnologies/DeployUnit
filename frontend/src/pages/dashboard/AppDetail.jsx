@@ -15,6 +15,7 @@ import AppWebAnalyticsTab from "../../components/AppWebAnalyticsTab";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
 import CustomSubdomainCard from "../../components/CustomSubdomainCard";
+import AddonsCard from "../../components/AddonsCard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const TABS = ["overview", "deployments", "console", "domains", "env", "resources", "monitoring", "analytics", "settings"];
+const TABS = ["overview", "deployments", "console", "domains", "env", "resources", "monitoring", "analytics", "addons", "settings"];
 
 function timeAgo(iso) {
   if (!iso) return "—";
@@ -741,6 +742,20 @@ export default function AppDetail() {
 
       {tab === "monitoring" && (
         <AppAnalyticsPanel appId={id} />
+      )}
+
+      {tab === "addons" && (
+        <div className="p-6 max-w-3xl space-y-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-xl">Add-ons</h2>
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              Per-app paid features billed monthly in credits. Cancel anytime — the feature stays active until the period ends.
+            </p>
+          </div>
+          <AddonsCard appId={id} appName={app.name} />
+        </div>
       )}
 
       {tab === "settings" && (
