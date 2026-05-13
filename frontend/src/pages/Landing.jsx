@@ -1233,35 +1233,26 @@ const SMALL_FEATURES = [
 /* ───────────────────────── Comparison table ───────────────────────── */
 
 function Compare() {
-  // Each row is bucketed by what the customer actually gains: features the
-  // competitors don't even offer ("new"), features we do strictly better
-  // ("improved"), and features that are table-stakes anyway ("on_par").
-  // Sorting the table this way makes the differentiator visceral — the eye
-  // hits the "13 features only on DeployUnit" header before scanning
-  // anything else.
+  // Bundled feature buckets — instead of 18 atomic rows we show 11 rows
+  // that each carry their own punch. Bundling related capabilities (e.g.
+  // analytics+metrics+alerts → "Full observability") makes the value
+  // clearer and the table easier to scan.
   const NEW = [
-    "No config required (zero DevOps)",
-    "Single dashboard for everything",
-    "Built-in analytics (no Plausible/GA)",
-    "Built-in monitoring & metrics",
-    "Built-in alerts (Slack/Discord/email)",
-    "Background jobs / cron included",
-    "No need for external tools",
-    "Agency workspaces (multi-client)",
-    "Per-client access & permissions",
-    "Per-client billing support",
-    "Predictable pricing",
-    "No surprise usage costs",
-    "Everything works out-of-the-box",
+    { f: "No config required (zero DevOps)",                                vc: false, rd: false },
+    { f: "Single dashboard — no external SaaS tools needed",                 vc: false, rd: false },
+    { f: "Full observability: analytics + metrics + alerts (Slack/Discord/email)", vc: false, rd: false },
+    { f: "Background jobs / cron included",                                  vc: false, rd: false },
+    { f: "Agency workspaces — multi-client billing, access & permissions",   vc: false, rd: false },
   ];
   const IMPROVED = [
     { f: "Deploy logs & full pipeline visibility", vc: "limited", rd: "limited" },
+    { f: "Predictable pricing (no surprise usage costs)", vc: false, rd: "limited" },
   ];
   const ON_PAR = [
-    "Push → live deploy in seconds",
-    "PR preview deployments",
-    "Auto-detect stack (Next.js, Node, etc.)",
-    "Custom domains & TLS included",
+    { f: "Push → live deploy in seconds",          vc: true, rd: true },
+    { f: "PR preview deployments",                 vc: true, rd: true },
+    { f: "Auto-detect stack (Next.js, Node, etc.)",vc: true, rd: true },
+    { f: "Custom domains & TLS included",          vc: true, rd: true },
   ];
 
   function Cell({ v }) {
@@ -1276,9 +1267,9 @@ function Compare() {
 
   function GroupHeader({ tone, kicker, title, count, blurb }) {
     const toneMap = {
-      new:      { dot: "bg-cyan-400",    border: "border-cyan-500/40",   text: "text-cyan-300",  pill: "bg-cyan-950/40 text-cyan-300 border-cyan-500/40" },
-      improved: { dot: "bg-amber-400",   border: "border-amber-400/40",  text: "text-amber-300", pill: "bg-amber-950/40 text-amber-300 border-amber-400/40" },
-      on_par:   { dot: "bg-zinc-500",    border: "border-zinc-700",      text: "text-zinc-400",  pill: "bg-zinc-900 text-zinc-400 border-zinc-700" },
+      new:      { dot: "bg-cyan-400",    text: "text-cyan-300",  pill: "bg-cyan-950/40 text-cyan-300 border-cyan-500/40" },
+      improved: { dot: "bg-amber-400",   text: "text-amber-300", pill: "bg-amber-950/40 text-amber-300 border-amber-400/40" },
+      on_par:   { dot: "bg-zinc-500",    text: "text-zinc-400",  pill: "bg-zinc-900 text-zinc-400 border-zinc-700" },
     }[tone];
     return (
       <div className="flex items-end justify-between flex-wrap gap-3 mt-12 mb-3">
@@ -1317,26 +1308,21 @@ function Compare() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
-              const label = typeof r === "string" ? r : r.f;
-              const vc = typeof r === "string" ? (tone === "new" ? false : true) : r.vc;
-              const rd = typeof r === "string" ? (tone === "new" ? false : true) : r.rd;
-              return (
-                <motion.tr
-                  key={label}
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.02 }}
-                  className="border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02]"
-                >
-                  <td className="p-4 text-zinc-300">{label}</td>
-                  <td className="p-4 text-center"><Cell v={true} /></td>
-                  <td className="p-4 text-center"><Cell v={vc} /></td>
-                  <td className="p-4 text-center"><Cell v={rd} /></td>
-                </motion.tr>
-              );
-            })}
+            {rows.map((r, i) => (
+              <motion.tr
+                key={r.f}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.03 }}
+                className="border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02]"
+              >
+                <td className="p-4 text-zinc-300">{r.f}</td>
+                <td className="p-4 text-center"><Cell v={true} /></td>
+                <td className="p-4 text-center"><Cell v={r.vc} /></td>
+                <td className="p-4 text-center"><Cell v={r.rd} /></td>
+              </motion.tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -1403,7 +1389,7 @@ function Compare() {
           <GroupHeader
             tone="new"
             kicker="New · only on DeployUnit"
-            title="13 things our competitors don't even offer."
+            title="5 things our competitors don't even offer."
             count={NEW.length}
             blurb="Stop assembling 6 SaaS tools to get what one platform should already do."
           />
