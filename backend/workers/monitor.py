@@ -24,28 +24,53 @@ def _now_iso() -> str:
 
 
 async def _evaluate_alerts(app: dict, ok: bool, response_ms: int | None):
-    """Apply alert rules for an app result."""
+    """Apply alert rules for an app result + dispatch app_down/app_recovered
+    notifications when the state actually flips. Cooldown is owned by the
+    central dispatcher so SMS / email / slack / discord don't get spammed
+    every minute the app stays down."""
     db = get_db()
+    # Track the previous state so we know when we *transition* (down→up or
+    # up→down). Without this we'd never fire `app_recovered`.
+    prev_ok = app.get("monitor_last_ok")
+    state_changed = (prev_ok is None) or (bool(prev_ok) != bool(ok))
+    await db.apps.update_one(
+        {"id": app["id"]},
+        {"$set": {"monitor_last_ok": bool(ok), "monitor_last_checked_at": _now_iso()}},
+    )
+
+    if state_changed:
+        from services.event_dispatcher import dispatch_event
+        if not ok:
+            await dispatch_event(
+                workspace_id=app["workspace_id"],
+                event_type="app_down",
+                title=f"{app['name']} is DOWN",
+                body=f"{app.get('primary_url') or app['name']} stopped responding.",
+                app_id=app["id"],
+            )
+        elif prev_ok is False:
+            # Only fire `recovered` when we actually transitioned from down
+            # to up — not for the very first probe of a freshly seen app.
+            await dispatch_event(
+                workspace_id=app["workspace_id"],
+                event_type="app_recovered",
+                title=f"{app['name']} is back",
+                body=f"{app.get('primary_url') or app['name']} is responding again.",
+                app_id=app["id"],
+            )
+
+    # Legacy `alert_rules` path — kept for the "slow response" threshold
+    # rule which has no dispatcher equivalent yet.
     rules = await db.alert_rules.find(
         {"workspace_id": app["workspace_id"], "enabled": True,
          "$or": [{"app_id": app["id"]}, {"app_id": None}]},
         {"_id": 0},
     ).to_list(50)
     for rule in rules:
-        triggered = False
-        title = ""
-        msg = ""
-        if rule["type"] == "app_down" and not ok:
-            triggered = True
-            title = f"{app['name']} is DOWN"
-            msg = f"{app.get('primary_url') or app['name']} returned an error response."
-        elif rule["type"] == "slow_response" and response_ms and rule.get("threshold") and response_ms > rule["threshold"]:
-            triggered = True
-            title = f"{app['name']} responding slowly"
-            msg = f"Response time {response_ms}ms exceeds threshold {rule['threshold']}ms."
-        if not triggered:
+        if rule["type"] != "slow_response":
             continue
-        # Cooldown
+        if not (response_ms and rule.get("threshold") and response_ms > rule["threshold"]):
+            continue
         last = rule.get("last_triggered_at")
         if last:
             last_dt = datetime.fromisoformat(last) if isinstance(last, str) else last
@@ -54,19 +79,13 @@ async def _evaluate_alerts(app: dict, ok: bool, response_ms: int | None):
         await db.alert_rules.update_one(
             {"id": rule["id"]}, {"$set": {"last_triggered_at": _now_iso()}}
         )
-        await db.notifications.insert_one(
-            {
-                "id": str(uuid.uuid4()),
-                "workspace_id": app["workspace_id"],
-                "user_id": None,
-                "type": rule["type"],
-                "title": title,
-                "message": msg,
-                "severity": "error" if rule["type"] == "app_down" else "warning",
-                "read": False,
-                "link": f"/app/apps/{app['id']}",
-                "created_at": _now_iso(),
-            }
+        from services.event_dispatcher import dispatch_event
+        await dispatch_event(
+            workspace_id=app["workspace_id"],
+            event_type="build_warning",
+            title=f"{app['name']} responding slowly",
+            body=f"Response time {response_ms}ms exceeds threshold {rule['threshold']}ms.",
+            app_id=app["id"],
         )
 
 
@@ -356,6 +375,32 @@ async def sync_deployments():
         if new_status in ("live", "failed"):
             update["last_deploy_at"] = _now_iso()
         await db.apps.update_one({"id": a["id"]}, {"$set": update})
+
+        # Fire deploy_succeeded / deploy_failed when we just learned of a
+        # terminal state transition. We only dispatch when status actually
+        # flipped (handled by `if new_status == a.get("status"): continue`
+        # earlier) — so this only runs on real state changes.
+        try:
+            from services.event_dispatcher import dispatch_event
+            if new_status == "live":
+                # Was building/queued/failed → now live = success.
+                await dispatch_event(
+                    workspace_id=a["workspace_id"],
+                    event_type="deploy_succeeded",
+                    title=f"{a.get('name') or a['id']} deployed successfully",
+                    body=f"Latest build is live at {primary_url or a.get('primary_url') or '—'}",
+                    app_id=a["id"],
+                )
+            elif new_status == "failed":
+                await dispatch_event(
+                    workspace_id=a["workspace_id"],
+                    event_type="deploy_failed",
+                    title=f"{a.get('name') or a['id']} deploy failed",
+                    body="The latest build did not finish — check the Deployments tab for the failure log.",
+                    app_id=a["id"],
+                )
+        except Exception as e:
+            logger.warning("dispatch deploy event failed for %s: %s", a.get("id"), e)
         # Safety net: every app that goes live without a managed Cloudflare
         # subdomain gets one auto-provisioned now. Random 8-char prefix so
         # branded names never leak into public DNS history. Runs once per

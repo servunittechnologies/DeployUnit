@@ -583,3 +583,52 @@ async def admin_reset_credit_packs(request: Request):
               meta={}, request=request)
     from services.credits import get_credit_packs
     return await get_credit_packs()
+
+
+
+# ─────────── Notifications — synthetic event firing (admin debug) ───────────
+class _NotifEventIn(BaseModel):
+    workspace_id: str
+    event_type: str
+    title: str | None = None
+    body: str | None = None
+    app_id: str | None = None
+
+
+@router.post("/admin/notifications/fire")
+async def admin_notifications_fire(payload: _NotifEventIn, request: Request):
+    """Dispatch a synthetic event through the full notification pipeline
+    (in-app bell + every workspace member's SMS/email/Slack/Discord prefs).
+    Bypasses the cooldown so the admin can verify wiring end-to-end. Use
+    this to reproduce 'why isn't my SMS arriving' bug reports without
+    needing a real deploy/crash to occur."""
+    actor = await _require_admin(request)
+    from services.event_dispatcher import dispatch_event
+    from services.notifications_sms import SUPPORTED_EVENT_TYPES
+    if payload.event_type not in SUPPORTED_EVENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"event_type must be one of: {sorted(SUPPORTED_EVENT_TYPES)}")
+    res = await dispatch_event(
+        workspace_id=payload.workspace_id,
+        event_type=payload.event_type,
+        title=payload.title or f"[Admin test] {payload.event_type}",
+        body=payload.body or "Synthetic event fired from the Admin Console to verify notification wiring.",
+        app_id=payload.app_id,
+        force=True,   # ← skip cooldown for the debug endpoint
+    )
+    audit_log(action="admin.notifications_fire", actor=actor,
+              resource_type="workspace", resource_id=payload.workspace_id,
+              meta={"event_type": payload.event_type}, request=request)
+    return res
+
+
+@router.get("/admin/notifications/sends")
+async def admin_notifications_sends(request: Request, limit: int = 50, workspace_id: str | None = None):
+    """Last N notification_sends rows so the admin can audit what was sent
+    (or skipped + why). Useful when 'I didn't get an SMS' is reported."""
+    await _require_admin(request)
+    db = get_db()
+    q: dict = {}
+    if workspace_id:
+        q["workspace_id"] = workspace_id
+    rows = await db.notification_sends.find(q, {"_id": 0}).sort("created_at", -1).limit(min(500, max(1, limit))).to_list(limit)
+    return rows

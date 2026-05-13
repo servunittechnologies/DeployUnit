@@ -27,6 +27,7 @@ from services.subdomains import refill_pool as subdomain_refill_pool
 from services.routing_healer import routing_healer_tick
 from services.coolify_reconcile import reconcile_tick as coolify_reconcile_tick
 from services.custom_subdomain import verify_pending_subdomains_tick
+from services.health_audit import health_audit_tick
 from routers.status import status_ping_tick
 
 from routers import (
@@ -122,6 +123,10 @@ async def lifespan(app: FastAPI):
     # Traefik + SSL are all working. Prevents the "user changed name
     # and now their app is unreachable" failure mode.
     scheduler.add_job(verify_pending_subdomains_tick, "interval", seconds=30, id="custom_subdomain_verify", replace_existing=True, max_instances=1)
+    # Daily-ish health audit — SSL cert validity + custom-domain registration
+    # expiry for every verified custom domain. Per-event dispatcher cooldown
+    # prevents repeat pings within 24h for the same problem.
+    scheduler.add_job(health_audit_tick, "interval", hours=6, id="health_audit", replace_existing=True, max_instances=1)
     scheduler.start()
     # Initial fill on boot (fire-and-forget) so the very first deploy after
     # a restart doesn't have to wait 3 min for the first scheduler tick.

@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the new central dispatch_event() notification pipeline end-to-end. 24/25 backend tests pass. The admin /notifications/fire + /notifications/sends endpoints work, the restart endpoint correctly fires app_restarted, supported_events now exposes app_restarted + ssl_invalid, the existing /notifications/test button still works, _probe_ssl handles unreachable hosts, and health_audit is registered at 6h. ONE CRITICAL BUG FOUND: dispatch_event() cooldown does NOT work — two non-forced calls within the cooldown window both fire (and write duplicate event_cooldowns rows) because the upsert filter pattern in services/event_dispatcher.py::_cooldown_passed is missing a unique index on (workspace_id, event_type, app_id).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "services/event_dispatcher.py::_cooldown_passed (used by every non-forced dispatch_event call)",
+        "issue": "Cooldown logic is broken — duplicate event_cooldowns rows get inserted on the second call within the window, and the function returns True (fire allowed) both times. Verified empirically: after 2 back-to-back calls with the same key, db.event_cooldowns contains 2 rows for the same (workspace_id, event_type, app_id). Root cause: update_one(filter, $set, upsert=True) where filter uses a $or on last_at — when filter doesn't match, upsert inserts a NEW doc instead of being blocked, because there is no unique index on (workspace_id, event_type, app_id). Real-world impact: a flapping app_down/app_recovered or repeated deploy_failed will spam every workspace member's SMS + email + Slack + Discord every 60s, defeating COOLDOWN_DEFAULTS entirely. The admin/notifications/fire endpoint masks this because it hardcodes force=True.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter19_notif_dispatch.py",
+    "/app/test_reports/pytest/pytest_iter19.xml"
+  ],
+  "action_items": [
+    "Fix dispatch_event cooldown: add a unique index on db.event_cooldowns (workspace_id, event_type, app_id) in db.py::ensure_indexes, OR rewrite _cooldown_passed to use find_one_and_update with returnDocument='before' + manual comparison, OR use update_one with the full key as filter and only-set-if-stale via $expr. Without this, all production cooldowns (15-min app_down, 6h domain_expiring, etc.) are non-functional.",
+    "Optional: add an explicit assertion in dispatch_event that res.upserted_id is None when matched_count == 0 was expected — would have caught this in dev."
+  ],
+  "critical_code_review_comments": [
+    "event_dispatcher._cooldown_passed: the {filter + $or stale} + upsert=True pattern requires a unique index to be safe, but db.py does not declare one for event_cooldowns. This causes silent duplicate insertions.",
+    "admin_notifications_fire hardcodes force=True with no way for the caller to disable it. This made the cooldown bug hide during manual admin testing — consider exposing force as a request-body flag (defaulting to True) so the admin debug UI can also exercise the cooldown path.",
+    "services/notifications_sms.py::send_alert silently inserts to db.notifications for the email channel (free in-app row). dispatch_event ALSO writes to db.notifications. Net effect: any user whose prefs include event_type in channels['email'] gets TWO bell rows per event (one workspace-scoped from dispatcher, one user-scoped from send_alert). Either dedupe or drop the email-path insert.",
+    "event_dispatcher.dispatch_event swallows all exceptions and returns {'error': ...}. The admin/notifications/fire endpoint surfaces this as HTTP 200 with body {'error': ...} — the caller cannot tell success from failure without parsing the body."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter19_notif_dispatch.py"],
+  "success_rate": {"backend": "96% (24/25)", "frontend": "N/A (backend-only test)"},
+  "test_credentials": "Admin admin@deployunit.com/admin123; Demo demo@deployunit.com/demo1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Per-test synthetic workspace + user rows (auto-cleaned). Iteration_19 also generated transient db.notification_sends rows for all 9 supported event types via the admin fire endpoint — these are append-only audit rows and were intentionally left in place.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Re-run /app/backend/tests/test_iter19_notif_dispatch.py after the cooldown fix. The single failing test is test_dispatch_cooldown_skips_second_call — it calls dispatch_event(force=False) twice in quick succession and expects the second response to be {skipped:'cooldown'}. Also verify db.event_cooldowns has at most 1 row per (workspace_id, event_type, app_id) key after the fix. SMSTools 401 errors in notification_sends rows are EXPECTED in preview env (stale provider creds) and prove dispatch ran — do not flag those.",
+  "rca of the issue": "PyMongo's update_one(filter, update, upsert=True) inserts a NEW document whenever the filter does not match an existing one. event_dispatcher._cooldown_passed uses filter={key + last_at-stale-OR-missing}; on the second call within the window, the existing row's last_at is fresh so the $or evaluates false and the filter has zero matches. With upsert=True and no unique index on event_cooldowns, mongo cheerfully inserts a SECOND row with the same logical key. The function then sees upserted_id is set and returns True, mistakenly allowing the event to fire. The fix is to (a) create a unique index on (workspace_id, event_type, app_id) in db.ensure_indexes() AND wrap the upsert in try/except DuplicateKeyError → return False on duplicate; or (b) restructure to find_one_and_update with the bare key as filter and a $cond/$expr to only $set last_at when stale. Reproduction: call dispatch_event(workspace_id=X, event_type='build_warning', app_id=Y, force=False) twice in a row; both return {members:N, results:[...]} instead of the second returning {skipped:'cooldown'}."
+}

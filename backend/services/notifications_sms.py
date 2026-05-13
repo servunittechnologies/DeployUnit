@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EVENT_TYPES = {
     "deploy_failed", "deploy_succeeded",
     "app_down", "app_recovered",
+    "app_restarted",
     "build_warning", "domain_expiring",
+    "ssl_invalid",
     "credits_low",
 }
 

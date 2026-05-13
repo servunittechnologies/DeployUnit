@@ -1023,6 +1023,19 @@ async def restart_app(app_id: str, request: Request):
     await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
     if coolify.configured and app.get("coolify_app_uuid"):
         await coolify.restart(app["coolify_app_uuid"])
+    # Notify the workspace — app_restarted is an info-level event with a
+    # short cooldown so a flurry of restart clicks only pings once.
+    try:
+        from services.event_dispatcher import dispatch_event
+        await dispatch_event(
+            workspace_id=app["workspace_id"],
+            event_type="app_restarted",
+            title=f"{app.get('name') or app_id} restarted",
+            body=f"{user.get('email') or 'A user'} restarted the app.",
+            app_id=app_id,
+        )
+    except Exception as e:
+        logger.warning("dispatch app_restarted failed for %s: %s", app_id, e)
     return {"ok": True}
 
 
