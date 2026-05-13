@@ -1,0 +1,33 @@
+{
+  "summary": "Iter22c verification: removed stale 'coming soon' messaging for Heatmaps add-on across Analytics sub-tab, Landing page, and dashboard Roadmap. All requested flows passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "Public Landing (logged out): 'Web analytics' bento card → inner 'Heatmap' tab no longer carries a 'soon' badge (outerHTML scanned, no 'soon' substring).",
+    "Public Landing 'Shipping next' roadmap teaser: body text no longer mentions 'Native heatmaps'; it now mentions 'Session replays' (rrweb).",
+    "Login demo@deployunit.com / demo1234 → redirected to /app.",
+    "AppDetail /app/apps/63c1ba3c-...-32392 renders [data-testid='app-detail']; tab-analytics opens [data-testid='analytics-tab'].",
+    "[data-testid='analytics-subtab-heatmaps'] no longer contains a 'soon' badge (DOM-level check).",
+    "Heatmaps sub-tab ACTIVE state renders: 'Heatmaps are live' heading, [data-testid='heatmaps-open-full-viewer'] visible, [data-testid='heatmaps-summary-pages'] table present, 3 stat tiles (Total events / Clicks / Rage clicks) rendered (CSS-uppercased).",
+    "Click 'heatmaps-open-full-viewer' → URL navigates to /app/apps/{id}/heatmaps and [data-testid='heatmaps-page'] renders.",
+    "Regression: tab-addons still renders [data-testid='app-addons'] with [data-testid='addon-card-heatmaps'] showing 'active'.",
+    "Dashboard /app/roadmap: no [data-testid='roadmap-feature-heatmaps'] tile present; [data-testid='roadmap-feature-session-replays'] is present under Analytics & Insights category (title 'Session replays')."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Console still emits Recharts ResponsiveContainer width(-1)/height(-1) warnings on Landing (unchanged from prior iters, non-blocking).",
+    "Two background 401 console errors during Landing (likely /api/me probe while logged-out) — cosmetic but worth silencing in api client interceptor."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "demo@deployunit.com / demo1234",
+  "seed_data_creation": "None — relied on existing seeded demo workspace/app with heatmaps add-on already active and one tracked URL.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter22c verified — stale 'coming soon' references for Heatmaps removed from AppWebAnalyticsTab SUB_TABS heatmaps entry (no soon flag), HeatmapsPane shows active state with open-full-viewer CTA, Landing analytics bento Heatmap tab + Roadmap teaser swapped to Session replays (rrweb), and dashboard Roadmap feature swapped to session-replays. Demo's first app id 63c1ba3c-8286-4e80-83d1-06a603132392 currently has heatmaps active so HeatmapsPane renders the ACTIVE branch (not the enable CTA)."
+}

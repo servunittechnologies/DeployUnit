@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, getApiErrorMessage } from "../lib/api";
 import {
   Activity, BarChart3, Eye, Gauge, Globe2, Lock, Loader2, Map,
@@ -14,7 +15,7 @@ import { toast } from "sonner";
 const SUB_TABS = [
   { id: "visitors", label: "Visitors", icon: Users },
   { id: "speed", label: "Speed Insights", icon: Zap, gated: "pagespeed" },
-  { id: "heatmaps", label: "Heatmaps", icon: Activity, gated: "heatmaps", soon: true },
+  { id: "heatmaps", label: "Heatmaps", icon: Activity },
   { id: "setup", label: "Setup", icon: Terminal },
 ];
 
@@ -394,59 +395,175 @@ function SpeedPane({ appId, features }) {
 }
 
 // ─────────────────────── Heatmaps ───────────────────────
-// "Coming soon" placeholder. We keep collecting session/click signal in the
-// background (snippet auto-injects whenever the platform admin enabled it)
-// so when the in-house visual heatmap + session-replay engine ships we'll
-// already have historical data to backfill. No external (Clarity) link is
-// ever shown to end users.
-function HeatmapsPane({ features }) {
-  if (!features?.heatmaps) return <PlanLockNotice requiredPlan="Pro" label="Heatmaps" />;
+// Live integration with the in-house heatmaps add-on. Shows enable CTA when
+// the addon is inactive, or a compact summary + link to the full viewer
+// page when it's active.
+function HeatmapsPane({ appId }) {
+  const navigate = useNavigate();
+  const [state, setState] = useState({ loading: true, active: false, pages: [], cost: 100 });
+  const [enabling, setEnabling] = useState(false);
 
-  return (
-    <div className="space-y-6" data-testid="analytics-heatmaps">
-      <div className="relative overflow-hidden border border-white/[0.06] p-10">
-        {/* subtle animated grid bg */}
-        <div
-          className="absolute inset-0 opacity-[0.05] pointer-events-none"
-          style={{
-            backgroundImage: "linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand/10 blur-3xl pointer-events-none" />
+  const load = async () => {
+    try {
+      const [addons, pages] = await Promise.all([
+        api.get(`/apps/${appId}/addons`),
+        api.get(`/apps/${appId}/heatmaps/pages`, { params: { days: 30 } }).catch(() => ({ data: { pages: [], is_active: false } })),
+      ]);
+      const hm = (addons.data || []).find((a) => a.id === "heatmaps");
+      setState({
+        loading: false,
+        active: !!hm?.active,
+        cost: hm?.cost_cr_month || 100,
+        pages: pages.data?.pages || [],
+        sub: hm?.subscription,
+      });
+    } catch {
+      setState((s) => ({ ...s, loading: false }));
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [appId]);
 
-        <div className="relative">
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] bg-brand/10 text-brand border border-brand/30 mb-5">
-            <Sparkles className="h-3 w-3" /> coming soon
-          </div>
-          <h3 className="font-display text-3xl tracking-tight mb-3">
-            Heatmaps & session recordings
-          </h3>
-          <p className="text-zinc-400 max-w-xl mb-6">
-            See exactly where visitors click, how far they scroll, and replay anonymized real-user sessions —
-            built natively into DeployUnit. No third-party login, no extra setup, all data stays on your platform.
-          </p>
+  const enable = async () => {
+    setEnabling(true);
+    try {
+      await api.post(`/apps/${appId}/addons/heatmaps/enable`);
+      toast.success("Heatmaps enabled — credits charged");
+      await load();
+    } catch (e) {
+      const msg = getApiErrorMessage(e) || "Could not enable";
+      if (e?.response?.status === 402) {
+        toast.error(`Insufficient credits — top up first. (${msg})`);
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setEnabling(false);
+    }
+  };
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mb-8">
-            <ComingSoonCard icon={Activity} title="Click heatmaps" body="Pinpoint where users click most on every page." />
-            <ComingSoonCard icon={Eye} title="Session replays" body="Watch real visitor journeys, frame by frame." />
-            <ComingSoonCard icon={Zap} title="Rage & dead clicks" body="Catch friction signals before users churn." />
-          </div>
+  if (state.loading) {
+    return (
+      <div className="flex items-center gap-2 text-zinc-500 text-sm p-4">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading heatmaps…
+      </div>
+    );
+  }
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              disabled
-              className="inline-flex items-center gap-2 px-4 py-2 bg-brand/20 text-brand text-sm font-medium cursor-not-allowed opacity-70"
-              data-testid="heatmaps-waitlist-btn"
-            >
-              <Sparkles className="h-3.5 w-3.5" /> You're on the waitlist
-            </button>
-            <span className="text-[11px] font-mono text-zinc-500">
-              shipping next · all Pro & Agency apps unlock automatically
-            </span>
+  if (!state.active) {
+    return (
+      <div className="space-y-6" data-testid="analytics-heatmaps">
+        <div className="relative overflow-hidden border border-white/[0.06] p-10">
+          <div
+            className="absolute inset-0 opacity-[0.05] pointer-events-none"
+            style={{
+              backgroundImage: "linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)",
+              backgroundSize: "40px 40px",
+            }}
+          />
+          <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand/10 blur-3xl pointer-events-none" />
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.3em] bg-brand/10 text-brand border border-brand/30 mb-5">
+              <Sparkles className="h-3 w-3" /> available now · {state.cost} cr / mo
+            </div>
+            <h3 className="font-display text-3xl tracking-tight mb-3">
+              Site heatmaps
+            </h3>
+            <p className="text-zinc-400 max-w-xl mb-6">
+              See exactly where visitors click, how far they scroll, and where they rage-click — built natively into DeployUnit.
+              No third-party scripts, no extra accounts, all data stays on your platform.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mb-8">
+              <ComingSoonCard icon={Activity} title="Click density" body="Where users actually click on every page." />
+              <ComingSoonCard icon={Eye} title="Page views & scrolls" body="How far visitors scroll before bouncing." />
+              <ComingSoonCard icon={Zap} title="Rage clicks" body="Catch friction signals before users churn." />
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={enable}
+                disabled={enabling}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                data-testid="heatmaps-enable-btn"
+              >
+                {enabling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                Enable for {state.cost} cr / mo
+              </button>
+              <span className="text-[11px] font-mono text-zinc-500">
+                Cancel anytime · stays active until period ends
+              </span>
+            </div>
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Active — compact summary + link to full viewer
+  const totalEvents = state.pages.reduce((sum, p) => sum + (p.total || 0), 0);
+  const totalClicks = state.pages.reduce((sum, p) => sum + (p.clicks || 0), 0);
+  const totalRage = state.pages.reduce((sum, p) => sum + (p.rage || 0), 0);
+
+  return (
+    <div className="space-y-6" data-testid="analytics-heatmaps">
+      <div className="border border-white/[0.06] p-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-2">// last 30 days</div>
+            <h3 className="font-display text-2xl tracking-tight">Heatmaps are live</h3>
+            <p className="text-sm text-zinc-400 mt-1">
+              {state.pages.length} {state.pages.length === 1 ? "page" : "pages"} tracked · {fmtNum(totalEvents)} events captured
+            </p>
+          </div>
+          <button
+            onClick={() => navigate(`/app/apps/${appId}/heatmaps`)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-brand-fg text-sm font-medium hover:bg-brand/90 transition-colors"
+            data-testid="heatmaps-open-full-viewer"
+          >
+            <Activity className="h-3.5 w-3.5" /> Open full viewer
+          </button>
+        </div>
+        <div className="mt-5 grid grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
+          <div className="bg-background p-4">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Total events</div>
+            <div className="text-2xl font-display mt-1">{fmtNum(totalEvents)}</div>
+          </div>
+          <div className="bg-background p-4">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Clicks</div>
+            <div className="text-2xl font-display mt-1">{fmtNum(totalClicks)}</div>
+          </div>
+          <div className="bg-background p-4">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Rage clicks</div>
+            <div className="text-2xl font-display mt-1 text-signal-failed">{fmtNum(totalRage)}</div>
+          </div>
+        </div>
+      </div>
+
+      {state.pages.length === 0 ? (
+        <div className="border border-white/[0.06] p-6 text-sm text-zinc-400" data-testid="heatmaps-no-data">
+          No events captured yet. Make sure the tracking snippet is installed (see <button onClick={() => toast.info("Setup tab → Drop snippet into <head>")} className="text-brand underline">Setup</button> tab) and visit a page on your site.
+        </div>
+      ) : (
+        <div className="border border-white/[0.06]" data-testid="heatmaps-summary-pages">
+          <div className="grid grid-cols-[1fr_80px_80px_80px] px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 border-b border-white/[0.06]">
+            <div>URL</div>
+            <div className="text-right">Events</div>
+            <div className="text-right">Clicks</div>
+            <div className="text-right">Rage</div>
+          </div>
+          {state.pages.slice(0, 8).map((p) => (
+            <button
+              key={p.url}
+              onClick={() => navigate(`/app/apps/${appId}/heatmaps`)}
+              className="w-full grid grid-cols-[1fr_80px_80px_80px] px-4 py-2.5 text-sm hover:bg-white/[0.02] border-b border-white/[0.04] last:border-b-0 transition-colors items-center"
+              data-testid={`heatmaps-summary-row-${p.url.replace(/\W/g, "_")}`}
+            >
+              <div className="font-mono text-xs text-zinc-200 truncate text-left">{p.url || "/"}</div>
+              <div className="text-right font-mono text-xs">{fmtNum(p.total)}</div>
+              <div className="text-right font-mono text-xs text-cyan-300">{fmtNum(p.clicks)}</div>
+              <div className="text-right font-mono text-xs text-signal-failed">{fmtNum(p.rage)}</div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -493,7 +610,7 @@ export default function RootLayout({ children }) {
         <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-2">// step 1 · install</div>
         <div className="font-display text-xl tracking-tight mb-1">Drop this in your &lt;head&gt;</div>
         <div className="text-sm text-zinc-400 mb-4">
-          The tracker is ~1 KB, cookie-less, and auto-tracks SPA navigation, outbound clicks and Clarity heatmaps.
+          The tracker is ~1 KB, cookie-less, and auto-tracks SPA navigation, outbound clicks and click heatmaps.
         </div>
         <CopyBlock text={headHTML} testId="analytics-snippet-copy-html" />
 
@@ -548,7 +665,7 @@ export default function AppWebAnalyticsTab({ appId }) {
         <div>
           <h2 className="font-display text-2xl tracking-tight">Web analytics</h2>
           <p className="text-sm text-zinc-400 mt-1">
-            Privacy-first pageviews, Google PageSpeed audits, and Microsoft Clarity heatmaps — all in one place.
+            Privacy-first pageviews, Google PageSpeed audits, and in-house click heatmaps — all in one place.
           </p>
         </div>
         <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">
@@ -581,7 +698,7 @@ export default function AppWebAnalyticsTab({ appId }) {
 
       {sub === "visitors" && <VisitorsPane appId={appId} />}
       {sub === "speed" && <SpeedPane appId={appId} features={features} />}
-      {sub === "heatmaps" && <HeatmapsPane features={features} config={config} />}
+      {sub === "heatmaps" && <HeatmapsPane appId={appId} />}
       {sub === "setup" && <SetupPane appId={appId} config={config} refreshConfig={refreshConfig} />}
     </div>
   );

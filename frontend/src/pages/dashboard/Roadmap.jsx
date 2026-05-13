@@ -19,11 +19,11 @@ const CATEGORIES = [
 const FEATURES = [
   // Analytics & Insights
   {
-    id: "heatmaps", category: "analytics",
-    title: "Native heatmaps & session replays",
-    tagline: "See exactly where every visitor clicks, scrolls, and rage-clicks.",
+    id: "session-replays", category: "analytics",
+    title: "Session replays",
+    tagline: "Watch real visitor journeys, frame-by-frame, anonymized by default.",
     icon: Activity,
-    bullets: ["Click density heatmaps", "Session replay (rrweb)", "Dead & rage clicks"],
+    bullets: ["rrweb-based capture", "Privacy-first masking", "Replay alongside heatmaps"],
   },
 
   // Developer experience

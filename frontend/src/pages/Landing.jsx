@@ -885,7 +885,7 @@ function HeatmapPreview() {
         />
       ))}
       <div className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.25em] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-        <Sparkles className="h-2.5 w-2.5" /> soon
+        <Sparkles className="h-2.5 w-2.5" /> live
       </div>
       <div className="absolute bottom-2 left-2 text-[10px] font-mono text-zinc-400">
         <span className="text-red-400">3 hot</span> · <span className="text-yellow-400">1 mid</span> · <span className="text-emerald-400">1 cool</span>
@@ -1002,14 +1002,14 @@ function Features() {
           <BentoCard
             overline="Web analytics"
             title="Cookieless visitors + heatmaps."
-            body="Privacy-first tracker (1 KB · sendBeacon · GDPR by default). Heatmaps and session replays land next."
+            body="Privacy-first tracker (1 KB · sendBeacon · GDPR by default). In-house click & rage-click heatmaps — no third-party scripts."
             testId="feature-analytics"
           >
             <TabbedCard
               testId="analytics-tabs"
               tabs={[
                 { id: "visitors", label: "Visitors", icon: Globe, content: <VisitorMapMock /> },
-                { id: "heatmap",  label: "Heatmap",  icon: Sparkles, soon: true, content: <HeatmapPreview /> },
+                { id: "heatmap",  label: "Heatmap",  icon: Sparkles, content: <HeatmapPreview /> },
               ]}
             />
           </BentoCard>
@@ -1568,7 +1568,7 @@ function GreenEnergy() {
 
 function Roadmap() {
   const items = [
-    { icon: Activity, title: "Native heatmaps & session replays", cat: "Analytics" },
+    { icon: Activity, title: "Session replays (rrweb)",          cat: "Analytics" },
     { icon: GitBranch, title: "Database branching",               cat: "DX" },
     { icon: Bot,      title: "AI Code Co-pilot",                  cat: "DX" },
     { icon: Sparkles, title: "Visual deploy diffs",               cat: "DX" },
