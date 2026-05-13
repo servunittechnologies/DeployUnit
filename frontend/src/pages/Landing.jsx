@@ -249,8 +249,9 @@ function Hero() {
             <span className="text-cyan-400">built for agencies.</span>
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-7 text-lg sm:text-xl text-zinc-400 max-w-xl leading-relaxed">
-            Push to Git → live URL in 41 seconds. <span className="text-zinc-200">No surprise bills.</span>{" "}
-            <span className="text-zinc-200">No DevOps.</span> Fully EU-hosted.
+            Push to Git → live URL in 41 seconds.<br />
+            <span className="text-zinc-200">No surprise bills. No DevOps. No extra tools.</span><br />
+            Fully EU-hosted.
           </motion.p>
           <motion.div variants={fadeUp} className="mt-9 flex flex-wrap gap-3">
             <PrimaryBtn to="/register" testId="hero-cta-primary">Start deploying</PrimaryBtn>
@@ -313,7 +314,7 @@ function ReplacesStack() {
             Stop juggling 6 tools to run one app.
           </h2>
           <p className="mt-6 text-lg text-zinc-400 max-w-xl leading-relaxed">
-            DeployUnit replaces your hosting, analytics, monitoring and deploy workflows — in one place.
+            Replace your entire stack with one platform.
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-zinc-900 border border-zinc-900" data-testid="replaces-stack">
@@ -370,7 +371,7 @@ function ForAgencies() {
             Built for agencies <span className="text-emerald-400">managing real clients.</span>
           </h2>
           <p className="mt-6 text-lg text-zinc-400 leading-relaxed max-w-lg">
-            Not just projects — workspaces, billing and access per customer. The platform that fits how your studio actually works.
+            Finally, a platform that matches how agencies actually work — not just how indie devs ship side projects.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <PrimaryBtn to="/register" testId="agency-cta">Start deploying</PrimaryBtn>
@@ -1233,21 +1234,20 @@ const SMALL_FEATURES = [
 /* ───────────────────────── Comparison table ───────────────────────── */
 
 function Compare() {
-  // Bundled feature buckets — instead of 18 atomic rows we show 11 rows
-  // that each carry their own punch. Bundling related capabilities (e.g.
-  // analytics+metrics+alerts → "Full observability") makes the value
-  // clearer and the table easier to scan.
-  const NEW = [
-    { f: "No config required (zero DevOps)",                                vc: false, rd: false },
-    { f: "Single dashboard — no external SaaS tools needed",                 vc: false, rd: false },
-    { f: "Full observability: analytics + metrics + alerts (Slack/Discord/email)", vc: false, rd: false },
-    { f: "White-label PDF invoices per client",                              vc: false, rd: false },
-    { f: "Agency workspaces — multi-client billing, access & permissions",   vc: false, rd: false },
-  ];
-  const IMPROVED = [
-    { f: "Deploy logs & full pipeline visibility", vc: "limited", rd: "limited" },
-    { f: "EU-hosted by default (NL/DE/FR · GDPR-first)", vc: false, rd: "limited" },
-    { f: "Predictable pricing (no surprise usage costs)", vc: false, rd: "limited" },
+  // Two-tier comparison: the things that actually move the needle when
+  // someone is shopping for an alternative (top table) + the trust-builder
+  // "yes we do the basics too" (bottom). One flat list with concrete
+  // badges (Add-on / Basic) is more credible than vague "limited" pills —
+  // developers want to see the actual gap, not soft language.
+  const WHY_SWITCH = [
+    { f: "No config required (zero DevOps)",                                vc: false,    rd: false },
+    { f: "Single dashboard — no external tools needed",                      vc: false,    rd: false },
+    { f: "Built-in analytics + monitoring + alerts",                         vc: false,    rd: false },
+    { f: "Agency workspaces — multi-client billing & permissions",           vc: false,    rd: false },
+    { f: "White-label PDF invoices per client",                              vc: false,    rd: false },
+    { f: "Predictable pricing — no usage surprises",                         vc: false,    rd: false },
+    { f: "Full pipeline visibility (deploy + runtime logs)",                 vc: "basic",  rd: "basic" },
+    { f: "EU-hosted by default (NL/DE/FR · GDPR-first)",                     vc: false,    rd: "addon" },
   ];
   const ON_PAR = [
     { f: "Push → live deploy in seconds",          vc: true, rd: true },
@@ -1261,44 +1261,16 @@ function Compare() {
       return <span className="inline-flex items-center gap-1 text-signal-live"><Check className="h-4 w-4" /></span>;
     if (v === false)
       return <span className="inline-flex items-center gap-1 text-zinc-600"><XIcon className="h-4 w-4" /></span>;
-    if (v === "limited")
-      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">limited</span>;
+    if (v === "basic")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">basic</span>;
+    if (v === "addon")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">add-on</span>;
     return <span className="text-zinc-600">—</span>;
   }
 
-  function GroupHeader({ tone, kicker, title, count, blurb }) {
-    const toneMap = {
-      new:      { dot: "bg-cyan-400",    text: "text-cyan-300",  pill: "bg-cyan-950/40 text-cyan-300 border-cyan-500/40" },
-      improved: { dot: "bg-amber-400",   text: "text-amber-300", pill: "bg-amber-950/40 text-amber-300 border-amber-400/40" },
-      on_par:   { dot: "bg-zinc-500",    text: "text-zinc-400",  pill: "bg-zinc-900 text-zinc-400 border-zinc-700" },
-    }[tone];
+  function CompareTable({ rows, accent, testId }) {
     return (
-      <div className="flex items-end justify-between flex-wrap gap-3 mt-12 mb-3">
-        <div>
-          <div className={`inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.35em] ${toneMap.text}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${toneMap.dot}`} />
-            {kicker}
-          </div>
-          <h3 className={`mt-2 font-display text-2xl md:text-3xl tracking-tighter text-white`}>
-            {title}
-          </h3>
-          {blurb && <p className="mt-1 text-sm text-zinc-500 max-w-md">{blurb}</p>}
-        </div>
-        <div className={`inline-flex items-center px-3 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border ${toneMap.pill}`}>
-          {count} feature{count === 1 ? "" : "s"}
-        </div>
-      </div>
-    );
-  }
-
-  function GroupTable({ tone, rows }) {
-    const accent = {
-      new:      "bg-cyan-950/20 border-cyan-500/30",
-      improved: "bg-amber-950/20 border-amber-400/30",
-      on_par:   "bg-zinc-950/60 border-zinc-800",
-    }[tone];
-    return (
-      <div className={`border ${accent} overflow-x-auto`} data-testid={`compare-group-${tone}`}>
+      <div className={`border ${accent} overflow-x-auto`} data-testid={testId}>
         <table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="border-b border-white/[0.06] text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
@@ -1352,10 +1324,10 @@ function Compare() {
           data-testid="why-switch-summary"
         >
           {[
-            { title: "Predictable pricing", vercel: "Surprise bills at scale", us: "Flat plans. Credits for clear add-ons.", neg: true },
-            { title: "EU-hosted by default", vercel: "US-based infra", us: "NL/DE/FR data centers · GDPR-first.", neg: true },
-            { title: "Everything in one place", vercel: "Fragmented tooling", us: "Hosting + analytics + monitoring + alerts.", neg: true },
-            { title: "Agency-first workflows", vercel: "Built for solo devs", us: "Workspaces, per-client billing, audit logs.", neg: true },
+            { title: "Predictable pricing", vercel: "Surprise bills at scale", us: "Flat plans. No usage gotchas." },
+            { title: "Everything included", vercel: "6 SaaS tools required", us: "Hosting + analytics + monitoring + alerts." },
+            { title: "Built for client work", vercel: "Built for solo devs", us: "Workspaces, per-client billing, audit logs." },
+            { title: "EU-hosted by default", vercel: "US-only infrastructure", us: "NL/DE/FR data centers · GDPR-first." },
           ].map((row, i) => (
             <motion.div
               key={row.title}
@@ -1387,32 +1359,39 @@ function Compare() {
           transition={{ duration: 0.5 }}
           data-testid="compare-grouped"
         >
-          <GroupHeader
-            tone="new"
-            kicker="New · only on DeployUnit"
-            title="5 things our competitors don't even offer."
-            count={NEW.length}
-            blurb="Stop assembling 6 SaaS tools to get what one platform should already do."
-          />
-          <GroupTable tone="new" rows={NEW} />
+          {/* Primary table — 8 reasons to switch */}
+          <div className="flex items-end justify-between flex-wrap gap-3 mt-12 mb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.35em] text-cyan-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                Reasons to switch
+              </div>
+              <h3 className="mt-2 font-display text-2xl md:text-3xl tracking-tighter text-white">
+                {WHY_SWITCH.length} things you only get on DeployUnit.
+              </h3>
+            </div>
+            <div className="inline-flex items-center px-3 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border bg-cyan-950/40 text-cyan-300 border-cyan-500/40">
+              {WHY_SWITCH.length} features
+            </div>
+          </div>
+          <CompareTable rows={WHY_SWITCH} accent="bg-cyan-950/20 border-cyan-500/30" testId="compare-group-new" />
 
-          <GroupHeader
-            tone="improved"
-            kicker="Improved"
-            title="Where we go further than the rest."
-            count={IMPROVED.length}
-            blurb="Same capability — done deeper, no add-on fees, EU-first."
-          />
-          <GroupTable tone="improved" rows={IMPROVED} />
-
-          <GroupHeader
-            tone="on_par"
-            kicker="On par"
-            title="Table-stakes — yes, we do these too."
-            count={ON_PAR.length}
-            blurb="Just confirming what you'd expect from any modern platform."
-          />
-          <GroupTable tone="on_par" rows={ON_PAR} />
+          {/* On-par table — trust builder */}
+          <div className="flex items-end justify-between flex-wrap gap-3 mt-14 mb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                On par
+              </div>
+              <h3 className="mt-2 font-display text-2xl md:text-3xl tracking-tighter text-white">
+                Table-stakes — yes, we do these too.
+              </h3>
+            </div>
+            <div className="inline-flex items-center px-3 py-1 text-[10px] font-mono uppercase tracking-[0.3em] border bg-zinc-900 text-zinc-400 border-zinc-700">
+              {ON_PAR.length} features
+            </div>
+          </div>
+          <CompareTable rows={ON_PAR} accent="bg-zinc-950/60 border-zinc-800" testId="compare-group-on_par" />
         </motion.div>
       </Container>
     </Section>
