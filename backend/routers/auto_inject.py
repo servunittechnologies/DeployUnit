@@ -153,7 +153,8 @@ async def toggle_auto_inject(app_id: str, request: Request):
 @router.get("/apps/{app_id}/auto-inject")
 async def get_auto_inject_state(app_id: str, request: Request):
     """Combined state: flag + last injection outcome + the build command
-    we will actually run. Used by the Setup tab."""
+    we will actually run + the LIVE build_command Coolify currently has
+    stored (so the user can verify the PATCH actually landed)."""
     user = await get_current_user(request)
     db = get_db()
     app = await db.apps.find_one({"id": app_id}, {"_id": 0})
@@ -168,6 +169,22 @@ async def get_auto_inject_state(app_id: str, request: Request):
     last = await get_last_result(app_id) or None
     base = app.get("build_command") or ""
     active = app.get("_active_build_command") or (wrap_build_command(app_id, base) if enabled else base)
+
+    # Read the LIVE build_command from Coolify so the UI can show whether
+    # our PATCH actually landed there. This makes silent build-engine
+    # overrides immediately visible to the user.
+    coolify_build_command = None
+    coolify_error = None
+    coolify_has_preflight = None
+    if app.get("coolify_app_uuid"):
+        try:
+            live = await coolify.get_application(app["coolify_app_uuid"])
+            if isinstance(live, dict):
+                coolify_build_command = live.get("build_command") or ""
+                coolify_has_preflight = "preflight.js" in (coolify_build_command or "")
+        except Exception as e:
+            coolify_error = str(e)[:200]
+
     return {
         "enabled": enabled,
         "supported_frameworks": [
@@ -176,5 +193,8 @@ async def get_auto_inject_state(app_id: str, request: Request):
         ],
         "user_build_command": base,
         "active_build_command": active,
+        "coolify_build_command": coolify_build_command,
+        "coolify_has_preflight": coolify_has_preflight,
+        "coolify_error": coolify_error,
         "last_result": last,
     }

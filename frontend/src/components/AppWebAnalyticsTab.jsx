@@ -673,6 +673,31 @@ export default function RootLayout({ children }) {
           </div>
         </div>
 
+        {/* Coolify read-back — confirms our PATCH actually landed. */}
+        {ai && ai.enabled && (
+          <div className="relative mt-5 border-t border-white/[0.06] pt-4 text-xs space-y-2" data-testid="auto-injector-coolify-state">
+            <div className="font-mono uppercase tracking-[0.2em] text-zinc-500 text-[10px]">build engine state</div>
+            {ai.coolify_error ? (
+              <div className="text-rose-300">
+                ✗ could not read build engine config: <span className="text-zinc-400">{ai.coolify_error}</span>
+              </div>
+            ) : ai.coolify_build_command === null ? (
+              <div className="text-zinc-400">
+                · no build engine link yet — the wrap will be applied on first deploy.
+              </div>
+            ) : ai.coolify_has_preflight ? (
+              <div className="text-emerald-300">
+                ✓ build engine has the wrapped command stored — preflight WILL run on next build.
+              </div>
+            ) : (
+              <div className="text-amber-300">
+                ⚠ build engine has a build_command but it does NOT include our preflight. The injection will not run on the next deploy. Try toggling off + on again, or trigger a fresh redeploy from the Deployments tab.
+                <div className="mt-1 text-zinc-500 font-mono break-all">stored: <span className="text-zinc-300">{(ai.coolify_build_command || "(empty)").slice(0, 240)}</span></div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Last result */}
         {ai?.last_result && (
           <div className="relative mt-5 grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-1 sm:gap-3 border-t border-white/[0.06] pt-4 text-xs">
