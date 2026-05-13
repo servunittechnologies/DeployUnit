@@ -666,3 +666,19 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **Rationale**: the user-reported failure mode ("toggle is on, build ran, no events") is almost always one of: Coolify rejected our PATCH silently, the build_command was reset by Nixpacks/UI, or the framework wasn't detected. All three were previously invisible. Now each shows up in 2 places.
   - **No code change to the preflight logic itself** — backend pytest still 15/15 green.
   - **Files touched**: `backend/routers/apps.py` (read-back logging in `_redeploy_background`), `backend/routers/auto_inject.py` (Coolify live state in GET), `frontend/src/components/AppWebAnalyticsTab.jsx` (build-engine-state strip on Setup tab).
+
+
+- **2026-05-13 — Iter23c — Coolify build_command 255-char + semicolon bug (P0 root cause fix)**
+  - **User report**: build engine state strip on Setup tab showed `⚠ build engine has a build_command but it does NOT include our preflight. stored: yarn build || npm run build` — the auto-inject wrap was being silently dropped.
+  - **Root cause** (discovered by hitting the real Coolify v4 API directly with progressive payloads):
+    1. **Coolify v4 validates `build_command` and REJECTS any string containing `;`** with a 422 "The build command field format is invalid." Our iter23 wrap used `; ` as the separator between the preflight chain and the user's build → instant rejection.
+    2. **Coolify v4 also enforces a ~255-char hard limit on `build_command`** (DB column overflow → HTTP 500 silently). Even after fixing the `;` issue, the verbose wrap with the long `/api/auto-inject/preflight.js?app=<uuid>&token=<hmac>` URL was ~286 chars → 500.
+    The `update_application` call swallowed both errors (returned None on non-2xx but the caller didn't check), so Coolify kept its old value and we logged success.
+  - **Fix**:
+    1. **Compact preflight URL**: new route `GET /api/aij/{app_id}/{token}` (path params, no query string). Old `/api/auto-inject/preflight.js?app=&token=` still works for backwards compat.
+    2. **Slim wrap**: `curl -fsSL "<short_url>" -o /tmp/i && node /tmp/i || true && <base>` — pure `&&`/`||` (no `;`), drops the verbose echo prefix. 197 chars on preview, ~170 on production.
+    3. **Length guard**: if base build_command pushes the wrap over 255 chars, `wrap_build_command` returns base unchanged + logs a warning rather than producing a payload Coolify would 500 on.
+    4. **Surface Coolify errors loudly**: `coolify.update_application` now uses `_request_meta` and logs the actual 4xx/5xx with payload keys so future API quirks are obvious in backend logs.
+    5. **Read-back marker check** now matches `/api/aij/` OR `preflight.js` so both URL shapes count as "wrapped".
+  - **Tests**: 17/17 green (added `test_short_url_serves_preflight` and `test_wrap_length_fallback_for_oversized_base`). Also verified END-TO-END against the real production Coolify instance: PATCH with the new wrap returns 200 and the read-back contains `/api/aij/` (manually confirmed with curl).
+  - **Files touched**: `backend/services/auto_injector.py` (compact wrap + length guard + short_preflight_url), `backend/routers/auto_inject.py` (new `/api/aij/{app}/{token}` route + dual-shape marker check), `backend/clients/coolify.py` (log non-2xx PATCH errors), `backend/routers/apps.py` (updated read-back marker check + logging).

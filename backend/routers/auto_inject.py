@@ -47,6 +47,19 @@ async def preflight_script(app: str = Query(...), token: str = Query(...)):
     the app id — verifies the requester is allowed to fetch this specific
     app's snippet. Anyone with both the app id AND the token gets the
     script (which only contains the public analytics snippet anyway)."""
+    return await _serve_preflight(app, token)
+
+
+@router.get("/aij/{app_id}/{token}")
+async def preflight_script_short(app_id: str, token: str):
+    """Compact alias for /auto-inject/preflight.js — used by the build
+    container because the full URL would push the wrapped build_command
+    over Coolify v4's 255-char limit.
+    `aij` = `auto-inject`."""
+    return await _serve_preflight(app_id, token)
+
+
+async def _serve_preflight(app: str, token: str):
     if not verify_token(app, token):
         raise HTTPException(status_code=403, detail="Bad token")
     db = get_db()
@@ -181,7 +194,9 @@ async def get_auto_inject_state(app_id: str, request: Request):
             live = await coolify.get_application(app["coolify_app_uuid"])
             if isinstance(live, dict):
                 coolify_build_command = live.get("build_command") or ""
-                coolify_has_preflight = "preflight.js" in (coolify_build_command or "")
+                coolify_has_preflight = bool(coolify_build_command) and (
+                    "/api/aij/" in coolify_build_command or "preflight.js" in coolify_build_command
+                )
         except Exception as e:
             coolify_error = str(e)[:200]
 

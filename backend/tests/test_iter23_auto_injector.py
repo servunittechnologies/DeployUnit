@@ -56,9 +56,8 @@ def preflight_path(demo):
     r = demo.post(f"{BASE_URL}/api/apps/{APP_ID}/auto-inject/toggle", json={"enabled": True}, timeout=15)
     assert r.status_code == 200
     cmd = r.json()["active_build_command"]
-    # Pull out the preflight URL.
     import re
-    m = re.search(r'"(https?://[^"]+/auto-inject/preflight\.js[^"]+)"', cmd)
+    m = re.search(r'"(https?://[^"]+(?:/api/aij/[^"]+|/auto-inject/preflight\.js[^"]+))"', cmd)
     assert m, f"No preflight URL found in: {cmd}"
     url = m.group(1)
     out = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
@@ -86,10 +85,52 @@ def test_get_state_default_disabled(demo):
 def test_toggle_round_trip(demo):
     on = demo.post(f"{BASE_URL}/api/apps/{APP_ID}/auto-inject/toggle", json={"enabled": True}, timeout=15)
     assert on.status_code == 200 and on.json()["enabled"] is True
-    assert "preflight.js" in on.json()["active_build_command"]
+    cmd = on.json()["active_build_command"]
+    # New compact wrap uses the /api/aij/ short URL (no preflight.js).
+    assert "/api/aij/" in cmd, f"expected /api/aij/ in wrap, got: {cmd}"
+    # MUST fit in Coolify v4's 255-char build_command limit.
+    assert len(cmd) <= 255, f"wrap is {len(cmd)} chars, exceeds Coolify 255-char limit: {cmd}"
+    # MUST NOT contain semicolons — Coolify rejects them with 422.
+    assert ";" not in cmd, f"wrap contains ';' which Coolify rejects: {cmd}"
     off = demo.post(f"{BASE_URL}/api/apps/{APP_ID}/auto-inject/toggle", json={"enabled": False}, timeout=15)
     assert off.status_code == 200 and off.json()["enabled"] is False
+    assert "/api/aij/" not in (off.json().get("active_build_command") or "")
     assert "preflight.js" not in (off.json().get("active_build_command") or "")
+
+
+def test_short_url_serves_preflight():
+    """/api/aij/{app}/{token} must serve the same script as preflight.js
+    — the build container uses the compact path because the long one
+    would push the wrapped build_command over Coolify's 255-char limit."""
+    import hmac, hashlib, os
+    secret = (os.environ.get("AUTO_INJECT_SECRET") or os.environ.get("JWT_SECRET") or "deployunit-auto-inject").encode()
+    # We need to derive the token via the SAME secret as the server. The
+    # toggle endpoint exposes the URL; harvest from there.
+    s = _login(DEMO_EMAIL, DEMO_PASS)
+    r = s.post(f"{BASE_URL}/api/apps/{APP_ID}/auto-inject/toggle", json={"enabled": True}, timeout=15)
+    cmd = r.json()["active_build_command"]
+    import re
+    m = re.search(r'"(https?://[^"]+/api/aij/[^"]+)"', cmd)
+    s.post(f"{BASE_URL}/api/apps/{APP_ID}/auto-inject/toggle", json={"enabled": False}, timeout=15)
+    assert m, f"no /api/aij/ url in: {cmd}"
+    rr = requests.get(m.group(1), timeout=15)
+    assert rr.status_code == 200
+    assert "fs.readFileSync" in rr.text
+    assert "deployunit-auto-injected" in rr.text
+
+
+def test_wrap_length_fallback_for_oversized_base():
+    """When the user's base build_command would push the wrap over
+    Coolify's 255-char limit, we MUST return the base unchanged (so
+    Coolify accepts the PATCH) rather than producing a 500."""
+    from services.auto_injector import wrap_build_command
+    long_base = "x" * 250  # already near the limit, wrap would overflow
+    result = wrap_build_command(APP_ID, long_base)
+    assert result == long_base, "should fall back to base when wrap would overflow"
+    short_base = "yarn build"
+    wrapped = wrap_build_command(APP_ID, short_base)
+    assert "/api/aij/" in wrapped
+    assert len(wrapped) <= 255
 
 
 def test_preflight_bad_token_403():

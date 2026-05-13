@@ -59,6 +59,13 @@ def _public_base() -> str:
     return base
 
 
+def short_preflight_url(app_id: str) -> str:
+    """Compact preflight URL using path params so the full wrapped
+    build_command fits inside Coolify v4's 255-char limit on the
+    `build_command` field."""
+    return f"{_public_base()}/api/aij/{app_id}/{_hmac_token(app_id)}"
+
+
 def preflight_url(app_id: str) -> str:
     return f"{_public_base()}/api/auto-inject/preflight.js?app={app_id}&token={_hmac_token(app_id)}"
 
@@ -67,16 +74,36 @@ def report_url(app_id: str) -> str:
     return f"{_public_base()}/api/auto-inject/result?app={app_id}&token={_hmac_token(app_id)}"
 
 
+# Coolify v4 rejects:
+#   * any `;` in build_command  → "field format is invalid" (422)
+#   * build_command strings > 255 chars → HTTP 500 (DB column overflow)
+# So our wrap MUST fit in 255 chars and use `&&`/`||` only.
+COOLIFY_BUILD_CMD_MAX = 255
+
+
 def wrap_build_command(app_id: str, base_command: str | None) -> str:
-    """Prepend the auto-inject preflight to the user's build command.
-    Preflight failure is non-fatal — user's build always runs."""
+    """Prepend a compact preflight invocation to the user's build command.
+
+    Layout (always ASCII, no semicolons, fits in 255 chars for typical
+    URLs + bases):
+
+        curl -fsSL "<short_url>" -o /tmp/i && node /tmp/i || true && <base>
+
+    If the resulting string would exceed Coolify's 255-char limit we fall
+    back to returning the user's base command unchanged and emit a
+    warning in the logs — auto-injection silently degrades rather than
+    breaking the deploy with a 422.
+    """
     base = (base_command or "").strip() or "yarn build || npm run build"
-    pre = (
-        f'echo "[deployunit] auto-injecting analytics snippet…" && '
-        f'curl -fsSL "{preflight_url(app_id)}" -o /tmp/.dpu-inject.js && '
-        f'node /tmp/.dpu-inject.js || echo "[deployunit] auto-inject preflight skipped (non-fatal)"'
-    )
-    return f"{pre} ; {base}"
+    pre = f'curl -fsSL "{short_preflight_url(app_id)}" -o /tmp/i && node /tmp/i || true'
+    wrapped = f"{pre} && {base}"
+    if len(wrapped) > COOLIFY_BUILD_CMD_MAX:
+        logger.warning(
+            "auto-inject wrap exceeds Coolify build_command limit (%d > %d) for app %s — falling back to base",
+            len(wrapped), COOLIFY_BUILD_CMD_MAX, app_id,
+        )
+        return base
+    return wrapped
 
 
 def unwrap_build_command(wrapped: str | None) -> str:
@@ -84,12 +111,20 @@ def unwrap_build_command(wrapped: str | None) -> str:
     command when toggling auto-inject OFF."""
     if not wrapped:
         return ""
-    marker = "[deployunit] auto-inject preflight skipped (non-fatal)"
-    if marker in wrapped:
-        idx = wrapped.find(marker)
-        sep = wrapped.find(" ; ", idx)
-        if sep > -1:
-            return wrapped[sep + 3:].strip()
+    # Compact wrap (current): `curl ... && node /tmp/i || true && <base>`
+    if "node /tmp/i || true && " in wrapped:
+        return wrapped.split("node /tmp/i || true && ", 1)[1].strip()
+    # Legacy verbose wrap markers (kept for migration safety).
+    for marker in (
+        "[deployunit] preflight skipped (non-fatal)",
+        "[deployunit] auto-inject preflight skipped (non-fatal)",
+    ):
+        if marker in wrapped:
+            idx = wrapped.find(marker)
+            for sep in (' && ', ' ; '):
+                pos = wrapped.find(sep, idx)
+                if pos > -1:
+                    return wrapped[pos + len(sep):].strip()
     return wrapped.strip()
 
 

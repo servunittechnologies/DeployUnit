@@ -224,7 +224,11 @@ class CoolifyClient:
         body = dict(payload or {})
         if "fqdn" in body and "domains" not in body:
             body["domains"] = body.pop("fqdn")
-        return await self._request("PATCH", f"/applications/{app_uuid}", json=body)
+        data, status, err = await self._request_meta("PATCH", f"/applications/{app_uuid}", json=body)
+        if status and (status < 200 or status >= 300):
+            logger.warning("Coolify update_application(%s) -> %s: %s (payload keys=%s)",
+                           app_uuid, status, (err or "")[:200], list(body.keys()))
+        return data
 
     async def set_domains(self, app_uuid: str, domains: str | list[str], *, force_https: bool = True) -> Optional[dict]:
         """Set the application's public domains AND turn on Force HTTPS in

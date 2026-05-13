@@ -167,17 +167,19 @@ async def _redeploy_background(
             await db.apps.update_one({"id": app_id}, {"$set": {"_active_build_command": wrapped}})
             await _append_log(deployment_id, "[BUILD] analytics auto-inject ON — preflight will patch build")
             # Verify by reading the build_command back from Coolify so any
-            # silent override (e.g. Coolify field rename, permission denial)
-            # surfaces directly in the user's deploy log.
+            # silent override (e.g. Coolify field rename, permission denial,
+            # 422 validation rejection, 255-char DB column overflow) surfaces
+            # directly in the user's deploy log.
             try:
                 live = await coolify.get_application(coolify_uuid)
                 actual = (live or {}).get("build_command") if isinstance(live, dict) else None
+                marker_present = bool(actual) and ("/api/aij/" in actual or "preflight.js" in actual)
                 if not actual:
                     await _append_log(deployment_id, "[WARN] auto-inject: Coolify accepted the PATCH but the build_command read-back is empty — preflight will NOT run. Check build engine API token permissions.")
-                elif "preflight.js" not in actual:
-                    await _append_log(deployment_id, f"[WARN] auto-inject: Coolify rejected the wrapped command (returned: {actual[:140]}). Preflight will NOT run.")
+                elif not marker_present:
+                    await _append_log(deployment_id, f"[WARN] auto-inject: Coolify rejected the wrapped command (length={len(wrapped)}, stored={actual[:160]!r}). Preflight will NOT run.")
                 else:
-                    await _append_log(deployment_id, "[BUILD] auto-inject: Coolify stored the wrapped build command (verified by read-back).")
+                    await _append_log(deployment_id, f"[BUILD] auto-inject: build engine stored wrapped build_command (verified, {len(actual)} chars)")
             except Exception as e:
                 await _append_log(deployment_id, f"[WARN] auto-inject: could not read back build_command from Coolify ({str(e)[:120]})")
         elif (app or {}).get("_active_build_command"):
