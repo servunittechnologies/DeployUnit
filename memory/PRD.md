@@ -519,3 +519,16 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 - 2026-05-06 — Iter3 — Mollie billing migration + EU VAT + PDF invoices.
 - 2026-05-06 — Iter2 — GitHub OAuth wired live (Fernet-encrypted tokens, CSRF state).
 - 2026-05-06 — Phase 1 MVP shipped (25/25 backend, all frontend flows green).
+
+
+- **2026-05-13 — Iter17 — Admin Credit-Pricing Editor (P0)**
+  - Migrated hardcoded `CREDIT_PACKS` dict from `services/credits.py` to DB-backed `platform_settings.credit_packs`.
+  - New `get_credit_packs()` async helper + `get_pack()` is now async — all callers updated (`routers/credits.py`, `routers/account.py`, `routers/billing.py` webhook paths).
+  - `account.py` `CreditPackCheckoutIn.pack` changed from `Literal["small","medium","large"]` to `str` so custom-named packs are accepted.
+  - New admin endpoints (admin-only):
+    - `GET /api/admin/credit-packs` — current catalog (defaults if unset)
+    - `PUT /api/admin/credit-packs` — persist custom catalog with validation (positive credits/price, unique alphanumeric ids, max 500% bonus_pct)
+    - `POST /api/admin/credit-packs/reset` — revert to built-in defaults
+  - New Admin Console tab "Credit Packs" with full CRUD UI: id, label, credits, price (€), bonus % per row. Live €/credit calculator. Add/remove rows + Save + Revert to defaults (with confirm dialog).
+  - Validation surfaces friendly toasts (duplicate id, non-positive values, empty list). bonus_pct=0 is normalized away on storage.
+  - Tests: 17/17 backend pytest green (`/app/backend/tests/test_iter17_credit_packs.py`), full UI Playwright flow (load → edit → add → remove → save → reload → reset) verified. Iter17 report: `/app/test_reports/iteration_17.json`.
