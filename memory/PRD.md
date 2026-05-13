@@ -560,3 +560,24 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
   - **DB-indexen toegevoegd**: `event_cooldowns(workspace_id, event_type, app_id)` UNIQUE, plus indexen op `notification_sends` en `custom_subdomain_requests` voor de hot path.
   - **Tests**: 29/29 backend pytest green (`/app/backend/tests/test_iter20_dispatcher.py`). Regressie: cooldown atomicity verified (back-to-back POST /apps/{id}/restart fires once), email-branch deduplication verified, all 9 event types in `SUPPORTED_EVENT_TYPES`. Report: `/app/test_reports/iteration_20.json`.
 
+
+- **2026-05-13 — Iter21 — Landing + pricing positioning rebuild (P0 marketing)**
+  - Strategic pivot: van "we zijn een goed platform" naar **"de European Vercel alternative, built for agencies"** — concrete doelgroep, concrete competitor, concrete differentiators.
+  - **Landing.jsx changes**:
+    * Hero: H1 "Deploy Next.js & Node apps — built for agencies" / sub "Push to Git → live URL in 41 seconds. No surprise bills. No DevOps. Fully EU-hosted." / trust bar `EU hosted · GDPR ready · Predictable pricing · 41s deploys`
+    * Nieuwe sectie `ReplacesStack` ("Stop juggling 6 tools to run one app") — toont Vercel/Datadog/Sentry/Plausible/Cloudflare/Linear doorgestreept met arrow naar DeployUnit
+    * Nieuwe sectie `ForAgencies` als pillar — workspaces per client / per-client billing / team permissions / staging+production per project
+    * Compare-tabel rebrand: "Why teams switch from ~~Vercel~~" met 4 grote head-to-head cards bovenaan (Predictable pricing / EU hosted / Everything in one place / Agency-first)
+    * Final CTA: "Start deploying" (CTA consistency)
+  - **Pricing.jsx changes**:
+    * Nieuw kop: "Flat plans. Transparent add-ons."
+    * Plan grid uitgebreid van 3 naar 4 kolommen (Free / Starter / Pro / Agency)
+    * Nieuwe sectie `addons-catalog` — 6 credit-add-on cards met transparante prijzen: SMS (1 cr) · WhatsApp (3 cr) · Reserved static IP (50 cr/mo) · Branded email sender (100 cr/mo) · Extended log retention (100 cr/mo) · Top-up packs (from €5)
+  - **Backend `services/plans.py`**:
+    * `DEFAULT_PLANS` herschreven met nieuwe prijzen: Free €0 / Starter €29 (nieuw) / Pro €99 (was €20) / Agency €299 (was €99)
+    * Credit allowances geüpdatet: 0 / 25 / 100 / 500 per maand
+    * Force-resync script applied — DB collection `platform_plans` is up-to-date
+    * Feature lijsten gepolisht voor positionering ("Everything Vercel charges per-seat for. Flat.")
+  - **Prerender refresh**: nieuwe copy is bevestigd aanwezig in `build/index.html` en `build/pricing/index.html` voor no-JS visitors + SEO.
+  - **Strategie**: credits worden gepresenteerd als **"feature-unlock currency"** (transparant per add-on, niet als usage-meter). Aansluitend op user-statement "extra features worden betaald met credits maar dit is heel transparant".
+

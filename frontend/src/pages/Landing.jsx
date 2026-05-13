@@ -235,33 +235,32 @@ function Hero() {
   return (
     <Section className="relative pt-32 pb-24 lg:pt-40 lg:pb-32 overflow-hidden">
       <div className="absolute inset-0 -z-10">
-        <ConstellationCanvas density={60} />
+        <ConstellationCanvas density={40} />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" />
       </div>
       <Container className="grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center">
         <motion.div initial="hidden" animate="show" variants={stagger}>
-          <motion.div variants={fadeUp} className="mb-5"><Overline>The European agency PaaS</Overline></motion.div>
+          <motion.div variants={fadeUp} className="mb-6"><Overline>The European Vercel alternative</Overline></motion.div>
           <motion.h1
             variants={fadeUp}
             className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95] text-white"
           >
-            Deploy anything.<br />
-            <span className="text-cyan-400">Faster.</span> <span className="text-emerald-400">Greener.</span>
+            Deploy Next.js & Node apps —{" "}
+            <span className="text-cyan-400">built for agencies.</span>
           </motion.h1>
-          <motion.p variants={fadeUp} className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed">
-            The all-in-one PaaS built for agencies and modern teams.
-            Push to Git → live URL, container metrics, analytics and
-            uptime alerts. Zero config, fully managed, EU-hosted.
+          <motion.p variants={fadeUp} className="mt-7 text-lg sm:text-xl text-zinc-400 max-w-xl leading-relaxed">
+            Push to Git → live URL in 41 seconds. <span className="text-zinc-200">No surprise bills.</span>{" "}
+            <span className="text-zinc-200">No DevOps.</span> Fully EU-hosted.
           </motion.p>
-          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
+          <motion.div variants={fadeUp} className="mt-9 flex flex-wrap gap-3">
             <PrimaryBtn to="/register" testId="hero-cta-primary">Start deploying</PrimaryBtn>
             <OutlineBtn to="/pricing" testId="hero-cta-secondary">See pricing</OutlineBtn>
           </motion.div>
-          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-[0.3em] text-zinc-500">
-            <span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> EU-hosted</span>
-            <span className="inline-flex items-center gap-1.5"><Leaf className="h-3 w-3 text-emerald-400" /> green energy</span>
+          <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-3 text-[11px] font-mono uppercase tracking-[0.3em] text-zinc-500">
+            <span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> EU hosted</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3 w-3" /> GDPR ready</span>
-            <span className="inline-flex items-center gap-1.5"><Eye className="h-3 w-3" /> first-party data</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="h-3 w-3" /> Predictable pricing</span>
+            <span className="inline-flex items-center gap-1.5"><Zap className="h-3 w-3 text-cyan-400" /> 41s deploys</span>
           </motion.div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
@@ -291,6 +290,116 @@ function LogoStrip() {
     </Section>
   );
 }
+
+/* ───────────────────────── Killer: replaces N tools ───────────────────────── */
+
+function ReplacesStack() {
+  // Each card represents a tool DeployUnit subsumes — keeps it short on
+  // purpose: this section is a credibility punch, not a feature wall.
+  const replaced = [
+    { name: "Vercel",     why: "hosting + edge" },
+    { name: "Datadog",    why: "monitoring + alerts" },
+    { name: "Sentry",     why: "error tracking" },
+    { name: "Plausible",  why: "web analytics" },
+    { name: "Cloudflare", why: "DNS + SSL" },
+    { name: "Linear",     why: "deploy workflows" },
+  ];
+  return (
+    <Section className="py-28 lg:py-36 border-b border-zinc-900">
+      <Container>
+        <div className="max-w-3xl mb-16 lg:mb-20">
+          <Overline>One platform</Overline>
+          <h2 className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-[1.05]">
+            Stop juggling 6 tools to run one app.
+          </h2>
+          <p className="mt-6 text-lg text-zinc-400 max-w-xl leading-relaxed">
+            DeployUnit replaces your hosting, analytics, monitoring and deploy workflows — in one place.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-zinc-900 border border-zinc-900" data-testid="replaces-stack">
+          {replaced.map((t, i) => (
+            <motion.div
+              key={t.name}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.04 }}
+              className="bg-black p-8 md:p-10 relative group"
+            >
+              <div className="absolute top-4 right-4 text-zinc-700 group-hover:text-signal-failed/70 transition-colors">
+                <XIcon className="h-4 w-4" />
+              </div>
+              <div className="font-display text-2xl md:text-3xl text-zinc-200 line-through decoration-zinc-700 decoration-1">
+                {t.name}
+              </div>
+              <div className="mt-2 text-[11px] font-mono uppercase tracking-[0.3em] text-zinc-500">
+                {t.why}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+        <div className="mt-10 text-center">
+          <span className="inline-flex items-center gap-3 text-sm font-mono text-zinc-400">
+            <span className="h-px w-12 bg-cyan-500/40" />
+            <ArrowRight className="h-4 w-4 text-cyan-400" />
+            <span className="text-cyan-400 uppercase tracking-[0.3em] text-xs">DeployUnit</span>
+            <span className="h-px w-12 bg-cyan-500/40" />
+          </span>
+        </div>
+      </Container>
+    </Section>
+  );
+}
+
+
+/* ───────────────────────── Built for agencies (pillar) ───────────────────────── */
+
+function ForAgencies() {
+  const bullets = [
+    { t: "Workspaces per client", b: "Hard tenant isolation. Switch contexts in one click without leaking data." },
+    { t: "Per-client billing", b: "Each workspace bills separately. Invoice your customers with white-label PDFs." },
+    { t: "Team permissions & audit logs", b: "Owner / admin / developer / billing roles. Every action logged for compliance." },
+    { t: "Staging + production per project", b: "Branch-based environments, PR previews, instant rollback per workspace." },
+  ];
+  return (
+    <Section className="py-28 lg:py-36 border-b border-zinc-900 bg-zinc-950/30">
+      <Container className="grid lg:grid-cols-[1fr_1.1fr] gap-16 items-center">
+        <div>
+          <Overline color="text-emerald-400">For agencies</Overline>
+          <h2 className="mt-4 font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter text-white leading-[1.05]">
+            Built for agencies <span className="text-emerald-400">managing real clients.</span>
+          </h2>
+          <p className="mt-6 text-lg text-zinc-400 leading-relaxed max-w-lg">
+            Not just projects — workspaces, billing and access per customer. The platform that fits how your studio actually works.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <PrimaryBtn to="/register" testId="agency-cta">Start deploying</PrimaryBtn>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-zinc-900 border border-zinc-900" data-testid="agency-bullets">
+          {bullets.map((b, i) => (
+            <motion.div
+              key={b.t}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-black p-7"
+            >
+              <div className="flex items-center gap-2 text-emerald-400 mb-3">
+                <Check className="h-4 w-4" />
+                <span className="text-xs font-mono uppercase tracking-[0.2em]">included</span>
+              </div>
+              <div className="font-display text-lg text-zinc-100 leading-tight">{b.t}</div>
+              <div className="mt-2 text-sm text-zinc-400 leading-relaxed">{b.b}</div>
+            </motion.div>
+          ))}
+        </div>
+      </Container>
+    </Section>
+  );
+}
+
 
 /* ───────────────────────── How it works ───────────────────────── */
 
@@ -1154,17 +1263,54 @@ function Compare() {
   }
 
   return (
-    <Section id="compare" className="py-24 lg:py-32">
+    <Section id="compare" className="py-28 lg:py-36">
       <Container>
-        <div className="mb-12 max-w-2xl">
-          <Overline>Compare</Overline>
-          <h2 className="mt-3 font-display text-3xl md:text-5xl font-bold tracking-tighter text-white">
-            Why teams switch to DeployUnit.
+        <div className="mb-14 max-w-2xl">
+          <Overline>Why switch</Overline>
+          <h2 className="mt-4 font-display text-4xl md:text-6xl font-bold tracking-tighter text-white leading-[1.05]">
+            Why teams switch from <span className="line-through decoration-zinc-700 decoration-2">Vercel</span>.
           </h2>
-          <p className="mt-3 text-zinc-400">
-            Apples-to-apples against the platforms you already know.
+          <p className="mt-5 text-lg text-zinc-400 leading-relaxed">
+            Apples-to-apples — the four things that send people looking for an alternative.
           </p>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="grid md:grid-cols-2 gap-px bg-zinc-900 border border-zinc-900 mb-12"
+          data-testid="why-switch-summary"
+        >
+          {[
+            { title: "Predictable pricing", vercel: "Surprise bills at scale", us: "Flat plans. Credits for clear add-ons.", neg: true },
+            { title: "EU-hosted by default", vercel: "US-based infra", us: "NL/DE/FR data centers · GDPR-first.", neg: true },
+            { title: "Everything in one place", vercel: "Fragmented tooling", us: "Hosting + analytics + monitoring + alerts.", neg: true },
+            { title: "Agency-first workflows", vercel: "Built for solo devs", us: "Workspaces, per-client billing, audit logs.", neg: true },
+          ].map((row, i) => (
+            <motion.div
+              key={row.title}
+              initial={{ opacity: 0, y: 8 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.04 }}
+              className="bg-black p-7"
+            >
+              <div className="font-display text-xl text-zinc-100 mb-4">{row.title}</div>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-start gap-2.5 text-zinc-500">
+                  <XIcon className="h-4 w-4 mt-0.5 text-signal-failed/80 flex-shrink-0" />
+                  <span><span className="text-zinc-400 font-mono text-[10px] uppercase tracking-[0.25em] mr-2">Vercel</span>{row.vercel}</span>
+                </div>
+                <div className="flex items-start gap-2.5 text-zinc-200">
+                  <Check className="h-4 w-4 mt-0.5 text-signal-live flex-shrink-0" />
+                  <span><span className="text-cyan-400 font-mono text-[10px] uppercase tracking-[0.25em] mr-2">DeployUnit</span>{row.us}</span>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1478,11 +1624,11 @@ function FinalCTA() {
             Stop managing infrastructure. <span className="text-cyan-400">Start building.</span>
           </motion.h2>
           <motion.p variants={fadeUp} className="mt-5 text-zinc-400 max-w-xl mx-auto">
-            14 days free. No credit card. Deploy your first app in 41 seconds.
+            14 days free. No credit card required. Deploy your first app in 41 seconds.
           </motion.p>
           <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3 justify-center">
-            <PrimaryBtn to="/register" testId="cta-final-primary">Create free account</PrimaryBtn>
-            <OutlineBtn to="/pricing" testId="cta-final-secondary">View pricing</OutlineBtn>
+            <PrimaryBtn to="/register" testId="cta-final-primary">Start deploying</PrimaryBtn>
+            <OutlineBtn to="/pricing" testId="cta-final-secondary">See pricing</OutlineBtn>
           </motion.div>
         </motion.div>
       </Container>
@@ -1548,9 +1694,9 @@ function Footer() {
 
 export default function Landing() {
   useSeo({
-    title: "DeployUnit — Ship Next.js & Node apps in 2 clicks · EU hosting platform",
+    title: "DeployUnit — The European Vercel alternative, built for agencies",
     description:
-      "Vercel-grade DX without the lock-in. Connect your private GitHub repo, get a live URL in 90 seconds with instant SSL, EU data residency and credit-based pricing.",
+      "Deploy Next.js & Node apps in 41 seconds. No surprise bills. No DevOps. EU hosting, GDPR ready, agency-grade workspaces and billing. Predictable flat pricing.",
     path: "/",
   });
   return (
@@ -1558,7 +1704,9 @@ export default function Landing() {
       <Nav />
       <Hero />
       <LogoStrip />
+      <ReplacesStack />
       <HowItWorks />
+      <ForAgencies />
       <Features />
       <Compare />
       <GreenEnergy />

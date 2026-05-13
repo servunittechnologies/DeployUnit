@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Check, ArrowRight, Sparkles, Shield, Rocket } from "lucide-react";
+import { Check, ArrowRight, Sparkles, Shield, Rocket, Coins, Mail, MessageSquare, Server, Gauge } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import Logo from "../components/Logo";
 import useSpotlight from "../hooks/useSpotlight";
 import useSeo from "../hooks/useSeo";
 
-const PLAN_ICON = { free: Sparkles, pro: Rocket, agency: Shield };
+const PLAN_ICON = { free: Sparkles, starter: Sparkles, pro: Rocket, agency: Shield };
 
 function PlanCard({ plan, onChoose, index }) {
   const onMove = useSpotlight();
@@ -117,22 +117,73 @@ export default function Pricing() {
           transition={{ duration: 0.8 }}
           className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-semibold leading-[1.05]"
         >
-          Pay for outcomes,<br /> not config.
+          Flat plans.<br /> <span className="text-brand">Transparent add-ons.</span>
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 }}
-          className="mt-6 text-sm sm:text-base text-zinc-400 max-w-md mx-auto"
+          className="mt-6 text-base sm:text-lg text-zinc-400 max-w-lg mx-auto leading-relaxed"
         >
-          Cancel any time. Monitoring, alerts, custom domains and a 24/7 build queue on every plan.
+          Pick a plan. Unlock extra features with credits — every add-on priced openly. No surprise bills, ever.
         </motion.p>
       </section>
 
-      <section className="max-w-[1400px] mx-auto px-6 pb-28 grid grid-cols-1 md:grid-cols-3 gap-5">
+      <section className="max-w-[1400px] mx-auto px-6 pb-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {plans.map((p, i) => (
           <PlanCard key={p.id} plan={p} onChoose={choose} index={i} />
         ))}
+      </section>
+
+      {/* What credits unlock — the transparent add-on catalog */}
+      <section className="max-w-[1200px] mx-auto px-6 pb-20" data-testid="addons-catalog">
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.4em] text-brand">
+            <Coins className="h-3 w-3" /> credits unlock
+          </div>
+          <h2 className="mt-4 font-display text-3xl md:text-5xl tracking-tighter font-semibold leading-[1.1]">
+            What you can do with credits.
+          </h2>
+          <p className="mt-4 text-zinc-400 max-w-xl mx-auto">
+            Every plan includes a monthly credit allowance. Use them for the features below — buy more whenever you need, never expire.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] border border-white/[0.06]">
+          {[
+            { icon: MessageSquare, name: "SMS alert", price: "1 credit",  hint: "Per SMS sent to your phone for deploy / downtime events." },
+            { icon: MessageSquare, name: "WhatsApp alert", price: "3 credits", hint: "Same as SMS but delivered via WhatsApp Business." },
+            { icon: Server,        name: "Reserved static IP", price: "50 credits / mo", hint: "Pin your app to a fixed IP — required for some database whitelists & 3rd party integrations." },
+            { icon: Mail,          name: "Branded email sender", price: "100 credits / mo", hint: "Send transactional emails from your domain with our infra." },
+            { icon: Gauge,         name: "Extended log retention", price: "100 credits / mo", hint: "Keep build & runtime logs for 30 days instead of 7." },
+            { icon: Coins,         name: "Top-up credit packs", price: "from €5", hint: "Buy 50 / 220 / 600 credits packs. Bulk discount on larger packs." },
+          ].map((addon, i) => {
+            const Ai = addon.icon;
+            return (
+              <motion.div
+                key={addon.name}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-background p-6"
+                data-testid={`addon-${addon.name.toLowerCase().replace(/\s+/g,'-')}`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="h-9 w-9 border border-brand/40 flex items-center justify-center">
+                    <Ai className="h-4 w-4 text-brand" />
+                  </div>
+                  <div className="text-xs font-mono text-brand">{addon.price}</div>
+                </div>
+                <div className="font-display text-lg text-zinc-100">{addon.name}</div>
+                <div className="mt-2 text-sm text-zinc-400 leading-relaxed">{addon.hint}</div>
+              </motion.div>
+            );
+          })}
+        </div>
+        <div className="mt-6 text-center text-xs font-mono text-zinc-500">
+          Every action shows its credit cost before you confirm. Watch your balance live on the dashboard. Hard cap toggle so you&apos;re never billed for more than you budgeted.
+        </div>
       </section>
 
       <section className="max-w-[1200px] mx-auto px-6 pb-28">
