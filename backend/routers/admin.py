@@ -485,6 +485,12 @@ async def admin_smstools_test(payload: _SmsTestPayload, request: Request):
         resp = await _send_sms(payload.to, body)
     except SMSToolsError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        # Catch-all so we NEVER let an httpx / network / decode error bubble
+        # up as an uncaught 500/520 — give the admin a clean toast instead.
+        import logging as _logging
+        _logging.getLogger(__name__).exception("smstools test send crashed")
+        raise HTTPException(status_code=502, detail=f"sms send crashed: {type(e).__name__}: {str(e)[:160]}")
     audit_log(action="admin.smstools_test", actor=user,
               resource_type="platform", resource_id="smstools",
               meta={"to": payload.to[-4:].rjust(len(payload.to), "*")}, request=request)

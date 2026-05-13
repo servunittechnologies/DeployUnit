@@ -1843,7 +1843,7 @@ export default function Admin() {
   const [tab, setTab] = useState("integrations");
 
   return (
-    <div className="px-4 py-6 sm:p-8 max-w-5xl" data-testid="admin-page">
+    <div className="px-4 py-6 sm:p-8 max-w-screen-2xl mx-auto" data-testid="admin-page">
       <div className="flex items-center gap-3 mb-1">
         <ShieldCheck className="h-5 w-5 text-brand" />
         <h1 className="font-display text-2xl sm:text-3xl tracking-tighter">Admin Console</h1>

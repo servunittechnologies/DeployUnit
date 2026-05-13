@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { Activity, Cpu, MemoryStick, HardDrive, Clock, Zap, GitCommit, AlertTriangle, TrendingUp } from "lucide-react";
 import AppMetricsCharts from "./AppMetricsCharts";
+import InfoTip from "./InfoTip";
 
 const WINDOWS = [
   { id: "1h",  label: "Last hour"  },
@@ -357,19 +358,39 @@ export function AccountAnalyticsPanel() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Deployments</div>
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 flex items-center">
+            Deployments
+            <InfoTip>
+              How many times this app was built &amp; pushed in the selected window.
+              Includes manual redeploys and auto-deploys from GitHub pushes.
+            </InfoTip>
+          </div>
           <div className="font-display text-2xl mt-1">{t.deployments_in_window || 0}</div>
           <div className="text-[10px] font-mono text-zinc-500">{t.build_minutes_in_window || 0} build minutes</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Credit burn</div>
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 flex items-center">
+            Credit burn
+            <InfoTip>
+              Credits this app consumed in the selected window. Burn comes from{" "}
+              <b className="text-zinc-200">SMS alerts</b>, <b className="text-zinc-200">build overages</b> (builds longer than your plan's free minutes),
+              and <b className="text-zinc-200">resource overages</b> (CPU/RAM/storage above your plan's quota).
+              Resource cost is shown separately as "Resource cost / month".
+            </InfoTip>
+          </div>
           <div className="font-display text-2xl mt-1 text-signal-failed">{c.burn_total || 0} <span className="text-xs text-zinc-500 font-mono">cr</span></div>
-          <div className="text-[10px] font-mono text-zinc-500">{burnKinds.length} categories</div>
+          <div className="text-[10px] font-mono text-zinc-500">{burnKinds.length} {burnKinds.length === 1 ? "category" : "categories"} · see breakdown below</div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Resource cost / month</div>
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500 flex items-center">
+            Resource cost / month
+            <InfoTip>
+              The monthly credit cost of CPU + memory + storage this app is allocated, regardless of usage.
+              This is what you'd pay even if no traffic hit the app.
+            </InfoTip>
+          </div>
           <div className="font-display text-2xl mt-1 text-brand">{t.monthly_resource_cost_credits || 0} <span className="text-xs text-zinc-500 font-mono">cr</span></div>
-          <div className="text-[10px] font-mono text-zinc-500">recurring addons</div>
+          <div className="text-[10px] font-mono text-zinc-500">recurring add-ons</div>
         </div>
       </div>
       {burnKinds.length > 0 && (

@@ -39,7 +39,6 @@ class ResourceBundle(TypedDict):
 
 DEFAULT_PLAN_RESOURCES: dict[str, ResourceBundle] = {
     "free":   {"cpu_vcpu": 0.25, "memory_mb": 256,  "storage_mb": 1024},
-    "hobby":  {"cpu_vcpu": 0.25, "memory_mb": 256,  "storage_mb": 1024},
     "pro":    {"cpu_vcpu": 0.5,  "memory_mb": 512,  "storage_mb": 5120},
     "agency": {"cpu_vcpu": 1.0,  "memory_mb": 1024, "storage_mb": 20480},
 }

@@ -69,7 +69,7 @@ export default function CreditsTopup() {
   const customPrice = useMemo(() => (custom * CUSTOM_RATE_EUR).toFixed(2), [custom]);
 
   return (
-    <div className="px-4 py-6 sm:p-8 max-w-4xl" data-testid="credits-topup-page">
+    <div className="px-4 py-6 sm:p-8 max-w-screen-2xl mx-auto" data-testid="credits-topup-page">
       <button
         onClick={() => navigate(-1)}
         className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 hover:text-white mb-4"

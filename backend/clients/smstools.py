@@ -87,15 +87,17 @@ async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None 
     brand sender hasn't been pre-registered yet). This stops first-time
     setups from failing silently while the admin waits for sender approval.
     """
-    # Strip the leading + so SMSTools accepts it (their API wants the digits
-    # only, no '+'). E.164 → "+316XXXXXXXX" → "316XXXXXXXX".
-    digits = (to or "").lstrip("+")
-    if not digits:
+    # SMSTools accepts E.164 with the leading `+`. Just make sure it's
+    # actually E.164 (starts with + and one digit immediately after).
+    recipient = (to or "").strip()
+    if not recipient:
         raise SMSToolsError("recipient is empty")
+    if not recipient.startswith("+"):
+        recipient = "+" + recipient.lstrip("0")
 
     payload: dict = {
         "message": body,
-        "to": digits,
+        "to": recipient,
     }
     sender_to_use = None if _retry_no_sender else cfg.get("sender")
     if sender_to_use:
@@ -111,17 +113,25 @@ async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None 
         "Content-Type": "application/json",
     }
     url = f"{SMSTOOLS_API_BASE}/message/send"
-    async with httpx.AsyncClient(timeout=12.0) as cli:
-        r = await cli.post(url, json=payload, headers=headers)
+    # Aggressive client-side timeouts so a slow SMSTools never trips the
+    # outer Cloudflare-ingress timeout (which surfaces as a confusing 520
+    # rather than a clean 502/504).
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=4.0, read=8.0, write=4.0, pool=4.0)) as cli:
+            r = await cli.post(url, json=payload, headers=headers)
+    except httpx.TimeoutException as e:
+        raise SMSToolsError(f"smstools network timeout — try again in a moment ({str(e)[:80]})")
+    except httpx.HTTPError as e:
+        raise SMSToolsError(f"smstools network error — {str(e)[:120]}")
 
     # Try to surface SMSTools' business errors verbatim.
     try:
         data = r.json()
     except Exception:
-        data = {"raw": r.text[:200]}
+        data = {"raw": (r.text or "")[:200]}
 
     if r.status_code >= 400:
-        code = data.get("code") or data.get("error_code")
+        code = data.get("code") or data.get("error_code") if isinstance(data, dict) else None
         code_int = int(code) if (code and str(code).isdigit()) else None
         # Auto-fallback on "invalid sender" — try once more without one.
         if code_int == 111 and not _retry_no_sender and sender_to_use:
@@ -134,7 +144,7 @@ async def _post_message(cfg: dict, *, to: str, body: str, reference: str | None 
                     "Fix: in Admin → SMSTools, set Sender ID to (a) your own phone number digits-only "
                     "(e.g. 32475123456 — works immediately) OR (b) a pre-registered brand name "
                     "(register at smstools.com → Sender names → Add sender, 24-48h approval).")
-        msg = data.get("message") or data.get("error") or r.text[:200]
+        msg = (data.get("message") or data.get("error") or (r.text or "")[:200]) if isinstance(data, dict) else (r.text or "")[:200]
         raise SMSToolsError(f"smstools {r.status_code}: {hint or msg}")
 
     # SMSTools sometimes returns 200 with an error payload — guard for that.

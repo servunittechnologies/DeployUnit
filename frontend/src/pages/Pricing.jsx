@@ -8,7 +8,7 @@ import Logo from "../components/Logo";
 import useSpotlight from "../hooks/useSpotlight";
 import useSeo from "../hooks/useSeo";
 
-const PLAN_ICON = { hobby: Sparkles, pro: Rocket, agency: Shield };
+const PLAN_ICON = { free: Sparkles, pro: Rocket, agency: Shield };
 
 function PlanCard({ plan, onChoose, index }) {
   const onMove = useSpotlight();
@@ -59,7 +59,7 @@ function PlanCard({ plan, onChoose, index }) {
         }`}
         data-testid={`plan-cta-${plan.id}`}
       >
-        {plan.id === "hobby" ? "Start free" : `Choose ${plan.name}`} <ArrowRight className="h-4 w-4" />
+        {plan.id === "free" ? "Start free" : `Choose ${plan.name}`} <ArrowRight className="h-4 w-4" />
       </button>
     </motion.div>
   );
@@ -68,7 +68,7 @@ function PlanCard({ plan, onChoose, index }) {
 export default function Pricing() {
   useSeo({
     title: "Pricing — DeployUnit",
-    description: "Transparent EU hosting pricing for Next.js & Node.js. Hobby is free forever. Pro from €19/mo. No vendor lock-in.",
+    description: "Transparent EU hosting pricing for Next.js & Node.js. Free forever for personal projects. Pro from €19/mo. No vendor lock-in.",
     path: "/pricing",
   });
   const [plans, setPlans] = useState([]);

@@ -1125,22 +1125,32 @@ const SMALL_FEATURES = [
 
 function Compare() {
   const rows = [
-    { f: "EU data residency",         dh: true, vc: false, rd: "partial", coolify: "self-host" },
-    { f: "Included container metrics", dh: true, vc: false, rd: "partial", coolify: false },
-    { f: "Built-in web analytics",     dh: true, vc: false, rd: false,     coolify: false },
-    { f: "Agency-grade multi-tenant",   dh: true, vc: false, rd: false,     coolify: false },
-    { f: "Agency multi-tenant",        dh: true, vc: false, rd: false,     coolify: false },
-    { f: "Green energy by default",    dh: true, vc: false, rd: false,     coolify: "self-host" },
-    { f: "Credit-based pricing",       dh: true, vc: false, rd: false,     coolify: false },
-    { f: "Push-to-deploy from GitHub", dh: true, vc: true,  rd: true,      coolify: "DIY" },
-    { f: "PR previews",                dh: true, vc: true,  rd: true,      coolify: false },
-    { f: "Managed support",            dh: true, vc: true,  rd: true,      coolify: false },
+    { f: "EU data residency by default", dh: true,      vc: "partial", rd: "partial", coolify: "self-host" },
+    { f: "Included container metrics",   dh: true,      vc: "addon",   rd: "addon",   coolify: false },
+    { f: "Built-in web analytics",       dh: true,      vc: "addon",   rd: "addon",   coolify: false },
+    { f: "Agency-grade multi-tenant",    dh: true,      vc: false,     rd: false,     coolify: false },
+    { f: "Green energy by default",      dh: true,      vc: false,     rd: false,     coolify: "self-host" },
+    { f: "Credit-based pricing",         dh: true,      vc: "partial", rd: false,     coolify: false },
+    { f: "Transparent overage billing",  dh: true,      vc: "partial", rd: "partial", coolify: "self-host" },
+    { f: "Push-to-deploy from GitHub",   dh: true,      vc: true,      rd: true,      coolify: "DIY" },
+    { f: "PR previews",                  dh: true,      vc: true,      rd: true,      coolify: false },
+    { f: "Managed EU-based support",     dh: true,      vc: false,     rd: false,     coolify: false },
   ];
 
   function Cell({ v }) {
-    if (v === true) return <Check className="h-4 w-4 text-cyan-400 mx-auto" />;
-    if (v === false) return <XIcon className="h-4 w-4 text-zinc-700 mx-auto" />;
-    return <span className="block text-center text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-500">{v}</span>;
+    if (v === true)
+      return <span className="inline-flex items-center gap-1 text-signal-live"><Check className="h-4 w-4" /></span>;
+    if (v === false)
+      return <span className="text-zinc-600">—</span>;
+    if (v === "partial")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">partial</span>;
+    if (v === "addon")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-amber-400/40 text-amber-300 font-mono">paid add-on</span>;
+    if (v === "self-host")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-zinc-600 text-zinc-400 font-mono">self-host</span>;
+    if (v === "DIY")
+      return <span className="inline-flex items-center px-2 py-0.5 text-[10px] uppercase tracking-wider border border-zinc-600 text-zinc-400 font-mono">DIY only</span>;
+    return <span className="text-zinc-600">—</span>;
   }
 
   return (

@@ -260,7 +260,7 @@ export default function Account() {
   const currentRank = planRank[plan.id] ?? 0;
 
   return (
-    <div className="px-4 py-5 sm:px-6 sm:py-6 max-w-6xl" data-testid="account-page">
+    <div className="px-4 py-5 sm:px-6 sm:py-6 max-w-screen-2xl mx-auto" data-testid="account-page">
       {/* Hero */}
       <div className="mb-6">
         <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// account</div>

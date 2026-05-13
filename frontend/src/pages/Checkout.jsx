@@ -63,7 +63,7 @@ export default function Checkout() {
     );
   }
 
-  const isFree = plan.id === "hobby";
+  const isFree = plan.id === "free";
 
   return (
     <div className="min-h-screen bg-background">
@@ -122,7 +122,7 @@ export default function Checkout() {
           {isFree ? (
             <>
               <p className="mt-8 text-sm text-zinc-400">
-                Hobby is free. Click confirm and you're live.
+                Free plan is on the house — click confirm and you're live.
               </p>
               {error && <div className="mt-4 text-signal-failed text-sm">{error}</div>}
               <button

@@ -102,7 +102,7 @@ export default function Settings() {
   const usage = wsUsage?.usage || {};
 
   return (
-    <div className="px-6 py-6 max-w-4xl space-y-8" data-testid="settings-page">
+    <div className="px-6 py-6 max-w-screen-2xl mx-auto space-y-8" data-testid="settings-page">
       {/* Hero */}
       <div>
         <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// Workspace settings</div>

@@ -401,7 +401,7 @@ export default function Tickets() {
 
   if (id) {
     return (
-      <div className="px-4 py-6 sm:p-8 max-w-5xl">
+      <div className="px-4 py-6 sm:p-8 max-w-screen-2xl mx-auto">
         <TicketThread ticketId={id} onBack={() => navigate("/app/tickets")} />
       </div>
     );
@@ -419,7 +419,7 @@ export default function Tickets() {
   }
 
   return (
-    <div className="px-4 py-6 sm:p-8 max-w-5xl">
+    <div className="px-4 py-6 sm:p-8 max-w-screen-2xl mx-auto">
       <TicketsList
         tickets={tickets}
         loading={loading}
