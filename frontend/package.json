@@ -59,6 +59,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "postbuild": "python3 scripts/prerender.py || echo '[prerender] skipped (non-fatal)'",
     "test": "craco test"
   },
   "browserslist": {

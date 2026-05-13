@@ -26,6 +26,7 @@ from services.analytics import gc as analytics_gc
 from services.subdomains import refill_pool as subdomain_refill_pool
 from services.routing_healer import routing_healer_tick
 from services.coolify_reconcile import reconcile_tick as coolify_reconcile_tick
+from services.custom_subdomain import verify_pending_subdomains_tick
 from routers.status import status_ping_tick
 
 from routers import (
@@ -116,6 +117,11 @@ async def lifespan(app: FastAPI):
     # apps that no longer exist on the build engine and counts Coolify apps
     # not tracked by DeployUnit (info pill only, no warning spam).
     scheduler.add_job(coolify_reconcile_tick, "interval", minutes=10, id="coolify_reconcile", replace_existing=True, max_instances=1)
+    # Custom-subdomain verifier — every 30s probes any pending requests
+    # and only flips the primary URL to the new subdomain once DNS +
+    # Traefik + SSL are all working. Prevents the "user changed name
+    # and now their app is unreachable" failure mode.
+    scheduler.add_job(verify_pending_subdomains_tick, "interval", seconds=30, id="custom_subdomain_verify", replace_existing=True, max_instances=1)
     scheduler.start()
     # Initial fill on boot (fire-and-forget) so the very first deploy after
     # a restart doesn't have to wait 3 min for the first scheduler tick.

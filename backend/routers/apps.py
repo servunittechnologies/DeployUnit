@@ -767,6 +767,81 @@ async def reclaim_cloudflare_subdomain(app_id: str, request: Request):
 
 
 
+# ─────────── Custom subdomain on the platform root domain ───────────────────
+class CustomSubdomainIn(BaseModel):
+    name: str
+
+
+@router.get("/apps/{app_id}/custom-subdomain")
+async def custom_subdomain_state(app_id: str, request: Request):
+    """Current state — pending / active / failed / none — for the app's
+    custom subdomain. Polled by the UI while a request is in flight."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0, "workspace_id": 1})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    from services.custom_subdomain import status_for_app
+    return await status_for_app(app_id)
+
+
+@router.get("/apps/{app_id}/custom-subdomain/check")
+async def custom_subdomain_check(app_id: str, name: str, request: Request):
+    """Real-time availability check while the user types a desired name."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0, "workspace_id": 1})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user)
+    from services.custom_subdomain import check_availability
+    return await check_availability(name)
+
+
+@router.post("/apps/{app_id}/custom-subdomain")
+async def custom_subdomain_request(app_id: str, payload: CustomSubdomainIn, request: Request):
+    """Kick off provisioning. The old random URL keeps working until the
+    new one is fully verified (3 successful probes ≈ 90s)."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    from services.custom_subdomain import request_custom_subdomain
+    res = await request_custom_subdomain(app, payload.name)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not start provisioning")
+    audit_log(action="app.custom_subdomain_request", actor=user,
+              resource_type="app", resource_id=app_id,
+              meta={"fqdn": res.get("fqdn")}, request=request)
+    return res
+
+
+@router.delete("/apps/{app_id}/custom-subdomain")
+async def custom_subdomain_cancel(app_id: str, request: Request):
+    """Cancel a pending request OR detach an active custom subdomain. In
+    both cases the old random URL is restored as primary."""
+    user = await get_current_user(request)
+    db = get_db()
+    app = await db.apps.find_one({"id": app_id}, {"_id": 0})
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    await require_workspace_member(app["workspace_id"], user, ["owner", "admin", "developer"])
+    from services.custom_subdomain import cancel_pending, detach_active_custom
+    # If there's a pending request, cancel it. Otherwise, if active, detach.
+    if app.get("custom_subdomain_status") == "active":
+        res = await detach_active_custom(app_id)
+    else:
+        res = await cancel_pending(app_id)
+    audit_log(action="app.custom_subdomain_cancel", actor=user,
+              resource_type="app", resource_id=app_id,
+              meta=res, request=request)
+    return res
+
+
+
 @router.post("/apps/{app_id}/redeploy")
 async def redeploy(app_id: str, request: Request, background: BackgroundTasks, payload: RedeployIn | None = None):
     user = await get_current_user(request)

@@ -14,6 +14,7 @@ import AppAnalyticsPanel from "../../components/AppAnalyticsPanel";
 import AppWebAnalyticsTab from "../../components/AppWebAnalyticsTab";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import AddDomainWizard from "../../components/AddDomainWizard";
+import CustomSubdomainCard from "../../components/CustomSubdomainCard";
 import useDeploymentStream from "../../hooks/useDeploymentStream";
 import {
   ChevronLeft, RotateCw, RefreshCcw, Trash2, GitBranch, GitCommit,
@@ -678,6 +679,11 @@ export default function AppDetail() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Custom subdomain on the platform root domain */}
+          <div className="mb-6">
+            <CustomSubdomainCard appId={id} onChanged={load} />
           </div>
 
           <div className="flex items-center justify-between mb-6">

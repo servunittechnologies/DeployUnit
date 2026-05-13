@@ -1,0 +1,61 @@
+{
+  "summary": "Iter18 — Prerender + Custom Subdomain feature testing. 45/45 backend+prerender pytest tests PASS, all UI assertions on CustomSubdomainCard PASS, hydration of /pricing prerendered page verified clean (no console errors, root has children, real human content). Regression smoke for /api/admin/credit-packs also PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Prerendered /login, /register, /forgot-password snapshots", "issues": ["canonical and og:url point to 'https://deployunit.com/' (root) instead of the actual path (/login, /register, /forgot-password). Likely intentional for SEO (auth pages shouldn't compete with the homepage), but worth confirming the team's intent. Public pages (pricing/about/status/contact/support) correctly point to their own path."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_custom_subdomain.py",
+    "/app/test_reports/pytest/iter18_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "services/custom_subdomain.py (611 lines) is approaching the 700-line threshold. Future iterations could split the state machine (validate/check/request/cancel/detach/verify_tick) into separate modules under services/custom_subdomain/.",
+    "validate_name() accepts uppercase input because normalize_name() lowercases first. This is forgiving UX and intentional, but the public docstring of validate_name should mention 'input is normalized first' to avoid confusion for future callers.",
+    "Prerender canonical for /login, /register, /forgot-password resolves to 'https://deployunit.com/' (homepage) — confirm this is intentional. If it is, no change needed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_custom_subdomain.py (new)"
+  ],
+  "success_rate": {"backend": "100% (45/45)", "frontend": "100% (CustomSubdomainCard UI + hydration)"},
+  "test_credentials": "demo@deployunit.com / demo1234 (workspace owner), admin@deployunit.com / admin123 (admin). Loaded from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created an outsider test user (TEST_iter18_outsider@example.com / Passw0rd!23) via /api/auth/register to verify 403 non-member path. No demo data mutated.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter18 features fully verified. Backend regression file: /app/backend/tests/test_iter18_custom_subdomain.py covers prerender file existence, root-div content, canonical/og:url correctness, validate_name() unit tests, GET/POST/DELETE /api/apps/{id}/custom-subdomain endpoints (state/check/reserved/404/403/noop), scheduler registration of verify_pending_subdomains_tick at 30s, and credit-packs regression. Preview env has NO Cloudflare configured — that's expected; valid names return available:false with 'Cloudflare is not configured…'. The full provisioning state machine (pending→active or pending→failed) can only be exercised with mocks or in prod. UI testids verified on AppDetail Domains tab: custom-subdomain-form, custom-subdomain-name-input, custom-subdomain-submit, custom-subdomain-check-msg, custom-subdomain-unavailable.",
+  "detailed_results": {
+    "prerender": {
+      "files_exist": "9/9 routes (index, pricing, about, login, register, forgot-password, status, contact, support)",
+      "root_div_has_real_content": "9/9 routes (text length 80+ chars, contains real page copy)",
+      "canonical_and_og_url_https_deployunit": "9/9 routes — all use https://deployunit.com, NO http://127.0.0.1 or http://localhost leaks",
+      "hydration_check_pricing": "Pricing page hydrates cleanly. Title 'Pricing — DeployUnit', visible pricing tiers, 0 page-error/console-error after networkidle."
+    },
+    "custom_subdomain_backend": {
+      "validate_name_unit": "PASS — too short, reserved (admin/www/api/mail/status), invalid chars, 60+ reserved entries, valid names",
+      "GET_state_none": "PASS — returns {status: 'none'|active|pending}",
+      "GET_check": "PASS — too short / reserved (admin,api,www) / invalid chars / valid+cf-not-configured",
+      "POST_reserved_400": "PASS",
+      "POST_unknown_app_404": "PASS",
+      "POST_non_member_403": "PASS (using outsider session)",
+      "DELETE_noop": "PASS — returns {ok: true}",
+      "scheduler_30s": "PASS — verify_pending_subdomains_tick registered in scheduler.add_job at 30s in server.py:124"
+    },
+    "custom_subdomain_ui": {
+      "AppDetail_Domains_tab": "Renders CustomSubdomainCard",
+      "typing_admin": "Shows '✕ admin is reserved by the platform.' and Provision button disabled",
+      "typing_ab": "Shows '✕ Subdomain must be at least 3 characters.'",
+      "typing_valid_myappt18": "Shows '✕ Cloudflare is not configured on the platform yet.' with custom-subdomain-unavailable element present and Provision button disabled",
+      "testids_present": "custom-subdomain-form, custom-subdomain-name-input, custom-subdomain-submit, custom-subdomain-check-msg, custom-subdomain-unavailable — all found"
+    },
+    "regression": {
+      "GET_admin_credit_packs": "PASS — 200 for admin"
+    }
+  }
+}
