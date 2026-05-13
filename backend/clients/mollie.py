@@ -81,6 +81,12 @@ class MollieClient:
     async def create_subscription(self, customer_id: str, *, payload: dict) -> dict:
         return await self._req("POST", f"/customers/{customer_id}/subscriptions", json=payload)
 
+    async def update_subscription(self, customer_id: str, subscription_id: str, *, payload: dict) -> dict:
+        """PATCH a subscription — typically to change `amount`, `description`,
+        or `metadata` when a user upgrades/downgrades. Mollie applies the new
+        price on the next billing cycle."""
+        return await self._req("PATCH", f"/customers/{customer_id}/subscriptions/{subscription_id}", json=payload)
+
     async def get_subscription(self, customer_id: str, subscription_id: str) -> dict:
         return await self._req("GET", f"/customers/{customer_id}/subscriptions/{subscription_id}")
 

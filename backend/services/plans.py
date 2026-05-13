@@ -168,11 +168,19 @@ DEFAULT_PLANS = [
 
 
 async def seed_default_plans() -> None:
-    """Insert default plans if missing. Safe to call repeatedly — never
-    overwrites a plan that already exists, so admin edits survive restarts.
+    """Insert default plans if missing; resync defaults onto plans that have
+    NOT been manually edited by an admin yet.
 
-    Also backfills the `features_block` capability map on any plan that
-    predates that field, so feature-gated routes don't break existing admins.
+    Safety contract:
+      * Missing plan → insert from DEFAULT_PLANS.
+      * Existing plan with `admin_edited_at` set → never touch pricing/limits
+        (admin owns it now; only auto-expand features_block additively).
+      * Existing plan WITHOUT `admin_edited_at` → fully resync price, name,
+        tagline, features, limits, credits, currency, interval, order, active,
+        fleet_view, support_sla_hours, features_block. This is how
+        production catches up when DEFAULT_PLANS changes (e.g. when we add
+        a new tier or rebrand pricing) — but only as long as no admin has
+        taken ownership of the plan via the admin console.
     """
     db = get_db()
     for plan in DEFAULT_PLANS:
@@ -181,16 +189,25 @@ async def seed_default_plans() -> None:
             await db.platform_plans.insert_one(plan.copy())
             logger.info("seeded plan: %s", plan["id"])
             continue
-        if "features_block" not in existing and "features_block" in plan:
+        if not existing.get("admin_edited_at"):
+            # Plan is "stock" — auto-resync defaults so live deployments
+            # pick up new tiers / prices without manual DB surgery.
+            sync_fields = {
+                k: plan.get(k) for k in (
+                    "name", "price", "currency", "interval", "tagline",
+                    "features", "limits", "credits", "highlight", "order",
+                    "active", "fleet_view", "support_sla_hours", "features_block",
+                )
+            }
             await db.platform_plans.update_one(
                 {"id": plan["id"]},
-                {"$set": {"features_block": plan["features_block"]}},
+                {"$set": sync_fields},
             )
-            logger.info("backfilled features_block on plan: %s", plan["id"])
+            logger.info("resynced stock plan %s → price=%s", plan["id"], plan["price"])
             continue
-        # Keep features_block in sync with shipped defaults so newly-released
-        # features (e.g. heatmaps for Pro) light up automatically — but never
-        # downgrade a plan that's been manually edited to enable MORE features.
+        # Admin-edited plan: keep their pricing, but additively expand
+        # features_block so newly-released capabilities (e.g. heatmaps) light
+        # up automatically. Never DOWNGRADE an admin-enabled feature.
         cur_fb = existing.get("features_block") or {}
         target_fb = plan.get("features_block") or {}
         merged = {**target_fb, **{k: v for k, v in cur_fb.items() if v}}
@@ -233,6 +250,8 @@ async def update_plan(plan_id: str, updates: dict) -> Optional[dict]:
     }
     if not safe_updates:
         return await get_plan(plan_id)
+    from datetime import datetime, timezone
+    safe_updates["admin_edited_at"] = datetime.now(timezone.utc).isoformat()
     await db.platform_plans.update_one({"id": plan_id}, {"$set": safe_updates})
     return await get_plan(plan_id)
 

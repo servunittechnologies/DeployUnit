@@ -25,7 +25,9 @@ from pydantic import BaseModel, Field
 from db import get_db
 from auth_utils import get_current_user, hash_password
 from services.audit import log as audit_log
-from services.plans import workspace_plan, list_plans
+from services.plans import workspace_plan, list_plans, get_plan
+from clients.mollie import mollie, MollieError
+import os
 
 router = APIRouter(tags=["admin-users"])
 logger = logging.getLogger(__name__)
@@ -294,28 +296,98 @@ class PlanIn(BaseModel):
 
 @router.post("/admin/users/{user_id}/plan")
 async def set_plan(user_id: str, payload: PlanIn, request: Request):
+    """Switch this user's account plan.
+
+    The platform stores the plan on the OWNER USER (users.plan); every
+    workspace the user owns inherits it. The legacy field workspaces.plan
+    is kept in sync for backwards-compat with old reports, but is no
+    longer the source of truth.
+
+    If the user has an active Mollie subscription we PATCH it to the new
+    price so the next recurring charge bills the correct amount. If the
+    target is the free plan, we cancel the Mollie subscription instead.
+    """
     actor = await _require_admin(request)
     db = get_db()
-    u = await db.users.find_one({"id": user_id})
+    u = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    ws = await db.workspaces.find_one({"id": payload.workspace_id})
+    ws = await db.workspaces.find_one({"id": payload.workspace_id}, {"_id": 0})
     if not ws or ws.get("owner_id") != user_id:
         raise HTTPException(status_code=400, detail="Workspace not owned by user")
-    plan = next((p for p in await list_plans() if p["id"] == payload.plan), None)
+    plan = await get_plan(payload.plan)
     if not plan:
         raise HTTPException(status_code=400, detail=f"Unknown plan '{payload.plan}'")
-    await db.workspaces.update_one(
-        {"id": payload.workspace_id},
-        {"$set": {"plan": payload.plan, "plan_changed_at": _now_iso()}},
+
+    previous_plan = u.get("plan") or ws.get("plan") or "free"
+    now = _now_iso()
+
+    # Source of truth — user account plan.
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"plan": payload.plan, "plan_changed_at": now}},
     )
+    # Keep every workspace this user owns in sync (legacy field used by
+    # some reports/queries). One write, many docs.
+    await db.workspaces.update_many(
+        {"owner_id": user_id},
+        {"$set": {"plan": payload.plan, "plan_changed_at": now}},
+    )
+
+    # Sync Mollie subscription if the user has one.
+    mollie_synced = False
+    mollie_action = "none"
+    mollie_error: Optional[str] = None
+    sub = await db.subscriptions.find_one({"user_id": user_id}, {"_id": 0})
+    cust_id = (sub or {}).get("mollie_customer_id")
+    sub_id = (sub or {}).get("mollie_subscription_id")
+    if sub and cust_id and sub_id and mollie.configured:
+        try:
+            if payload.plan in ("free", "hobby"):
+                await mollie.cancel_subscription(cust_id, sub_id)
+                await db.subscriptions.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"status": "cancelled", "plan": "free",
+                              "cancelled_at": now, "cancelled_by": "admin"}},
+                )
+                mollie_action = "cancelled"
+                mollie_synced = True
+            elif float(plan.get("price") or 0) > 0:
+                await mollie.update_subscription(cust_id, sub_id, payload={
+                    "amount": {"currency": "EUR", "value": f"{float(plan['price']):.2f}"},
+                    "description": f"{plan['name']} plan subscription",
+                    "metadata": {"user_id": user_id, "plan": plan["id"]},
+                })
+                await db.subscriptions.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"plan": plan["id"], "status": "active",
+                              "updated_at": now}},
+                )
+                mollie_action = "updated"
+                mollie_synced = True
+        except MollieError as e:
+            logger.warning("admin plan change Mollie sync failed for user %s: %s", user_id, e)
+            mollie_error = str(e)
+        except Exception as e:
+            logger.warning("admin plan change Mollie sync unexpected: %s", e)
+            mollie_error = str(e)
+
     audit_log(action="admin.user.plan_change", actor=actor,
               workspace_id=payload.workspace_id,
               resource_type="workspace", resource_id=payload.workspace_id,
               meta={"target_email": u.get("email"), "new_plan": payload.plan,
-                    "previous_plan": ws.get("plan")},
+                    "previous_plan": previous_plan,
+                    "mollie_action": mollie_action,
+                    "mollie_synced": mollie_synced,
+                    "mollie_error": mollie_error},
               request=request)
-    return {"plan": payload.plan}
+    return {
+        "plan": payload.plan,
+        "previous_plan": previous_plan,
+        "mollie_synced": mollie_synced,
+        "mollie_action": mollie_action,
+        "mollie_error": mollie_error,
+    }
 
 
 # ─────────────────────── Payments / invoices ───────────────────────

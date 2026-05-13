@@ -611,3 +611,18 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
 ## Known good test data (post-iter22)
 - Demo user: `demo@deployunit.com` / `demo1234`.
 - Seeded first app (id `63c1ba3c-8286-4e80-83d1-06a603132392`) already has `heatmaps` addon active and 1 URL (`/test`) with click data — convenient for visual checks.
+
+
+- **2026-05-13 — Iter22b — Admin plan change bug fix (P0 production)**
+  - **User report (Dutch)**: "Als ik als admin een klant upgrade naar een ander plan upgrade hij niet en het starters abonnement is nog niet meegenomen en de prijzen ook niet."
+  - **Three bugs found**:
+    1. `POST /admin/users/{id}/plan` wrote to `workspaces.plan` but the plan resolver (`services/plans.py::user_plan`) reads from `users.plan`. Result: dropdown showed the new plan but every code path treated the user as still on the old plan.
+    2. `seed_default_plans()` never updated existing plans, so production DBs that pre-dated the rebrand still had old prices (Pro €20, Agency €99) and no Starter tier at all.
+    3. Admin plan change didn't sync the Mollie subscription — user kept being billed the old amount even though the platform thought they were on a new tier.
+  - **Fixes**:
+    * `services/plans.py::seed_default_plans` — now resyncs **all** stock fields (price, name, features, limits, credits, tagline, …) on plans that have **never been manually edited by an admin**. New marker `admin_edited_at` is stamped by `update_plan()` whenever an admin edits via the console; stock plans get auto-updated on next startup. Admin-customized plans keep their edits intact (only `features_block` additively expands, never downgrades).
+    * `routers/admin_users.py::set_plan` — writes `users.plan` (the source of truth) AND mirrors to `workspaces.plan` on every workspace the user owns. Returns `previous_plan`, `mollie_synced`, `mollie_action`, and `mollie_error` so the UI can show a meaningful toast.
+    * `clients/mollie.py` — added `update_subscription()` (PATCH `/customers/{cid}/subscriptions/{sid}`) so the admin endpoint can flip the Mollie recurring amount. If the new plan is free we cancel the subscription instead. Both paths swallow MollieError so DB still updates if Mollie is temporarily down.
+  - **Tests**: 6/6 green in `tests/test_iter22_admin_plan_change.py` — verifies all 4 plans present with correct prices, plan flips actually persist on `users.plan` + `workspaces.plan` + `plan_details`, full roundtrip starter→pro→agency→free→pro, 400 on unknown id, 403 for non-admin, 400 for wrong workspace owner.
+  - **Production impact**: After redeploy, `seed_default_plans` runs at startup and (a) inserts Starter if missing, (b) resyncs prices to €0/€29/€99/€299 on the three pre-existing stock plans. Admin upgrades will then bill correctly via Mollie on next cycle.
+  - **Files touched**: `backend/services/plans.py`, `backend/routers/admin_users.py`, `backend/clients/mollie.py`, `backend/tests/test_iter22_admin_plan_change.py`.
