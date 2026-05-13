@@ -36,6 +36,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from pymongo.errors import DuplicateKeyError
+
 from db import get_db
 from services.notifications_sms import send_alert, SUPPORTED_EVENT_TYPES
 
@@ -83,24 +85,38 @@ async def _cooldown_passed(workspace_id: str, event_type: str, app_id: Optional[
     """Atomically claim the cooldown slot for this (workspace, event, app).
     Returns True when we are the first caller within the window (i.e. we
     should fire), False when someone already fired recently.
+
+    Relies on the unique index `event_cooldowns(workspace_id, event_type,
+    app_id)` declared in db.py::ensure_indexes. The flow:
+      1. Try to UPDATE an existing row only if its `last_at` is older than
+         `cutoff`. If the row was stale we win and the update succeeds.
+      2. If no stale row matched, INSERT a fresh one. The unique index
+         either accepts it (no row existed → we win) or rejects it with
+         DuplicateKeyError (a fresh row already exists → we lose).
     """
     db = get_db()
+    now_iso = _now_iso()
     cutoff = (_now() - timedelta(seconds=window_s)).isoformat()
     key = {
         "workspace_id": workspace_id,
         "event_type": event_type,
         "app_id": app_id,
     }
-    # Try to upsert a row only if the existing row's last_at is older than
-    # cutoff (or doesn't exist). update_one with this filter + upsert gives
-    # us atomicity without a distributed lock.
+    # 1) Refresh a stale row in place.
     res = await db.event_cooldowns.update_one(
-        {**key, "$or": [{"last_at": {"$lt": cutoff}}, {"last_at": {"$exists": False}}]},
-        {"$set": {**key, "last_at": _now_iso()}},
-        upsert=True,
+        {**key, "last_at": {"$lt": cutoff}},
+        {"$set": {"last_at": now_iso}},
+        upsert=False,
     )
-    # If we matched an existing stale row OR inserted a brand new row, fire.
-    return bool(res.matched_count or res.upserted_id)
+    if res.matched_count:
+        return True
+    # 2) No stale row → try to insert a brand new claim. Unique index
+    #    prevents two concurrent dispatchers from both succeeding.
+    try:
+        await db.event_cooldowns.insert_one({**key, "last_at": now_iso})
+        return True
+    except DuplicateKeyError:
+        return False
 
 
 async def _write_inapp_notification(

@@ -158,22 +158,11 @@ async def send_alert(
                 results.append({"channel": "sms", "status": "failed", "error": str(e)})
 
         elif ch == "email":
-            # Always write the in-app notification (free, always available)
-            db = get_db()
-            await db.notifications.insert_one({
-                "id": str(uuid.uuid4()),
-                "user_id": user["id"],
-                "workspace_id": workspace_id,
-                "title": title,
-                "message": body,
-                "event_type": event_type,
-                "channel": "email",
-                "created_at": _now_iso(),
-                "read": False,
-            })
-            # Also fire a real transactional email via MailerSend if configured.
-            # Graceful: if MailerSend isn't configured, we just skip the real email
-            # but the in-app notification still landed.
+            # Fire a real transactional email via MailerSend if configured.
+            # The in-app bell row is the dispatcher's responsibility — we
+            # used to insert one here too, which caused double bell rows
+            # on every email-enabled event. Now this branch is purely
+            # the "external" email pipeline.
             try:
                 from services.emails import send_notification as send_email_notification
                 from clients.mailersend import configured as ms_configured
@@ -182,9 +171,18 @@ async def send_alert(
                         user=user, workspace_id=workspace_id,
                         event_type=event_type, title=title, body=body,
                     )
+                    status = "queued"
+                else:
+                    status = "skipped"
             except Exception as e:
                 logger.warning("mailersend notification failed: %s", e)
-            results.append({"channel": "email", "status": "queued", "cost": 0})
+                status = "failed"
+            await _log_send(
+                workspace_id=workspace_id, user_id=user["id"], channel="email",
+                event_type=event_type, to=user.get("email") or "—",
+                body=body, status=status, cost=0,
+            )
+            results.append({"channel": "email", "status": status, "cost": 0})
 
         elif ch in ("slack", "discord"):
             # Webhook-based — free for the user, no Twilio. We just POST to the

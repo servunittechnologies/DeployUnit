@@ -226,9 +226,12 @@ class TestPrefsRegression:
         assert r.status_code == 200, f"test button broken: {r.status_code} {r.text}"
         body = r.json()
         assert "results" in body
-        # email always queues an in-app row (free path)
+        # Status depends on provider config: "queued" when MailerSend is
+        # configured, "skipped" in preview env where it isn't. Both are valid
+        # — the bug-fix removed the old buggy "queued"-via-bell-row path so
+        # "skipped" is now the honest answer when no provider is wired up.
         statuses = [x.get("status") for x in body["results"]]
-        assert any(s in ("queued", "sent") for s in statuses), f"unexpected statuses: {statuses}"
+        assert any(s in ("queued", "sent", "skipped") for s in statuses), f"unexpected statuses: {statuses}"
 
 
 def test_scheduler_has_health_audit_job_placeholder():
@@ -367,3 +370,147 @@ def test_supported_event_types_complete():
 def test_probe_ssl_unreachable():
     _reset_motor_client()
     asyncio.run(_impl_probe_ssl_unreachable())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter20 — Bug-fix verifications for the cooldown + email branches
+# ─────────────────────────────────────────────────────────────────────
+
+# Bug-fix #1: db.event_cooldowns unique index exists
+async def _impl_event_cooldowns_has_unique_index():
+    from db import get_db
+    db = get_db()
+    idx = await db.event_cooldowns.index_information()
+    target = "workspace_id_1_event_type_1_app_id_1"
+    assert target in idx, f"missing unique index, found: {list(idx.keys())}"
+    spec = idx[target]
+    assert spec.get("unique") is True, f"index exists but not unique: {spec}"
+    # key order
+    keys = [k for k, _ in spec["key"]]
+    assert keys == ["workspace_id", "event_type", "app_id"], f"wrong key order: {keys}"
+
+
+def test_event_cooldowns_has_unique_index():
+    _reset_motor_client()
+    asyncio.run(_impl_event_cooldowns_has_unique_index())
+
+
+# Bug-fix #2: After two back-to-back dispatch_event calls, event_cooldowns has EXACTLY 1 row
+async def _impl_cooldown_only_one_row_after_two_calls():
+    from services.event_dispatcher import dispatch_event
+    from db import get_db
+    db = get_db()
+
+    ws = DEMO_WS
+    ev = "build_warning"
+    app_id = f"singlerow_{uuid.uuid4().hex[:8]}"
+
+    await db.event_cooldowns.delete_many({"workspace_id": ws, "event_type": ev, "app_id": app_id})
+    try:
+        await dispatch_event(workspace_id=ws, event_type=ev,
+                             title="TEST_one_row_1", body="x", app_id=app_id, force=False)
+        await dispatch_event(workspace_id=ws, event_type=ev,
+                             title="TEST_one_row_2", body="x", app_id=app_id, force=False)
+
+        rows = await db.event_cooldowns.find(
+            {"workspace_id": ws, "event_type": ev, "app_id": app_id}
+        ).to_list(20)
+        assert len(rows) == 1, f"expected exactly 1 cooldown row, got {len(rows)}: {rows}"
+    finally:
+        await db.notifications.delete_many({"workspace_id": ws, "app_id": app_id})
+        await db.event_cooldowns.delete_many({"workspace_id": ws, "event_type": ev, "app_id": app_id})
+
+
+def test_cooldown_only_one_row_after_two_calls():
+    _reset_motor_client()
+    asyncio.run(_impl_cooldown_only_one_row_after_two_calls())
+
+
+# Bug-fix #3: email channel no longer double-writes db.notifications row
+async def _impl_email_no_double_inapp():
+    """For a member with email pref, dispatch_event must write exactly ONE
+    workspace-scoped bell row (the dispatcher's) and zero from send_alert."""
+    from services.event_dispatcher import dispatch_event
+    from db import get_db
+    db = get_db()
+
+    ws_id = f"ws_email_{uuid.uuid4().hex[:8]}"
+    user_id = f"user_email_{uuid.uuid4().hex[:8]}"
+    await db.users.insert_one({
+        "id": user_id,
+        "email": f"{user_id}@example.com",
+        "notification_prefs": {"channels": {"email": ["deploy_succeeded"]}},
+    })
+    await db.workspaces.insert_one({"id": ws_id, "owner_id": user_id, "name": "TEST_email_ws"})
+
+    try:
+        marker = f"TEST_email_double_{uuid.uuid4().hex[:8]}"
+        r = await dispatch_event(
+            workspace_id=ws_id, event_type="deploy_succeeded",
+            title=marker, body="email-only", force=True,
+        )
+        assert r.get("members") == 1, f"expected 1 member, got {r}"
+        # Should have exactly ONE bell row total for this workspace
+        bell_rows = await db.notifications.find({"workspace_id": ws_id}).to_list(20)
+        assert len(bell_rows) == 1, (
+            f"expected exactly 1 bell row (dispatcher's), got {len(bell_rows)}: "
+            f"{[b.get('title') for b in bell_rows]}"
+        )
+        assert bell_rows[0].get("title") == marker
+        assert bell_rows[0].get("user_id") is None, "dispatcher row must be workspace-scoped (user_id=None)"
+
+        # notification_sends MUST have an email channel row for this user
+        send_rows = await db.notification_sends.find(
+            {"workspace_id": ws_id, "user_id": user_id, "channel": "email"}
+        ).to_list(20)
+        assert len(send_rows) == 1, f"expected 1 email send-log row, got {len(send_rows)}"
+        assert send_rows[0].get("event_type") == "deploy_succeeded"
+        assert send_rows[0].get("status") in ("queued", "skipped", "failed")
+    finally:
+        await db.notifications.delete_many({"workspace_id": ws_id})
+        await db.notification_sends.delete_many({"workspace_id": ws_id})
+        await db.workspaces.delete_one({"id": ws_id})
+        await db.users.delete_one({"id": user_id})
+
+
+def test_email_no_double_inapp():
+    _reset_motor_client()
+    asyncio.run(_impl_email_no_double_inapp())
+
+
+# Bug-fix #4: notification_sends includes channel='email' rows after firing for
+# a user with email pref — exposed via /api/admin/notifications/sends
+class TestEmailChannelLogged:
+    def test_email_channel_logged_in_sends(self, admin, demo):
+        """Set the demo owner's email pref, fire a deploy_succeeded, and verify
+        a channel='email' row appears in /api/admin/notifications/sends."""
+        # Set up prefs via demo session
+        prefs_resp = demo.put(
+            f"{BASE_URL}/api/notifications/prefs",
+            json={"channels": {"email": ["deploy_succeeded"]}},
+            timeout=15,
+        )
+        if prefs_resp.status_code not in (200, 204):
+            pytest.skip(f"could not set notification prefs: {prefs_resp.status_code} {prefs_resp.text}")
+
+        marker = f"TEST_email_log_{uuid.uuid4().hex[:8]}"
+        r = admin.post(
+            f"{BASE_URL}/api/admin/notifications/fire",
+            json={"workspace_id": DEMO_WS, "event_type": "deploy_succeeded",
+                  "title": marker, "body": "email log check"},
+            timeout=20,
+        )
+        assert r.status_code == 200
+        time.sleep(1.0)
+        sends = admin.get(
+            f"{BASE_URL}/api/admin/notifications/sends",
+            params={"workspace_id": DEMO_WS, "limit": 100},
+            timeout=15,
+        ).json()
+        email_rows = [
+            s for s in sends
+            if s.get("channel") == "email" and s.get("event_type") == "deploy_succeeded"
+        ]
+        assert len(email_rows) >= 1, (
+            "expected at least one email-channel row in notification_sends after fire"
+        )

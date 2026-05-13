@@ -52,3 +52,18 @@ async def ensure_indexes():
     await db.invoices.create_index("mollie_payment_id")
     await db.webhook_logs.create_index("mollie_payment_id")
     await db.oauth_states.create_index("state", unique=True)
+    # Notification dispatcher cooldown — unique per (workspace, event, app)
+    # so a back-to-back dispatch can't insert two rows. `app_id` is
+    # optional → we treat None as a stable key value (Mongo unique index
+    # tolerates Nulls because all our docs always include the field).
+    await db.event_cooldowns.create_index(
+        [("workspace_id", 1), ("event_type", 1), ("app_id", 1)],
+        unique=True,
+    )
+    await db.notification_sends.create_index([("workspace_id", 1), ("created_at", -1)])
+    await db.notification_sends.create_index([("user_id", 1), ("created_at", -1)])
+    # Custom-subdomain provisioning index — looking up by app/status is the
+    # hot path for the 30s verifier tick.
+    await db.custom_subdomain_requests.create_index([("status", 1), ("created_at", 1)])
+    await db.custom_subdomain_requests.create_index([("app_id", 1), ("status", 1)])
+

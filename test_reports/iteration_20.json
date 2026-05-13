@@ -1,0 +1,39 @@
+{
+  "summary": "Bug-fix verification for iter19's CRITICAL cooldown bug. All 29 backend tests pass (24 regressions + 4 new iter20 fixes + 1 updated assertion). The fix in db.py (unique index on event_cooldowns(workspace_id, event_type, app_id)) + the rewrite of services/event_dispatcher.py::_cooldown_passed (stale-only update_one + insert_one with DuplicateKeyError fallback) correctly debounces real platform events. End-to-end proof: two back-to-back POST /api/apps/{id}/restart calls within 1s both return ok:true but only ONE app_restarted bell row is written and only ONE event_cooldowns row exists. Email-branch double-write in services/notifications_sms.py is removed — dispatch_event now writes exactly one workspace-scoped bell row per event for an email-enabled member (not two), and the email channel result is properly logged to notification_sends.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "services/event_dispatcher.py::dispatch_event",
+        "issue": "Function still swallows all exceptions and returns {'error': ...} with HTTP 200 from /api/admin/notifications/fire. Callers cannot distinguish success from failure without body inspection. Not regressed — same behavior as iter19, flagged again for awareness."
+      },
+      {
+        "endpoint": "routers/notifications.py::test_send (POST /api/notifications/test)",
+        "issue": "When MailerSend is not configured (preview env), the email test button now returns status='skipped' instead of the old fake 'queued'. This is correct behavior post-bug-fix, but frontend UI may need to surface 'skipped — provider not configured' clearly so users don't think the button is broken."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter19_notif_dispatch.py",
+    "/app/test_reports/pytest/pytest_iter20.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Bug-fix LGTM: db.event_cooldowns unique index on (workspace_id, event_type, app_id) is correctly declared with unique=True in db.ensure_indexes; index_information() confirms it lives at workspace_id_1_event_type_1_app_id_1. Note that app_id=None is treated as a literal key value by MongoDB unique indexes, which is exactly what we want here.",
+    "Bug-fix LGTM: _cooldown_passed now uses the safe pattern — try update_one with stale-only filter (no upsert); if matched_count==0, try insert_one and catch DuplicateKeyError to return False. This is race-safe and atomic.",
+    "Bug-fix LGTM: send_alert email branch no longer inserts into db.notifications; it only logs to notification_sends via _log_send. Verified by counting bell rows after a dispatch for a workspace with one email-enabled member: exactly 1 row, user_id=None (workspace-scoped from dispatcher).",
+    "Consider: notification_sends rows for email currently always record cost=0; if MailerSend introduces per-email charging later, this will need plumbing similar to the SMS branch.",
+    "Consider: event_cooldowns has no TTL — rows accumulate forever. A TTL index on last_at (expire after max cooldown ~6h+buffer) would keep the collection bounded without affecting correctness."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter19_notif_dispatch.py (added 4 iter20 bug-fix tests; relaxed test_test_button_still_works assertion to accept 'skipped' as a valid email status when MailerSend isn't configured)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "N/A (backend-only test)"},
+  "test_credentials": "Admin admin@deployunit.com/admin123; Demo demo@deployunit.com/demo1234 — from /app/memory/test_credentials.md",
+  "seed_data_creation": "Per-test synthetic workspace+user rows (auto-cleaned in try/finally). Each iter20 verification cleans up its own event_cooldowns + notifications + notification_sends rows. The real-restart e2e verification adds 1 bell row + 1 cooldown row to demo workspace (intentional, append-only audit data).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iter19 critical issues are resolved and verified. The test suite at /app/backend/tests/test_iter19_notif_dispatch.py is the regression baseline going forward — 29 tests covering admin fire/sends, restart wiring, prefs regression, scheduler registration, dispatch cooldown atomicity, no-prefs bell path, unique index existence, single-row guarantee, no-double-bell guarantee, and email channel send-log. SMSTools provider still returns 401 in preview env — that is environmental, not a code issue (stale creds). The /api/notifications/test 'skipped' status for email in preview env is the new correct behavior — old 'queued' was a side-effect of the now-fixed double-write bug.",
+  "rca of the issue": "Iter19 root cause was: PyMongo update_one(filter, $set, upsert=True) inserts a NEW document when the filter doesn't match — combined with no unique index on event_cooldowns, two near-simultaneous calls both upserted, both saw upserted_id != None, both returned True (fire allowed). Fix verified in iter20: (a) unique index workspace_id_1_event_type_1_app_id_1 added in db.ensure_indexes, (b) _cooldown_passed rewritten to update_one(stale-only, upsert=False) → on miss, insert_one in a DuplicateKeyError try/except. Result: two back-to-back dispatch_event() calls now yield exactly one bell row + one cooldown row + the second call returns {skipped:'cooldown'}. Also verified end-to-end via two POST /api/apps/{id}/restart calls within 1 second."
+}
