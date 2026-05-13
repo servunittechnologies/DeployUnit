@@ -636,3 +636,22 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
     * `pages/dashboard/Roadmap.jsx` — `FEATURES[0]` heatmaps entry replaced with `session-replays`.
   - **Tests**: iter22c testing agent run → 100% frontend pass (test_reports/iteration_22.json). Verified: no 'soon' badge on heatmaps sub-tab, active-state stats + open-viewer button render, Landing tab + Roadmap teaser swapped to session replays, dashboard /app/roadmap shows session-replays only. Regression: Addons tab still shows heatmaps as 'active'.
   - **Files touched**: `frontend/src/components/AppWebAnalyticsTab.jsx`, `frontend/src/pages/Landing.jsx`, `frontend/src/pages/dashboard/Roadmap.jsx`.
+
+
+- **2026-05-13 — Iter23 — Build-time Analytics Auto-Injector (P0)**
+  - **User ask (Dutch)**: "Kan je een auto injector toevoegen in de analytics zodat hij automatisch de injection doet van de code in de site van de klant? Dit moet kunnen voor specifieke frameworks en mag 0% foutmarge op zitten."
+  - **User choices captured**: most-common frameworks · build-time injection inside the customer's container · opt-in checkbox at app creation + toggleable later · deploy continues if injection fails (notify user) · Setup tab always visible alongside auto-inject.
+  - **Architecture**:
+    1. **Preflight script** (`services/auto_injector.py::render_preflight_js`) — a 254-line self-contained Node.js script with NO npm deps. Served from `GET /api/auto-inject/preflight.js?app=<id>&token=<hmac>`. Detects the framework from `package.json` + file layout and patches exactly one source/template file with the analytics `<script>` tag.
+    2. **Build-command wrap** (`wrap_build_command`) — when the auto-inject flag is ON, we prepend `curl -fsSL <preflight_url> -o /tmp/.dpu-inject.js && node /tmp/.dpu-inject.js || echo …` to the user's existing `build_command`. The `|| echo` turns any preflight failure into exit 0, then `; ` lets the original build run unconditionally → ZERO build-breakage risk.
+    3. **HMAC-gated URLs** — preflight + result callback are HMAC-token-scoped to a single app id (secret = `AUTO_INJECT_SECRET` env, fallback to `JWT_SECRET`), so leaked build URLs can't be replayed for other apps.
+    4. **Result callback** (`POST /api/auto-inject/result`) — preflight POSTs the outcome (status / framework / file / error / timestamp) which we store on `app_analytics_config.last_injection_result`. Surfaced live in the Setup tab.
+    5. **Auto-sync on deploy** — `_coolify_deploy` and `_redeploy_background` both call `wrap_build_command` and PATCH Coolify's `build_command` before triggering. Toggling OFF restores the original via `unwrap_build_command`.
+  - **Supported frameworks** (8 in 1 release): Next.js App Router, Next.js Pages Router (patches `_document` or creates one), Nuxt 3 (drops `plugins/deployunit-analytics.client.ts`), SvelteKit (`src/app.html`), Astro (first `src/layouts/*.astro` with `</head>`), Remix (`app/root.tsx`), Vite/CRA (`index.html`), plain static HTML. Idempotent on re-runs via `deployunit-auto-injected` marker.
+  - **Frontend additions**:
+    * Analytics → Setup tab now has an "auto-injector · beta" card at the top with a toggle + "last result" strip (green ✓ on success, rose ✗ with "Deploy continued without auto-injection" copy on failure).
+    * NewApp page step 2: default-checked checkbox "Automatically inject the web-analytics tracker into my code" sends `auto_inject_analytics:true` on POST `/api/apps`.
+  - **Testing**:
+    * `tests/test_iter23_auto_injector.py` — 15/15 green. Covers endpoint contracts, HMAC verification, wrap/unwrap round-trip, per-framework injection (all 9 strategies) via Node subprocess against fixture directories, idempotency, and "no matching framework" non-crash path.
+    * `test_reports/iteration_23.json` — frontend testing agent 100% pass. Verified toast, aria-checked flip, active_build_command contents, checkbox default state, failed last_result rendering, regression on existing snippet copy blocks.
+  - **Files touched**: `backend/services/auto_injector.py` (new, 351 lines), `backend/routers/auto_inject.py` (new, 169 lines), `backend/routers/apps.py` (wrap/unwrap hooks in deploy paths + persist flag at creation), `backend/server.py` (router include), `backend/models.py` (AppIn.auto_inject_analytics), `backend/tests/test_iter23_auto_injector.py` (new), `frontend/src/components/AppWebAnalyticsTab.jsx` (SetupPane auto-injector card), `frontend/src/pages/dashboard/NewApp.jsx` (checkbox).
