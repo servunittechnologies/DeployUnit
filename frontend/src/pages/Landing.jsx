@@ -1241,11 +1241,12 @@ function Compare() {
     { f: "No config required (zero DevOps)",                                vc: false, rd: false },
     { f: "Single dashboard — no external SaaS tools needed",                 vc: false, rd: false },
     { f: "Full observability: analytics + metrics + alerts (Slack/Discord/email)", vc: false, rd: false },
-    { f: "Background jobs / cron included",                                  vc: false, rd: false },
+    { f: "White-label PDF invoices per client",                              vc: false, rd: false },
     { f: "Agency workspaces — multi-client billing, access & permissions",   vc: false, rd: false },
   ];
   const IMPROVED = [
     { f: "Deploy logs & full pipeline visibility", vc: "limited", rd: "limited" },
+    { f: "EU-hosted by default (NL/DE/FR · GDPR-first)", vc: false, rd: "limited" },
     { f: "Predictable pricing (no surprise usage costs)", vc: false, rd: "limited" },
   ];
   const ON_PAR = [
@@ -1400,7 +1401,7 @@ function Compare() {
             kicker="Improved"
             title="Where we go further than the rest."
             count={IMPROVED.length}
-            blurb="Same capability — done deeper, with no add-on fee."
+            blurb="Same capability — done deeper, no add-on fees, EU-first."
           />
           <GroupTable tone="improved" rows={IMPROVED} />
 
