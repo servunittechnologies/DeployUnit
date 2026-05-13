@@ -40,9 +40,20 @@ class CoolifyClient:
     async def _request_meta(self, method: str, path: str, **kwargs) -> tuple[Any, int, str]:
         """Like _request but also returns (data, status_code, error_text).
         Used by callers that need to distinguish 404 (resource gone) from
-        500 (build engine down) etc. so they can show helpful messages."""
+        500 (build engine down) etc. so they can show helpful messages.
+
+        Env guard: any mutation (POST/PATCH/PUT/DELETE) is blocked when
+        we're not on `DEPLOYUNIT_ENV=production`. The call is logged and
+        returns (None, 0, "<env-guarded>") so callers can detect the skip
+        without a code path divergence. Reads (GET) always pass through —
+        observability from preview is safe."""
         if not self.configured:
             return None, 0, "build engine not configured"
+        if method.upper() in ("POST", "PATCH", "PUT", "DELETE"):
+            from env_utils import is_production, env_name
+            if not is_production():
+                logger.info("[env-guard] Coolify %s %s skipped (env=%s)", method, path, env_name())
+                return None, 0, f"env-guarded: preview cannot {method} Coolify"
         url = f"{self.base}/api/v1{path}"
         try:
             async with httpx.AsyncClient(timeout=15.0) as cli:

@@ -196,6 +196,33 @@ api_router.include_router(contact_router.router)
 api_router.include_router(tickets_router.router)
 api_router.include_router(auto_inject_router.router)
 
+
+# ─────────────────────── env-info endpoint ───────────────────────
+# A 1-shot, no-auth route the frontend hits on every page load to know
+# whether it's talking to a preview backend (which silently drops writes
+# to shared infra like Coolify/Cloudflare/Mollie/MailerSend/SMS) or the
+# real production deployment. Lets us show a clear banner so nobody ever
+# mistakes preview state for production state.
+@api_router.get("/env-info")
+async def env_info():
+    from env_utils import env_name, is_production
+    return {
+        "env": env_name(),
+        "is_production": is_production(),
+        "frontend_url": os.environ.get("FRONTEND_URL") or os.environ.get("PUBLIC_FRONTEND_URL") or "",
+        "write_guards": {
+            # Lists every shared-infra write that's blocked on non-production.
+            # Read operations always pass through.
+            "coolify": not is_production(),
+            "cloudflare": not is_production(),
+            "github_deploy_keys": not is_production(),
+            "mollie_payments": not is_production(),
+            "mailersend_email": not is_production(),
+            "smstools_sms": not is_production(),
+        },
+    }
+
+
 app.include_router(api_router)
 
 # CORS — explicit origin list for credentialed cookies.

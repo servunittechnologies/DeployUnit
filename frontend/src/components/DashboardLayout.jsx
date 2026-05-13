@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { api } from "../lib/api";
 import Logo from "./Logo";
+import EnvBanner from "./EnvBanner";
 import {
   LayoutGrid, FolderKanban, Globe, Activity, Bell, Settings, LogOut,
   Plus, Search, BellRing, ChevronsUpDown, Check, Building2, User as UserIcon,
@@ -338,6 +339,7 @@ export default function DashboardLayout() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
+        <EnvBanner />
         <header className="glass sticky top-0 z-30 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button

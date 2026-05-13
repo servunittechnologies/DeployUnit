@@ -20,7 +20,18 @@ class CloudflareError(Exception):
 
 async def _request(method: str, path: str, *, token: str, json: Optional[dict] = None) -> Optional[dict]:
     """Authenticated Cloudflare API call. Returns parsed `result` on success,
-    None on failure (logged)."""
+    None on failure (logged).
+
+    Env guard: any mutation (POST/PATCH/PUT/DELETE) is blocked when we're
+    not on `DEPLOYUNIT_ENV=production`. This prevents preview deployments
+    from creating/deleting/renaming DNS records on the shared Cloudflare
+    zone — those changes would silently propagate to real customers.
+    Reads (GET) always pass through; observability is safe."""
+    if method.upper() in ("POST", "PATCH", "PUT", "DELETE"):
+        from env_utils import is_production, env_name
+        if not is_production():
+            logger.info("[env-guard] Cloudflare %s %s skipped (env=%s)", method, path, env_name())
+            return None
     url = f"{CF_API_BASE}{path}"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:

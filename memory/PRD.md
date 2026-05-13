@@ -682,3 +682,30 @@ Build a one-stop SaaS hosting platform (Vercel-like) for Next.js & Node apps, **
     5. **Read-back marker check** now matches `/api/aij/` OR `preflight.js` so both URL shapes count as "wrapped".
   - **Tests**: 17/17 green (added `test_short_url_serves_preflight` and `test_wrap_length_fallback_for_oversized_base`). Also verified END-TO-END against the real production Coolify instance: PATCH with the new wrap returns 200 and the read-back contains `/api/aij/` (manually confirmed with curl).
   - **Files touched**: `backend/services/auto_injector.py` (compact wrap + length guard + short_preflight_url), `backend/routers/auto_inject.py` (new `/api/aij/{app}/{token}` route + dual-shape marker check), `backend/clients/coolify.py` (log non-2xx PATCH errors), `backend/routers/apps.py` (updated read-back marker check + logging).
+
+
+- **2026-05-13 — Iter24 — Preview ↔ Production env isolation (P0 safety)**
+  - **User concern (Dutch)**: "Ik ben bang dat preview omgeving en productie conflicteren met elkaar … zorg ervoor dat URLs op beide environments gescheiden blijven en dat beide gewoon apart werken zodat er niks fout kan gaan."
+  - **Risk model**: preview and production share the SAME Coolify (`149.12.246.205:8000`), the SAME Cloudflare zone, the SAME Mollie/SMSTools/MailerSend/GitHub credentials. Without isolation, a preview-side toggle/deploy could overwrite a production app's `build_command`, create rogue DNS records on the live zone, charge real customers, or send mails from a preview pod.
+  - **Solution — env-guard at the client layer** (not per-callsite, so every existing + future call is protected):
+    1. `backend/env_utils.py` — single source of truth. `env_name()` reads `DEPLOYUNIT_ENV` first, falls back to a `FRONTEND_URL` heuristic, defaults to `preview` when unknown (fail-safe).
+    2. Mutation guards added inside the shared HTTP entrypoints of:
+       * `clients/coolify.py::_request_meta` — blocks POST/PATCH/PUT/DELETE on non-production.
+       * `clients/cloudflare.py::_request` — blocks all writes on non-production.
+       * `clients/mollie.py::_req` — blocks payment + subscription writes (returns benign env-guarded stub).
+       * `clients/smstools.py::send_sms` — returns `{ok:True, skipped:'env-guard'}` on preview.
+       * `clients/mailersend.py::send` — returns `{ok:True, status:'env-guarded'}` on preview.
+       * `services/deploy_keys.py::add_github_deploy_key + remove_github_deploy_key` — early-return on preview.
+       READS still pass through, so observability (status checks, balance reads) work on preview.
+    3. `GET /api/env-info` (no-auth) — exposes the env + all 6 write-guard flags so the frontend can render a banner.
+    4. `frontend/src/components/EnvBanner.jsx` — amber sticky banner at the top of every dashboard page when not in production. Lists exactly what's blocked + links to deployunit.com. Dismissible per session.
+    5. `backend/.env` defaults `DEPLOYUNIT_ENV="preview"`. **Production .env must set `DEPLOYUNIT_ENV=production` explicitly** for live writes to be enabled.
+  - **Verified end-to-end**:
+    * preview toggle on auto-inject → backend logs `[env-guard] Coolify PATCH /applications/v6h... skipped (env=preview)` (live test against the shared Coolify confirmed NO PATCH happens) → DB still updated.
+    * `/api/env-info` returns `{env:"preview", is_production:false, write_guards:{coolify:true, …}}`.
+    * Dashboard banner visible immediately after login, dismissible.
+    * Backend pytest: **32/32 green** across iter22 (admin plan), iter23 (auto-injector), iter24 (env isolation). New tests:
+      - HTTP-layer monkeypatch proves Coolify, Cloudflare, GitHub deploy-key writes never hit httpx on preview.
+      - env_utils detection: explicit production/preview/unset (defaults safe to preview) + FRONTEND_URL heuristic for production vs preview hosts.
+  - **Files touched**: `backend/env_utils.py` (new), `backend/server.py` (/api/env-info), `backend/clients/coolify.py` + `cloudflare.py` + `mollie.py` + `smstools.py` + `mailersend.py` (write guards), `backend/services/deploy_keys.py` (key add/remove guards), `backend/.env` (DEPLOYUNIT_ENV default), `frontend/src/components/EnvBanner.jsx` (new), `frontend/src/components/DashboardLayout.jsx` (banner mount), `backend/tests/test_iter24_env_isolation.py` (new, 9 tests).
+  - **Production action required**: when redeploying `deployunit.com`, ensure the production .env has `DEPLOYUNIT_ENV="production"` — otherwise live writes will be blocked (this is the desired fail-safe behavior, but means production users will get the banner + no-op deploys until the env var is set).

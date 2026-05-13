@@ -80,6 +80,15 @@ async def send(
     if not html and not text:
         return {"ok": False, "status": "bad_input", "error": "html or text required", "message_id": None}
 
+    # Env guard: preview must never email real customers on the shared
+    # MailerSend account — those would land in real inboxes with the
+    # production domain, polluting reputation and confusing recipients.
+    from env_utils import is_production, env_name
+    if not is_production():
+        logger.info("[env-guard] MailerSend send to %s skipped (env=%s) subject=%s",
+                    to_email, env_name(), subject[:50])
+        return {"ok": True, "status": "env-guarded", "error": None, "message_id": None}
+
     payload: dict = {
         "from": {"email": cfg["from_email"], "name": cfg["from_name"]},
         "to": [{"email": to_email, **({"name": to_name} if to_name else {})}],

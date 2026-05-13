@@ -157,6 +157,11 @@ async def send_sms(to_e164: str, body: str, *, reference: str | None = None) -> 
     cfg = await SMSToolsConfig.load()
     if not cfg:
         raise SMSToolsError("SMSTools is not configured. Set Client ID + Secret in Admin → Platform Domain.")
+    # Env guard: preview must never burn real SMS credits on shared infra.
+    from env_utils import is_production, env_name
+    if not is_production():
+        logger.info("[env-guard] SMS send to %s skipped (env=%s)", to_e164[:4] + "***", env_name())
+        return {"ok": True, "skipped": "env-guard", "env": env_name()}
     return await _post_message(cfg, to=to_e164, body=body, reference=reference)
 
 

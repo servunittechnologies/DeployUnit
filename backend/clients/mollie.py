@@ -33,6 +33,17 @@ class MollieClient:
     async def _req(self, method: str, path: str, *, json: Optional[dict] = None, params: Optional[dict] = None) -> Optional[dict]:
         if not self.configured:
             raise RuntimeError("Mollie not configured")
+        # Env guard: writes are blocked on preview so we never charge real
+        # customers from a preview pod. Reads (balance check, status poll)
+        # still work — they're observability, not mutations. Mollie's test
+        # keys are an additional safety layer above this guard.
+        if method.upper() in ("POST", "PATCH", "PUT", "DELETE"):
+            from env_utils import is_production, env_name
+            if not is_production():
+                logger.info("[env-guard] Mollie %s %s skipped (env=%s)", method, path, env_name())
+                # Return a benign stub so callers don't blow up. Status='env-guarded'
+                # lets them detect the skip if they care.
+                return {"status": "env-guarded", "id": f"env_guarded_{env_name()}"}
         url = f"{self.base}{path}"
         try:
             async with httpx.AsyncClient(timeout=20.0) as cli:

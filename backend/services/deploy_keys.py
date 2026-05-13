@@ -39,8 +39,16 @@ async def add_github_deploy_key(
 ) -> Optional[int]:
     """POST a deploy key to the GitHub repo. Returns the numeric key id,
     or None on failure. Uses the caller's OAuth token (repo scope required).
+
+    Env guard: blocked on preview. Preview must never push deploy keys to
+    real customer repos — those would persist outside our system and could
+    be used by a stale preview backend to clone private code.
     """
     if not user_token:
+        return None
+    from env_utils import is_production, env_name
+    if not is_production():
+        logger.info("[env-guard] GitHub add_deploy_key %s/%s skipped (env=%s)", owner, repo, env_name())
         return None
     url = f"https://api.github.com/repos/{owner}/{repo}/keys"
     try:
@@ -102,6 +110,10 @@ async def remove_github_deploy_key(
     owner: str, repo: str, key_id: int, user_token: str
 ) -> bool:
     if not user_token or not key_id:
+        return False
+    from env_utils import is_production, env_name
+    if not is_production():
+        logger.info("[env-guard] GitHub remove_deploy_key %s/%s/%s skipped (env=%s)", owner, repo, key_id, env_name())
         return False
     try:
         async with httpx.AsyncClient(timeout=10.0) as cli:
