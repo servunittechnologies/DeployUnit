@@ -154,6 +154,27 @@ async def _redeploy_background(
             await coolify.update_application(coolify_uuid, patch)
         except Exception as e:
             await _append_log(deployment_id, f"[WARN] build config PATCH failed: {str(e)[:160]}")
+
+    # Re-apply auto-inject wrapping on every redeploy — guarantees the
+    # latest snippet/token are baked into the build_command even if the
+    # user toggled it on/off since the last deploy.
+    try:
+        from services.auto_injector import is_enabled as auto_inject_enabled, wrap_build_command, unwrap_build_command
+        base = (app or {}).get("build_command") or ""
+        if await auto_inject_enabled(app_id):
+            wrapped = wrap_build_command(app_id, base)
+            await coolify.update_application(coolify_uuid, {"build_command": wrapped})
+            await db.apps.update_one({"id": app_id}, {"$set": {"_active_build_command": wrapped}})
+            await _append_log(deployment_id, "[BUILD] analytics auto-inject ON — preflight will patch build")
+        elif (app or {}).get("_active_build_command"):
+            # Auto-inject was previously ON, now OFF — strip wrap and push.
+            cleaned = unwrap_build_command(app.get("_active_build_command")) or base
+            await coolify.update_application(coolify_uuid, {"build_command": cleaned})
+            await db.apps.update_one({"id": app_id}, {"$set": {"_active_build_command": None}})
+            await _append_log(deployment_id, "[BUILD] analytics auto-inject OFF — restored original build command")
+    except Exception as e:
+        await _append_log(deployment_id, f"[WARN] auto-inject sync failed: {str(e)[:160]}")
+
     await _trigger_coolify_deploy_with_retry(app_id, deployment_id, coolify_uuid)
 
 
@@ -442,6 +463,19 @@ async def _coolify_deploy(app_id: str, deployment_id: str | None = None):
     except Exception as e:
         logger.warning("resource push failed for %s: %s", app_id, e)
 
+    # Auto-inject analytics snippet — patch the build_command so the
+    # preflight runs in the customer's container before their `yarn build`.
+    try:
+        from services.auto_injector import is_enabled as auto_inject_enabled, wrap_build_command
+        if await auto_inject_enabled(app_id):
+            wrapped = wrap_build_command(app_id, app.get("build_command") or "")
+            await coolify.update_application(coolify_uuid, {"build_command": wrapped})
+            await db.apps.update_one({"id": app_id}, {"$set": {"_active_build_command": wrapped}})
+            if deployment_id:
+                await _append_log(deployment_id, "[BUILD] analytics auto-inject enabled — preflight will run before build")
+    except Exception as e:
+        logger.warning("auto-inject build_command patch failed for %s: %s", app_id, e)
+
     # Step 2 — explicitly trigger the deploy with retries.
     if deployment_id:
         cool_dep_uuid = await _trigger_coolify_deploy_with_retry(
@@ -539,6 +573,14 @@ async def create_app(payload: AppIn, request: Request, background: BackgroundTas
 
     await db.apps.insert_one(doc)
     doc.pop("_id", None)
+
+    # Persist auto-inject preference (per analytics config).
+    if payload.auto_inject_analytics:
+        try:
+            from services.analytics import set_auto_inject as _set_ai
+            await _set_ai(app_id, True)
+        except Exception as e:
+            logger.warning("auto_inject_analytics persist failed for %s: %s", app_id, e)
 
     # If paired_app_id was provided on create, set both sides immediately.
     if payload.paired_app_id:

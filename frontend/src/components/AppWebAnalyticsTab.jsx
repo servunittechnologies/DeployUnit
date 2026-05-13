@@ -580,7 +580,30 @@ function ComingSoonCard({ icon: Icon, title, body }) {
 
 // ─────────────────────── Setup ───────────────────────
 function SetupPane({ appId, config, refreshConfig }) {
+  const [ai, setAi] = useState(null);   // auto-inject state
+  const [aiLoading, setAiLoading] = useState(true);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  const loadAi = async () => {
+    setAiLoading(true);
+    try { const r = await api.get(`/apps/${appId}/auto-inject`); setAi(r.data); }
+    catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setAiLoading(false); }
+  };
+  useEffect(() => { loadAi(); /* eslint-disable-next-line */ }, [appId]);
+
   if (!config) return null;
+
+  const toggleAi = async () => {
+    if (!ai) return;
+    setAiBusy(true);
+    try {
+      const r = await api.post(`/apps/${appId}/auto-inject/toggle`, { enabled: !ai.enabled });
+      toast.success(r.data.enabled ? "Auto-injection enabled — runs on next deploy" : "Auto-injection disabled");
+      await loadAi();
+    } catch (e) { toast.error(getApiErrorMessage(e)); }
+    finally { setAiBusy(false); }
+  };
 
   // Framework-specific guidance — we let users pick the one matching their stack.
   const headHTML = config.snippet;
@@ -606,8 +629,83 @@ export default function RootLayout({ children }) {
 
   return (
     <div className="space-y-6" data-testid="analytics-setup">
+      {/* Auto-injector — runs the preflight in the customer's build container */}
+      <div className="border border-white/[0.06] p-6 relative overflow-hidden" data-testid="auto-injector-card">
+        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-brand/[0.06] blur-3xl pointer-events-none" />
+        <div className="relative flex items-start justify-between gap-6 flex-wrap">
+          <div className="flex-1 min-w-[260px]">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand">// auto-injector · beta</div>
+              {ai?.enabled && (
+                <span className="px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 leading-none">
+                  on
+                </span>
+              )}
+            </div>
+            <div className="font-display text-xl tracking-tight mb-1">Skip the copy-paste — we inject it for you</div>
+            <p className="text-sm text-zinc-400 mb-3 max-w-xl">
+              Turn this on and we'll patch the right template file (e.g.{" "}
+              <code className="text-xs bg-black/40 px-1.5 py-0.5">app/layout.tsx</code> or{" "}
+              <code className="text-xs bg-black/40 px-1.5 py-0.5">src/app.html</code>) automatically on every deploy.
+              The build runs even if injection fails — zero risk of breaking your deploy.
+            </p>
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500">
+              supported: {(ai?.supported_frameworks || []).join(" · ")}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!!ai?.enabled}
+              disabled={aiLoading || aiBusy}
+              onClick={toggleAi}
+              data-testid="auto-injector-toggle"
+              className={`relative inline-flex h-6 w-11 items-center transition-colors disabled:opacity-50
+                ${ai?.enabled ? "bg-brand" : "bg-zinc-700"}`}
+            >
+              <span className={`inline-block h-5 w-5 bg-white transition-transform
+                ${ai?.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500">
+              {ai?.enabled ? "on · runs on next deploy" : "off · use the snippet below"}
+            </span>
+          </div>
+        </div>
+
+        {/* Last result */}
+        {ai?.last_result && (
+          <div className="relative mt-5 grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-1 sm:gap-3 border-t border-white/[0.06] pt-4 text-xs">
+            <div className="font-mono uppercase tracking-[0.2em] text-zinc-500 text-[10px]">last result</div>
+            <div data-testid="auto-injector-last-result">
+              {ai.last_result.status === "injected" && (
+                <span className="text-emerald-300">
+                  ✓ injected into <code className="bg-black/40 px-1.5 py-0.5">{ai.last_result.file}</code>{" "}
+                  <span className="text-zinc-500">({ai.last_result.framework})</span>
+                </span>
+              )}
+              {ai.last_result.status === "skipped" && (
+                <span className="text-zinc-400">
+                  · already injected — <code className="bg-black/40 px-1.5 py-0.5">{ai.last_result.file}</code>
+                </span>
+              )}
+              {ai.last_result.status === "failed" && (
+                <span className="text-rose-300">
+                  ✗ injection failed ({ai.last_result.framework}):{" "}
+                  <span className="text-zinc-300">{ai.last_result.error}</span>
+                  <span className="block text-zinc-500 mt-1">
+                    Deploy continued without auto-injection — paste the snippet below manually.
+                  </span>
+                </span>
+              )}
+              <div className="text-[10px] font-mono text-zinc-500 mt-1">{ai.last_result.at}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="border border-white/[0.06] p-6">
-        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-2">// step 1 · install</div>
+        <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-brand mb-2">// or do it manually — step 1 · install</div>
         <div className="font-display text-xl tracking-tight mb-1">Drop this in your &lt;head&gt;</div>
         <div className="text-sm text-zinc-400 mb-4">
           The tracker is ~1 KB, cookie-less, and auto-tracks SPA navigation, outbound clicks and click heatmaps.

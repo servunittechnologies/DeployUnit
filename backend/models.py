@@ -88,6 +88,7 @@ class AppIn(BaseModel):
     env_vars: Dict[str, str] = Field(default_factory=dict)
     environment: Literal["production", "staging"] = "production"
     paired_app_id: Optional[str] = None  # link to counterpart on create
+    auto_inject_analytics: bool = False  # auto-inject tracking snippet at build-time (stored in app_analytics_config)
 
 
 class AppOut(BaseModel):
@@ -122,6 +123,7 @@ class AppUpdate(BaseModel):
     project_id: Optional[str] = None
     tier: Optional[Literal["development", "production"]] = None
     protected_branches: Optional[List[str]] = None
+    auto_inject_analytics: Optional[bool] = None
 
 
 class EnvVarUpdate(BaseModel):

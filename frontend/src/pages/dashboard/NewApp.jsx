@@ -26,6 +26,7 @@ export default function NewApp() {
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState("");
   const [envText, setEnvText] = useState("");
+  const [autoInject, setAutoInject] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,6 +63,7 @@ export default function NewApp() {
         branch,
         env_vars,
         environment,
+        auto_inject_analytics: autoInject,
       });
       navigate(`/app/apps/${data.id}`);
     } catch (e) {
@@ -236,6 +238,29 @@ export default function NewApp() {
               placeholder={"NODE_ENV=production\nDATABASE_URL=..."}
               data-testid="env-vars-input"
             />
+          </div>
+
+          <div className="mt-6">
+            <label className="flex items-start gap-3 cursor-pointer group" data-testid="auto-inject-row">
+              <input
+                type="checkbox"
+                checked={autoInject}
+                onChange={(e) => setAutoInject(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-brand"
+                data-testid="auto-inject-checkbox"
+              />
+              <span>
+                <span className="block text-sm text-zinc-200">
+                  Automatically inject the web-analytics tracker into my code
+                </span>
+                <span className="block text-xs text-zinc-500 mt-0.5">
+                  We'll patch <code className="bg-black/40 px-1 py-0.5">app/layout.tsx</code> /{" "}
+                  <code className="bg-black/40 px-1 py-0.5">_document.tsx</code> /{" "}
+                  <code className="bg-black/40 px-1 py-0.5">index.html</code> at build-time so visitors are tracked from day one.
+                  Toggleable later in Analytics → Setup. Deploy continues even if injection fails.
+                </span>
+              </span>
+            </label>
           </div>
 
           {error && <div className="mt-4 text-signal-failed text-sm">{error}</div>}
