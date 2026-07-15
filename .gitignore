@@ -132,3 +132,6 @@ credentials.json
 *.pem
 *.key
 .credentials
+.localdev/
+backend/.env
+frontend/.env
