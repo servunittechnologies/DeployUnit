@@ -1,0 +1,19 @@
+{
+    "schema": "1.0",
+    "type": "whmcs-servers",
+    "name": "deployunit",
+    "license": "proprietary",
+    "category": "provisioning",
+    "description": {
+        "name": "DeployUnit",
+        "tagline": "Sell DeployUnit plans through WHMCS",
+        "long": "Provisions DeployUnit accounts when customers order: creates the user and workspace exactly like a native signup, assigns the plan, and offers one-click SSO into the DeployUnit dashboard. Suspend, unsuspend, plan changes and termination are fully automated. WHMCS remains the billing system; DeployUnit never charges these accounts itself."
+    },
+    "version": "1.0.0",
+    "authors": [
+        {
+            "name": "ServUnit",
+            "homepage": "https://servunit.com"
+        }
+    ]
+}

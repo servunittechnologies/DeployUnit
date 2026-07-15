@@ -84,6 +84,10 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        # Suspended accounts (admin toggle or WHMCS billing suspension) still
+        # hold valid tokens but must not reach any authenticated endpoint.
+        if user.get("is_active") is False:
+            raise HTTPException(status_code=403, detail="Account suspended")
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

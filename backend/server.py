@@ -65,6 +65,7 @@ from routers import (
     contact as contact_router,
     tickets as tickets_router,
     auto_inject as auto_inject_router,
+    internal_provisioning as internal_provisioning_router,
 )
 
 
@@ -195,6 +196,7 @@ api_router.include_router(status_router.router)
 api_router.include_router(contact_router.router)
 api_router.include_router(tickets_router.router)
 api_router.include_router(auto_inject_router.router)
+api_router.include_router(internal_provisioning_router.router)
 
 
 # ─────────────────────── env-info endpoint ───────────────────────
