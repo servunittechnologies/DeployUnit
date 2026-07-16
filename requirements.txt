@@ -1,0 +1,2 @@
+# Vercel installs the Python serverless function's dependencies from here.
+-r backend/requirements.txt

@@ -66,6 +66,7 @@ from routers import (
     tickets as tickets_router,
     auto_inject as auto_inject_router,
     internal_provisioning as internal_provisioning_router,
+    platform_cron as platform_cron_router,
 )
 
 
@@ -226,6 +227,7 @@ api_router.include_router(contact_router.router)
 api_router.include_router(tickets_router.router)
 api_router.include_router(auto_inject_router.router)
 api_router.include_router(internal_provisioning_router.router)
+api_router.include_router(platform_cron_router.router)
 
 
 # ─────────────────────── env-info endpoint ───────────────────────

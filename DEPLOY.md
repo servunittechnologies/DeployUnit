@@ -9,12 +9,44 @@ DeployUnit has two parts with different hosting needs:
   pool, credit grants, billing renewals, …). These need a **persistent
   process** — which serverless platforms like Vercel do not provide.
 
-So the recommended split is **frontend on Vercel, backend on an always-on host**
-(your Coolify is ideal — DeployUnit already runs on it). A full-Vercel option
-is documented at the bottom for completeness.
+You can run **everything on Vercel** (one project — see below), or split
+**frontend on Vercel + backend on an always-on host** (your Coolify; the most
+robust option). Either way MongoDB must be a hosted database reachable from
+the functions (MongoDB Atlas free tier works). `localhost` Mongo is dev-only.
 
-MongoDB must be a hosted database reachable from wherever the backend runs
-(MongoDB Atlas free tier works). `localhost` Mongo only works for local dev.
+---
+
+## Everything on Vercel (one project, one deploy)
+
+The repo root is set up so you can **import the repo into Vercel and deploy** —
+the React frontend builds as static output and `api/index.py` serves the
+FastAPI app as a Python serverless function (same origin, so auth cookies work
+with no proxy config). `vercel.json` wires it all, including the cron jobs.
+
+1. Import the repo in Vercel → Deploy. (Root Directory = repo root; the root
+   `vercel.json` handles build + functions + rewrites + crons.)
+2. Set the environment variables (see `backend/.env.example`) in the Vercel
+   project. **Required:** `MONGO_URL` (Atlas), `DB_NAME`, `JWT_SECRET`,
+   `ENCRYPTION_KEY`, `DEPLOYUNIT_ENV=production`, `FRONTEND_URL` (your Vercel
+   URL), `COOLIFY_*`, `INTERNAL_API_KEY`, and **`CRON_SECRET`** (any random
+   string — protects the cron endpoints).
+3. Redeploy so the env vars apply.
+
+**Background jobs on Vercel = cron.** Vercel injects `VERCEL=1`, so the
+in-process scheduler is off; instead Vercel Cron calls `/api/cron/frequent`
+(every minute), `/api/cron/hourly` and `/api/cron/daily`. Two caveats you must
+accept with this setup:
+
+- **Vercel Cron needs the Pro plan** (Hobby runs crons only once/day). And its
+  minimum interval is 1 minute — so the natively sub-minute jobs (deploy sync
+  15s, watchdog/verify 30s) run at most once a minute. Deploy-status and
+  routing self-healing are therefore ~1-minute-coarse, not real-time.
+- Each cron invocation runs a batch of jobs within the function's `maxDuration`
+  (60s). If you have very many apps this can get tight.
+
+If real-time monitoring / instant routing recovery matters, run one always-on
+`worker.py` (below) against the same MongoDB and drop the `crons` from
+vercel.json — that's the split setup, which is why it's recommended.
 
 ---
 
