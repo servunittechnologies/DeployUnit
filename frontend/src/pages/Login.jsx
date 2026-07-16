@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext";
+import { api } from "../lib/api";
 import Logo from "../components/Logo";
 import GitHubButton from "../components/GitHubButton";
+import WhmcsButton from "../components/WhmcsButton";
 import ConstellationCanvas from "../components/ConstellationCanvas";
 import useScrambleText from "../hooks/useScrambleText";
 import { Loader2, ArrowRight, Activity } from "lucide-react";
@@ -19,6 +21,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [methods, setMethods] = useState({ github: true, whmcs: false });
+
+  useEffect(() => {
+    api.get("/auth/methods").then(({ data }) => setMethods(data)).catch(() => {});
+  }, []);
 
   const welcome = useScrambleText("Your fleet is waiting.", { durationMs: 1200 });
 
@@ -91,8 +98,9 @@ export default function Login() {
             </div>
           )}
 
-          <div className="mt-6">
-            <GitHubButton testId="login-github" />
+          <div className="mt-6 space-y-3">
+            {methods.github && <GitHubButton testId="login-github" />}
+            {methods.whmcs && <WhmcsButton testId="login-whmcs" />}
           </div>
           <div className="mt-5 flex items-center gap-3 text-[10px] uppercase tracking-[0.35em] font-mono text-zinc-600">
             <span className="flex-1 h-px bg-white/10" />

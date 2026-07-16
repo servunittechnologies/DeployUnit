@@ -34,6 +34,8 @@ export default function UsageStrip({ workspaceId }) {
   ];
   const isFree = (plan.id === "free") || plan.price === 0;
   const anyMaxed = rows.some((r) => r.cap > 0 && r.used >= r.cap);
+  // WHMCS-billed accounts can't self-upgrade — hide the in-app CTAs.
+  const managedByWhmcs = data.billing_source === "whmcs";
   const creditsLow = credits && credits.monthly_grant > 0 && credits.balance < (credits.monthly_grant * 0.2);
 
   return (
@@ -67,7 +69,7 @@ export default function UsageStrip({ workspaceId }) {
             </Link>
           )}
         </div>
-        {(anyMaxed || isFree) && (
+        {(anyMaxed || isFree) && !managedByWhmcs && (
           <Link
             to="/app/billing"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-brand text-brand-fg hover:bg-brand/90 transition-colors"
@@ -76,7 +78,7 @@ export default function UsageStrip({ workspaceId }) {
             <Zap className="h-3 w-3" /> Upgrade
           </Link>
         )}
-        {creditsLow && (
+        {creditsLow && !managedByWhmcs && (
           <Link
             to="/app/credits"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-brand/40 text-brand hover:bg-brand/10 transition-colors"

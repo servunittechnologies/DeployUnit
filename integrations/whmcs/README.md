@@ -54,3 +54,21 @@ Let op: buiten `DEPLOYUNIT_ENV=production` worden Coolify/Cloudflare/MailerSend-
 | "Open DeployUnit"-knop / SSO | Eenmalige loginlink, direct ingelogd in het dashboard |
 
 Idempotentie: provision en terminate zijn veilig opnieuw uit te voeren; een tweede provision voor dezelfde service koppelt aan het bestaande account.
+
+## "Login with ServUnit" op de DeployUnit-loginpagina
+
+Naast de client-area-knop kan een klant ook rechtstreeks vanaf de DeployUnit-loginpagina inloggen met zijn WHMCS-account — een knop "Continue with ServUnit" onder "Continue with GitHub". De klant typt zijn WHMCS-wachtwoord nergens in DeployUnit in; WHMCS is de identiteitsbron (zelfde principe als GitHub OAuth).
+
+Flow: knop → DeployUnit `/api/auth/whmcs/start` geeft de launcher-URL → WHMCS authenticeert de klant met zijn eigen login → de launcher vraagt via de interne API een eenmalige SSO-link op zijn e-mailadres → klant landt ingelogd in `/app`.
+
+### Installatie
+
+1. **DeployUnit-backend**: zet de launcher-URL in de env en herstart:
+   ```
+   WHMCS_LOGIN_URL=https://my.servunit.com/deployunit-sso.php
+   ```
+   De knop verschijnt automatisch zodra deze env-var gezet is (`GET /api/auth/methods` stuurt `{github, whmcs}` — de loginpagina toont alleen ingeschakelde methodes).
+
+2. **WHMCS**: kopieer `deployunit-sso.php` naar de WHMCS-webroot (naast `init.php`). Geen configuratie nodig — de launcher leest host + interne key uit het bestaande DeployUnit-serverrecord (`tblservers`, type `deployunit`).
+
+Randgevallen: niet-ingelogde klant → WHMCS-login met terugkeer; klant zonder DeployUnit-service → nette "bestel eerst een service"-pagina; gesuspendeerd account → geweigerd.

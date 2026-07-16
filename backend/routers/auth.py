@@ -158,6 +158,32 @@ async def me(request: Request):
     return _user_public(user)
 
 
+# ─────────────────────── Login providers ───────────────────────
+@router.get("/methods")
+async def auth_methods():
+    """Which external sign-in buttons the login page should show. GitHub is on
+    when OAuth is configured; WHMCS is on when a launcher URL is set (i.e. this
+    DeployUnit instance is sold through ServUnit/WHMCS)."""
+    import os
+    return {
+        "github": bool(os.environ.get("GITHUB_CLIENT_ID") or os.environ.get("GITHUB_OAUTH_CLIENT_ID")),
+        "whmcs": bool(os.environ.get("WHMCS_LOGIN_URL")),
+    }
+
+
+@router.get("/whmcs/start")
+async def whmcs_login_start():
+    """Hands the browser the WHMCS launcher URL. WHMCS authenticates the
+    customer with their own login, then bounces them back into DeployUnit via
+    the internal SSO one-time link — mirrors the GitHub OAuth handoff, with
+    WHMCS as the identity source. No WHMCS password ever reaches DeployUnit."""
+    import os
+    url = os.environ.get("WHMCS_LOGIN_URL", "")
+    if not url:
+        raise HTTPException(status_code=404, detail="WHMCS login is not enabled on this instance.")
+    return {"authorization_url": url}
+
+
 # ─────────────────────── Forgot password (self-serve) ───────────────────────
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
