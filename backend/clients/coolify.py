@@ -37,19 +37,33 @@ class CoolifyClient:
         data, _status, _err = await self._request_meta(method, path, **kwargs)
         return data
 
+    @staticmethod
+    def _is_mutation(method: str, path: str) -> bool:
+        if method.upper() in ("POST", "PATCH", "PUT", "DELETE"):
+            return True
+        if method.upper() == "GET":
+            clean = path.split("?", 1)[0].rstrip("/")
+            if clean == "/deploy":
+                return True
+            if clean.endswith(("/stop", "/start", "/restart")):
+                return True
+        return False
+
     async def _request_meta(self, method: str, path: str, **kwargs) -> tuple[Any, int, str]:
         """Like _request but also returns (data, status_code, error_text).
         Used by callers that need to distinguish 404 (resource gone) from
         500 (build engine down) etc. so they can show helpful messages.
 
-        Env guard: any mutation (POST/PATCH/PUT/DELETE) is blocked when
-        we're not on `DEPLOYUNIT_ENV=production`. The call is logged and
-        returns (None, 0, "<env-guarded>") so callers can detect the skip
-        without a code path divergence. Reads (GET) always pass through —
-        observability from preview is safe."""
+        Env guard: any mutation is blocked when we're not on
+        `DEPLOYUNIT_ENV=production`. The call is logged and returns
+        (None, 0, "<env-guarded>") so callers can detect the skip without a
+        code path divergence. Plain reads always pass through —
+        observability from preview is safe. NB: Coolify v4 exposes several
+        MUTATING actions as GET (deploy, stop, database start/stop), so the
+        guard matches on those paths too, not only on the HTTP method."""
         if not self.configured:
             return None, 0, "build engine not configured"
-        if method.upper() in ("POST", "PATCH", "PUT", "DELETE"):
+        if self._is_mutation(method, path):
             from env_utils import is_production, env_name
             if not is_production():
                 logger.info("[env-guard] Coolify %s %s skipped (env=%s)", method, path, env_name())
