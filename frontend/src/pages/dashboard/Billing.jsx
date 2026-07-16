@@ -86,6 +86,31 @@ export default function Billing() {
   const profile = sub.billing_profile;
   const isFreePlan = sub.plan === "free" || sub.plan === "hobby";
   const subStatus = sub.subscription?.status || (isFreePlan ? "active" : "none");
+  const managedByWhmcs = sub.billing_source === "whmcs";
+
+  // Externally-billed accounts (ordered through ServUnit) get a read-only
+  // view: plan and invoices live in the ServUnit client area.
+  if (managedByWhmcs) {
+    return (
+      <div className="px-6 py-6 space-y-8" data-testid="billing-page">
+        <div>
+          <div className="text-xs font-mono uppercase tracking-[0.3em] text-brand mb-2">// billing</div>
+          <h1 className="font-display text-4xl font-semibold tracking-tighter">Plan & billing</h1>
+        </div>
+        <section className="border border-white/[0.06] p-6">
+          <div className="text-[10px] uppercase tracking-[0.3em] font-mono text-zinc-500">Current plan</div>
+          <div className="mt-1 font-display text-3xl tracking-tighter capitalize">{sub.plan}</div>
+          <div className="mt-4 p-4 border border-signal-queued/30 bg-signal-queued/5 text-sm flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-signal-queued mt-0.5 shrink-0" />
+            <div>
+              This account is billed through <span className="text-zinc-200 font-medium">ServUnit</span>.
+              To change your plan, view invoices or update payment details, please use your ServUnit client area.
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 py-6 space-y-10" data-testid="billing-page">

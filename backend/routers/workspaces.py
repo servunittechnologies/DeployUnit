@@ -11,6 +11,7 @@ from models import WorkspaceIn, WorkspaceOut, WorkspaceMemberIn
 from services.plans import workspace_plan, workspace_usage
 from services.credits import get_balance as credits_balance
 from services.grandfathering import effective_price, upcoming_change
+from services.billing_guard import billing_source
 
 router = APIRouter(tags=["workspaces"])
 
@@ -271,5 +272,6 @@ async def get_workspace_usage(workspace_id: str, request: Request):
         "credits": credits,
         "effective_price": await effective_price(workspace_id, plan),
         "price_change": await upcoming_change(workspace_id, plan),
+        "billing_source": billing_source(user),
     }
 

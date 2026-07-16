@@ -91,6 +91,28 @@ async def _owned_app_uuids(user_id: str) -> list[str]:
     return uuids
 
 
+async def _cancel_mollie_subscription(user_id: str) -> None:
+    """Best-effort cancellation of a pre-existing self-billing subscription
+    when an account is taken over by WHMCS. Never raises."""
+    db = get_db()
+    sub = await db.subscriptions.find_one({"user_id": user_id}, {"_id": 0})
+    if not sub or not sub.get("mollie_subscription_id") or not sub.get("mollie_customer_id"):
+        return
+    if sub.get("status") == "canceled":
+        return
+    try:
+        from clients.mollie import mollie
+        if mollie.configured:
+            await mollie.cancel_subscription(sub["mollie_customer_id"], sub["mollie_subscription_id"])
+        await db.subscriptions.update_one(
+            {"id": sub["id"]},
+            {"$set": {"status": "canceled", "canceled_reason": "whmcs_takeover"}},
+        )
+    except Exception as e:  # noqa: BLE001 — takeover must not fail on Mollie
+        import logging
+        logging.getLogger("deployunit").warning("whmcs takeover: mollie cancel failed for %s: %s", user_id, e)
+
+
 async def _set_plan(user: dict, plan_id: str) -> dict:
     plan = await get_plan(plan_id)
     if not plan:
@@ -189,6 +211,9 @@ async def provision(payload: ProvisionIn, request: Request, background: Backgrou
                 "is_active": True,
             }},
         )
+        # If this e-mail already self-billed via Mollie, cancel that
+        # subscription so WHMCS takes over cleanly — no double billing.
+        await _cancel_mollie_subscription(user["id"])
 
     await _bootstrap_workspace_for(user)
     await _set_plan(user, plan["id"])
@@ -357,9 +382,13 @@ async def terminate(payload: TerminateIn, request: Request):
         await db.workspace_members.delete_many({"user_id": user["id"]})
         await db.users.delete_one({"id": user["id"]})
     else:
+        # Detach from WHMCS: suspended + free + back to self-billing, so if the
+        # same person returns (new WHMCS order or standalone) they're a clean
+        # account, not a WHMCS orphan.
         await db.users.update_one(
             {"id": user["id"]},
-            {"$set": {"is_active": False, "plan": "free", "plan_changed_at": _now_iso()},
+            {"$set": {"is_active": False, "plan": "free", "plan_changed_at": _now_iso(),
+                      "billing_managed_by": "self"},
              "$unset": {"whmcs_service_id": ""}},
         )
 

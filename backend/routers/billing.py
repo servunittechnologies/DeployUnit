@@ -29,6 +29,7 @@ from services.vat import (
 )
 from services.invoice import render_invoice_pdf, file_path_for, effective_company
 from services.plans import list_plans as plans_list, get_plan as plans_get
+from services.billing_guard import assert_self_billed, billing_source
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["billing"])
@@ -140,6 +141,7 @@ async def get_subscription(workspace_id: str, request: Request):
         "billing_profile": profile,
         "payments": payments,
         "mollie_available": mollie.configured,
+        "billing_source": billing_source(user),
     }
 
 
@@ -166,6 +168,7 @@ async def _ensure_mollie_customer(workspace: dict, profile: dict) -> str:
 @router.post("/billing/checkout")
 async def checkout(payload: CheckoutIn, request: Request):
     user = await get_current_user(request)
+    assert_self_billed(user)
     await require_workspace_member(payload.workspace_id, user, ["owner", "admin", "billing"])
     db = get_db()
 
@@ -298,6 +301,7 @@ async def checkout(payload: CheckoutIn, request: Request):
 @router.post("/billing/cancel")
 async def cancel(workspace_id: str, request: Request):
     user = await get_current_user(request)
+    assert_self_billed(user)
     await require_workspace_member(workspace_id, user, ["owner", "admin", "billing"])
     db = get_db()
     sub = await db.subscriptions.find_one({"workspace_id": workspace_id})

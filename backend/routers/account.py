@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from db import get_db
 from auth_utils import get_current_user, verify_password, hash_password
 from services.plans import user_plan, account_usage, list_plans, get_plan
+from services.billing_guard import assert_self_billed, billing_source
 from services.credits import (
     get_balance as credits_balance, list_transactions as credits_history,
     grant_credits, get_credit_packs, get_pack,
@@ -80,6 +81,7 @@ async def account_snapshot(request: Request):
         "usage": usage,
         "credits": credits,
         "subscription": sub,
+        "billing_source": billing_source(user),
         "workspaces": workspaces,
         "notif_prefs_summary": {
             "phone_set": bool((user.get("notification_prefs") or {}).get("phone_e164")),
@@ -141,7 +143,8 @@ async def get_account_plan(request: Request):
     plan = await user_plan(user["id"])
     usage = await account_usage(user["id"])
     plans = await list_plans(only_active=True)
-    return {"plan": plan, "usage": usage, "available_plans": plans}
+    return {"plan": plan, "usage": usage, "available_plans": plans,
+            "billing_source": billing_source(user)}
 
 
 class PlanCheckoutIn(BaseModel):
@@ -153,6 +156,7 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
     """Account-level plan switch. Downgrade to Free = immediate. Paid plan =
     returns a Mollie checkout URL."""
     user = await get_current_user(request)
+    assert_self_billed(user)
     db = get_db()
     plan = await get_plan(payload.plan)
     if not plan:
@@ -305,6 +309,7 @@ async def plan_checkout(payload: PlanCheckoutIn, request: Request):
 @router.post("/account/plan/cancel")
 async def plan_cancel(request: Request):
     user = await get_current_user(request)
+    assert_self_billed(user)
     db = get_db()
     sub = await db.subscriptions.find_one({"user_id": user["id"]})
     if not sub:
@@ -350,6 +355,7 @@ class CreditPackCheckoutIn(BaseModel):
 @router.post("/account/credits/checkout")
 async def credit_pack_checkout(payload: CreditPackCheckoutIn, request: Request):
     user = await get_current_user(request)
+    assert_self_billed(user)
     pack = await get_pack(payload.pack)
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")
