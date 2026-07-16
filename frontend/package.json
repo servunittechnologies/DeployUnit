@@ -62,7 +62,7 @@
     "build": "craco build",
     "postbuild": "python3 scripts/prerender.py || echo '[prerender] skipped (non-fatal)'",
     "test": "craco test",
-    "vercel-build": "craco build"
+    "vercel-build": "CI=false craco build"
   },
   "browserslist": {
     "production": [
