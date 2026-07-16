@@ -76,20 +76,36 @@ logger = logging.getLogger("deployunit")
 scheduler = AsyncIOScheduler()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    connect()
+def _scheduler_enabled() -> bool:
+    """The background scheduler must run in exactly one always-on process.
+
+    On serverless platforms (Vercel sets VERCEL=1) there is no persistent
+    process to host it, so the web app runs scheduler-free and a separate
+    worker (worker.py) owns all periodic jobs. Set DISABLE_SCHEDULER=1 to
+    force web-only mode on any host."""
+    if os.environ.get("VERCEL"):
+        return False
+    return os.environ.get("DISABLE_SCHEDULER", "").lower() not in ("1", "true", "yes")
+
+
+async def run_startup_maintenance():
+    """Index + seed + one-shot migration. Runs in whichever process owns the
+    scheduler (the always-on server or worker.py), never per serverless
+    cold-start."""
     await ensure_indexes()
     await seed_initial_data()
     await seed_default_plans()
-    # One-shot data migration: lift plan + credits + billing profile from
-    # workspaces onto their owner user. Skips users already migrated.
     if await needs_migration():
         try:
             result = await migrate_accounts()
             logger.info("account migration: %s", result)
         except Exception as e:
             logger.exception("account migration failed: %s", e)
+
+
+def register_jobs(scheduler):
+    """Register every periodic job. Called by the web app's lifespan when it
+    owns the scheduler, and by the standalone worker.py."""
     scheduler.add_job(run_monitor_tick, "interval", seconds=60, id="monitor", replace_existing=True)
     scheduler.add_job(sync_deployments, "interval", seconds=15, id="deploy_sync", replace_existing=True)
     scheduler.add_job(deployment_watchdog, "interval", seconds=30, id="deploy_watchdog", replace_existing=True, max_instances=2)
@@ -138,14 +154,27 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(app_addons_renew_tick, "interval", hours=1, id="app_addons_renew", replace_existing=True, max_instances=1)
     # Heatmap event GC — same retention tiers as metrics (7d / 30d with addon)
     scheduler.add_job(heatmap_gc_tick, "interval", hours=12, id="heatmap_gc", replace_existing=True, max_instances=1)
-    scheduler.start()
-    # Initial fill on boot (fire-and-forget) so the very first deploy after
-    # a restart doesn't have to wait 3 min for the first scheduler tick.
-    import asyncio as _asyncio
-    _asyncio.create_task(subdomain_refill_pool())
-    logger.info("DeployUnit backend started")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    connect()
+    if _scheduler_enabled():
+        await run_startup_maintenance()
+        register_jobs(scheduler)
+        scheduler.start()
+        # Initial fill on boot (fire-and-forget) so the very first deploy after
+        # a restart doesn't have to wait 3 min for the first scheduler tick.
+        import asyncio as _asyncio
+        _asyncio.create_task(subdomain_refill_pool())
+        logger.info("DeployUnit backend started (scheduler on)")
+    else:
+        # Web-only (serverless / split-worker) mode: a separate worker.py
+        # owns maintenance + the scheduler. Just keep the Mongo client warm.
+        logger.info("DeployUnit backend started (web-only, scheduler off)")
     yield
-    scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     await disconnect()
 
 

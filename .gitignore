@@ -135,3 +135,4 @@ credentials.json
 .localdev/
 backend/.env
 frontend/.env
+frontend/package-lock.json

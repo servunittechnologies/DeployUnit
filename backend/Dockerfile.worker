@@ -1,0 +1,18 @@
+# DeployUnit backend — worker tier (optional).
+# Use this ONLY when the web tier runs scheduler-free — i.e. the web app is on
+# Vercel serverless, or you run multiple web replicas with DISABLE_SCHEDULER=1.
+# Run exactly ONE worker against a given database.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN grep -viE '^(black|isort|flake8|mypy|pytest)\b' requirements.txt > runtime-requirements.txt \
+    && pip install -r runtime-requirements.txt
+
+COPY . .
+
+CMD ["python", "worker.py"]
