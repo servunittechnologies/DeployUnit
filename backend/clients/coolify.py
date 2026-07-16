@@ -123,6 +123,12 @@ class CoolifyClient:
     async def create_project(self, name: str, description: str = "") -> Optional[dict]:
         return await self._request("POST", "/projects", json={"name": name, "description": description})
 
+    async def delete_project(self, project_uuid: str) -> tuple[Any, int, str]:
+        """Delete an (ideally empty) project. Coolify refuses while resources
+        remain, so callers should delete apps/databases first. Returns the
+        full (data, status, error) so best-effort callers can ignore a 4xx."""
+        return await self._request_meta("DELETE", f"/projects/{project_uuid}")
+
     async def create_public_app(
         self,
         *,

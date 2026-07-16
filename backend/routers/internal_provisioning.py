@@ -17,6 +17,7 @@ Billing note: users provisioned here get `billing_managed_by: "whmcs"`; plan
 changes deliberately never touch Mollie — WHMCS is the payment system.
 """
 
+import asyncio
 import hmac
 import os
 import secrets
@@ -303,7 +304,9 @@ async def terminate(payload: TerminateIn, request: Request):
     from services.github_webhooks import unregister_webhook as wh_unregister
     from services.subdomains import release_subdomain
 
-    ws_ids = await db.workspaces.distinct("id", {"owner_id": user["id"]})
+    workspaces = await db.workspaces.find({"owner_id": user["id"]}, {"_id": 0, "id": 1, "coolify_project_uuid": 1}).to_list(50)
+    ws_ids = [w["id"] for w in workspaces]
+    project_uuids = [w.get("coolify_project_uuid") for w in workspaces if w.get("coolify_project_uuid")]
     apps_deleted = 0
     for ws_id in ws_ids:
         apps = await db.apps.find({"workspace_id": ws_id}).to_list(500)
@@ -337,6 +340,18 @@ async def terminate(payload: TerminateIn, request: Request):
         await db.workspace_members.delete_many({"workspace_id": ws_id})
         await db.subscriptions.delete_many({"workspace_id": ws_id})
         await db.billing_profiles.delete_many({"workspace_id": ws_id})
+
+    # Best-effort: remove the now-empty Coolify projects. App deletion is
+    # async in Coolify, so retry briefly while it refuses ("has resources").
+    for project_uuid in project_uuids:
+        for attempt in range(6):
+            try:
+                _data, status_code, _err = await coolify.delete_project(project_uuid)
+                if status_code in (200, 204, 404) or status_code == 0:
+                    break
+            except Exception:
+                break
+            await asyncio.sleep(5)
 
     if payload.delete_user:
         await db.workspace_members.delete_many({"user_id": user["id"]})
