@@ -9,7 +9,11 @@ module.exports = function (app) {
     "/api",
     createProxyMiddleware({
       target: process.env.DEV_BACKEND_URL || "http://127.0.0.1:8001",
-      changeOrigin: true,
+      // Keep the original Host (localhost:3000) and add X-Forwarded-* so the
+      // backend derives redirect/callback URLs on the single dev origin —
+      // matching how the production ingress presents one origin to the app.
+      changeOrigin: false,
+      xfwd: true,
     })
   );
 };
